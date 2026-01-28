@@ -17,7 +17,7 @@ one-time setup step is required.
 
 📘 **Full setup and troubleshooting instructions are provided in the Python setup vignette:**
 
-- 📄 [Python setup vignette](vignettes/python-setup.Rmd)
+- 📄 [Python setup vignette](https://gchickering21.github.io/DownBallotR/articles/python-setup.html)
 
 After installing the package, you can also view it in R:
 

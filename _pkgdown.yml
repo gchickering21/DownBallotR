@@ -1,15 +1,21 @@
-url: https://gchickering21.github.io/Downballot/
+url: https://gchickering21.github.io/DownBallotR/
 
 template:
   bootstrap: 5
 
 navbar:
   structure:
-    left:  [intro, articles, reference]
+    left: [intro, articles, reference]
     right: [github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/gchickering21/DownBallotR
+      aria-label: GitHub
 
 articles:
   - title: Getting started
     navbar: ~
     contents:
       - python-setup
+

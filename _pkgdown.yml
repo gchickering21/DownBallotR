@@ -1,0 +1,15 @@
+url: https://gchickering21.github.io/Downballot/
+
+template:
+  bootstrap: 5
+
+navbar:
+  structure:
+    left:  [intro, articles, reference]
+    right: [github]
+
+articles:
+  - title: Getting started
+    navbar: ~
+    contents:
+      - python-setup

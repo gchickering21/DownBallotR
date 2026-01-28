@@ -3,7 +3,7 @@ pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
   python-setup: python-setup.html
-last_built: 2026-01-28T19:07Z
+last_built: 2026-01-28T19:14Z
 urls:
   reference: https://gchickering21.github.io/Downballot/reference
   article: https://gchickering21.github.io/Downballot/articles

@@ -4,7 +4,6 @@
 [![R-CMD-check](https://github.com/gchickering21/Downballot/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/gchickering21/Downballot/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-
 `DownBallotR` is an R package that integrates R workflows with a managed Python
 environment (via **reticulate**) for tasks that require Python-based tooling.
 
@@ -14,14 +13,39 @@ one-time setup step is required.
 
 This README covers:
 
-1. First-time setup (required once)
-2. Normal day-to-day usage
-3. Using the package across multiple R sessions
-4. How to verify and troubleshoot the Python environment
+1. Installing the package
+2. First-time Python setup (required once)
+3. Normal day-to-day usage
+4. Using the package across multiple R sessions
+5. How to verify and troubleshoot the Python environment
 
 ---
 
-## 1. First-time setup (required once)
+## 1. Install the package
+
+You can install the development version from GitHub:
+
+```r
+install.packages("pak")
+pak::pak("gchickering21/Downballot")
+```
+
+Or using `remotes`:
+
+```r
+install.packages("remotes")
+remotes::install_github("gchickering21/Downballot")
+```
+
+Then load the package:
+
+```r
+library(DownBallotR)
+```
+
+---
+
+## 2. First-time setup (required once)
 
 After installing the R package, you must set up the Python environment used by
 `DownBallotR`.
@@ -35,6 +59,7 @@ downballot_install_python()
 ```
 
 This command:
+
 - Creates a dedicated Python virtual environment for `DownBallotR`
 - Installs required Python packages
 - Installs Playwright and its Chromium browser  
@@ -53,6 +78,7 @@ downballot_python_status()
 ```
 
 You should see output indicating:
+
 - The virtual environment exists
 - Required Python packages are installed
 - Playwright Chromium is available
@@ -61,21 +87,22 @@ At this point, Python is installed but **not yet active** in your R session.
 
 ---
 
-## 2. Normal usage (each R session)
+## 3. Normal usage (each R session)
 
 Each R session must explicitly activate the Python environment **once per
 session**.
 
 ### Activate Python for the session
 
-At the start of any R session where you plan to use `downballot`, run:
+At the start of any R session where you plan to use `DownBallotR`, run:
 
 ```r
 downballot_use_python()
 ```
 
 This:
-- Pins reticulate to the correct Python virtual environment
+
+- Pins `reticulate` to the correct Python virtual environment
 - Safely initializes Python for the current R session
 
 You only need to run this once per session.
@@ -91,13 +118,14 @@ downballot_python_status()
 ```
 
 This reports:
+
 - Whether Python is initialized
 - Which Python interpreter is active
 - Whether required packages are available
 
 ---
 
-## 3. Using downballot in future or concurrent sessions
+## 4. Using DownBallotR in future or concurrent sessions
 
 ### New R session?
 
@@ -115,12 +143,13 @@ You **do not** need to reinstall Python.
 ### Multiple R sessions at the same time
 
 If you have multiple R sessions open concurrently:
+
 - Each session must call `downballot_use_python()` once
 - All sessions can safely share the same virtual environment
 
 ---
 
-## 4. Common issues and fixes
+## 5. Common issues and fixes
 
 ### Python is not initialized or packages appear missing
 
@@ -145,6 +174,7 @@ This occurs when Python is initialized **before** calling
 `downballot_use_python()`.
 
 Fix:
+
 1. Restart your R session
 2. Immediately run:
    ```r
@@ -167,7 +197,7 @@ downballot_python_status()
 
 ---
 
-## 5. Recommended workflow summary
+## 6. Recommended workflow summary
 
 ### First-time setup:
 ```r
@@ -187,7 +217,7 @@ downballot_python_status()
 
 ---
 
-## 6. Design notes
+## 7. Design notes
 
 - `DownBallotR` intentionally does **not** auto-install Python dependencies on
   `library(DownBallotR)`

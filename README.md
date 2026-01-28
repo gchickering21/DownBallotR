@@ -5,6 +5,7 @@
 [![pkgdown](https://github.com/gchickering21/DownBallotR/actions/workflows/pkgdown.yaml/badge.svg)](https://github.com/gchickering21/DownBallotR/actions/workflows/pkgdown.yaml)
 [![GitHub Pages](https://github.com/gchickering21/DownBallotR/actions/workflows/pages-build-deployment/badge.svg)](https://github.com/gchickering21/DownBallotR/actions/workflows/pages-build-deployment)
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html)
+
 <!-- badges: end -->
 
 

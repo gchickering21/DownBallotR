@@ -123,7 +123,7 @@ You **do not** need to reinstall Python.
 If you have multiple R sessions open concurrently:
 
 - Each session must call
-  [`downballot_use_python()`](https://gchickering21.github.io/Downballot/reference/downballot_use_python.md)
+  [`downballot_use_python()`](https://gchickering21.github.io/DownBallotR/reference/downballot_use_python.md)
   once
 - All sessions can safely share the same virtual environment
 
@@ -151,7 +151,7 @@ downballot_install_python(reinstall = TRUE)
 ### “reticulate is already initialized to a different Python interpreter”
 
 This occurs when Python is initialized **before** calling
-[`downballot_use_python()`](https://gchickering21.github.io/Downballot/reference/downballot_use_python.md).
+[`downballot_use_python()`](https://gchickering21.github.io/DownBallotR/reference/downballot_use_python.md).
 
 Fix:
 

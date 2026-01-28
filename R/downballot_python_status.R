@@ -196,8 +196,8 @@ db_python_status_advice <- function(
 
 #' @export
 print.downballot_python_status <- function(x, ...) {
-  cat("\n🔍 downballotR Python status\n")
-  cat("────────────────────────────────\n")
+  cat("\n downballotR Python status\n")
+  cat("--------------------------------------\n")
   cat("Virtualenv name:         ", x$envname, "\n", sep = "")
   cat("Virtualenv exists:       ", x$virtualenv_exists, "\n", sep = "")
   
@@ -211,26 +211,26 @@ print.downballot_python_status <- function(x, ...) {
     cat("Active python:           ", x$active_python, "\n", sep = "")
     
     if (identical(x$active_python_matches_env, FALSE)) {
-      cat("⚠️  Active python does NOT match the virtualenv python for '", x$envname, "'.\n", sep = "")
+      cat(" Active python does NOT match the virtualenv python for '", x$envname, "'.\n", sep = "")
     }
   }
   
   if (identical(x$active_python_matches_env, FALSE)) {
-    cat("Python packages:         (not checked — wrong interpreter)\n")
-    cat("Playwright Chromium:     (not checked — wrong interpreter)\n")
+    cat("Python packages:         (not checked - wrong interpreter)\n")
+    cat("Playwright Chromium:     (not checked - wrong interpreter)\n")
   } else if (length(x$missing_packages) == 0) {
-    cat("Python packages:         ✅ all required packages installed\n")
+    cat("Python packages:         all required packages correctly installed\n")
     cat(
       "Playwright Chromium:     ",
-      if (isTRUE(x$playwright_chromium_installed)) "✅ installed" else "❌ missing",
+      if (isTRUE(x$playwright_chromium_installed)) "correctly installed" else " missing",
       "\n",
       sep = ""
     )
   } else {
-    cat("Missing packages:        ❌ ", paste(x$missing_packages, collapse = ", "), "\n", sep = "")
+    cat("Missing packages:        ", paste(x$missing_packages, collapse = ", "), "\n", sep = "")
     cat(
       "Playwright Chromium:     ",
-      if (isTRUE(x$playwright_chromium_installed)) "✅ installed" else "❌ missing",
+      if (isTRUE(x$playwright_chromium_installed)) " correctly nstalled" else " missing",
       "\n",
       sep = ""
     )
@@ -238,7 +238,7 @@ print.downballot_python_status <- function(x, ...) {
   
   if (!is.null(x$advice) && length(x$advice) > 0) {
     cat("\n")
-    cat(paste0("➡️  ", x$advice[[1]], "\n"), sep = "")
+    cat(paste0("- ", x$advice[[1]], "\n"), sep = "")
     if (length(x$advice) > 1) {
       cat(paste0(x$advice[-1], collapse = "\n"), "\n", sep = "")
     }

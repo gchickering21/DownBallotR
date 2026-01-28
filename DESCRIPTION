@@ -15,16 +15,11 @@ RoxygenNote: 7.3.3
 Depends: 
     R (>= 4.1.0)
 Imports:
-    cli,
-    dplyr,
-    purrr,
-    rlang,
-    tibble,
-    tidyr,
-    reticulate,
-    fs
+    reticulate
 Suggests:
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0),
-    withr,
-    covr
+    withr
 Config/testthat/edition: 3
+VignetteBuilder: knitr

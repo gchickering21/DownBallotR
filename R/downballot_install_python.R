@@ -181,7 +181,7 @@ except Exception:
 
 #' @keywords internal
 db_install_playwright_chromium <- function() {
-  message("Ensuring Playwright Chromium is installed (may download ~100–200MB)...")
+  message("Ensuring Playwright Chromium is installed (may download ~100-200MB)...")
   tryCatch({
     reticulate::py_run_string(
       "
@@ -276,7 +276,7 @@ downballot_install_python <- function(
     .msg(
       "Python environment '", envname, "' already exists and is ready.\n",
       "Packages present: ", paste(pkgs, collapse = ", "), "\n",
-      "Playwright Chromium: ✅ installed\n",
+      "Playwright Chromium: Correctly installed\n",
       "Nothing to do."
     )
     
@@ -306,6 +306,6 @@ downballot_install_python <- function(
     }
   }
   
-  .msg("✅ Python setup complete for env '", envname, "'.")
+  .msg("Python setup complete for env '", envname, "'.")
   invisible(TRUE)
 }

@@ -14,14 +14,14 @@ Authors@R: c(
         email = "chris.warshaw@georgetown.edu",
         role = "aut"
     )
-)
+  )
 Description: Provides an R interface for downloading and standardizing local
     and state election data. The package wraps state-specific Python web
     scrapers (e.g., Playwright- or requests-based) via reticulate and exposes
     consistent R functions for querying election availability and results.
 License: MIT + file LICENSE
 URL: https://gchickering21.github.io/DownBallotR/,
-     https://github.com/gchickering21/DownBallotR
+    https://github.com/gchickering21/DownBallotR
 BugReports: https://github.com/gchickering21/DownBallotR/issues
 Encoding: UTF-8
 Language: en-US

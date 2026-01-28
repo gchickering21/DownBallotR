@@ -15,15 +15,11 @@ To ensure reliability and reproducibility, **DownBallotR manages its own Python
 virtual environment**. Users do not need to configure Python manually, but a
 one-time setup step is required.
 
-📘 **Full setup and troubleshooting instructions are provided in the Python setup vignette:**
+📘 **Full setup and troubleshooting instructions are in the Python setup vignette:**
 
-- 📄 [Python setup vignette](https://gchickering21.github.io/DownBallotR/articles/python-setup.html)
-
-After installing the package, you can also view it in R:
-
-```{r}
-vignette("python-setup", package = "DownBallotR")
-```
+- 📄 Source (always available in the repo): [vignettes/python-setup.Rmd](vignettes/python-setup.Rmd)
+- 🧭 In R (after installing): `vignette("python-setup", package = "DownBallotR")`
+- 🌐 Rendered HTML (pkgdown): https://gchickering21.github.io/DownBallotR/articles/python-setup.html
 
 ---
 

@@ -1,5 +1,10 @@
 # DownBallotR
 
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/gchickering21/Downballot/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/gchickering21/Downballot/actions/workflows/R-CMD-check.yaml)
+<!-- badges: end -->
+
+
 `DownBallotR` is an R package that integrates R workflows with a managed Python
 environment (via **reticulate**) for tasks that require Python-based tooling.
 

@@ -1,0 +1,30 @@
+Package: DownBallotR
+Title: Local and State Election Data via R with Python-Backed Scrapers
+Version: 0.0.0.9000
+Authors@R: c(
+    person("Graham", "Chickering", email = "grahamchickering@gmail.com", role = c("aut", "cre")),
+    person("Chris", "Warshaw", email = "chris.warshaw@georgetown.edu", role = "aut")
+  )
+Description: Provides an R interface for downloading and standardizing local and state election data.
+    The package wraps state-specific Python web scrapers (e.g., Playwright/requests-based) via reticulate,
+    and exposes consistent R functions for querying election availability and results.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends: 
+    R (>= 4.1.0)
+Imports:
+    cli,
+    dplyr,
+    purrr,
+    rlang,
+    tibble,
+    tidyr,
+    reticulate,
+    fs
+Suggests:
+    testthat (>= 3.0.0),
+    withr,
+    covr
+Config/testthat/edition: 3

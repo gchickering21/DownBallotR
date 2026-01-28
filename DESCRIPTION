@@ -20,6 +20,8 @@ Suggests:
     knitr,
     rmarkdown,
     testthat (>= 3.0.0),
-    withr
+    withr,
+    pak,
+    remotes
 Config/testthat/edition: 3
 VignetteBuilder: knitr

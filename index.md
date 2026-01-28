@@ -12,7 +12,7 @@ manually, but a one-time setup step is required.
 Python setup vignette:**
 
 - 📄 [Python setup
-  vignette](https://gchickering21.github.io/Downballot/vignettes/python-setup.Rmd)
+  vignette](https://gchickering21.github.io/DownBallotR/articles/python-setup.html)
 
 After installing the package, you can also view it in R:
 

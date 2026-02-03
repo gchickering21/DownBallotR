@@ -2,7 +2,7 @@
 
 #' @keywords internal
 db_required_python_packages <- function() {
-  c("pandas", "requests", "lxml", "playwright")
+  c("pandas", "requests", "lxml", "playwright", "datetime", "re", "dataclasses")
 }
 
 #' @keywords internal
@@ -52,7 +52,7 @@ db_ensure_virtualenv <- function(envname, python = NULL) {
   if (isTRUE(tryCatch(reticulate::virtualenv_exists(envname), error = function(e) FALSE))) {
     return(invisible(TRUE))
   }
-  
+
   message("Creating virtualenv '", envname, "' ...")
   tryCatch(
     reticulate::virtualenv_create(envname = envname, python = python),
@@ -64,7 +64,7 @@ db_ensure_virtualenv <- function(envname, python = NULL) {
       )
     }
   )
-  
+
   invisible(TRUE)
 }
 
@@ -80,7 +80,7 @@ db_use_virtualenv <- function(envname) {
       )
     }
   )
-  
+
   invisible(TRUE)
 }
 
@@ -100,7 +100,7 @@ db_missing_python_packages <- function(pkgs, reinstall = FALSE) {
   if (isTRUE(reinstall)) {
     return(pkgs)
   }
-  
+
   ok <- vapply(
     pkgs,
     FUN = function(pkg) {
@@ -108,14 +108,16 @@ db_missing_python_packages <- function(pkgs, reinstall = FALSE) {
     },
     FUN.VALUE = logical(1)
   )
-  
+
   pkgs[!ok]
 }
 
 #' @keywords internal
 db_install_python_packages <- function(envname, packages, reinstall = FALSE) {
-  if (length(packages) == 0) return(invisible(TRUE))
-  
+  if (length(packages) == 0) {
+    return(invisible(TRUE))
+  }
+
   message("Installing Python packages into '", envname, "': ", paste(packages, collapse = ", "))
   tryCatch(
     reticulate::virtualenv_install(
@@ -133,7 +135,7 @@ db_install_python_packages <- function(envname, packages, reinstall = FALSE) {
       )
     }
   )
-  
+
   invisible(TRUE)
 }
 
@@ -160,10 +162,11 @@ db_playwright_chromium_is_installed <- function() {
   if (!isTRUE(tryCatch(reticulate::py_module_available("playwright"), error = function(e) FALSE))) {
     return(FALSE)
   }
-  
-  ok <- tryCatch({
-    reticulate::py_run_string(
-      "
+
+  ok <- tryCatch(
+    {
+      reticulate::py_run_string(
+        "
 from playwright.sync_api import sync_playwright
 __le_chromium_ok = False
 try:
@@ -172,19 +175,22 @@ try:
 except Exception:
     __le_chromium_ok = False
 "
-    )
-    isTRUE(reticulate::py$`__le_chromium_ok`)
-  }, error = function(e) FALSE)
-  
+      )
+      isTRUE(reticulate::py$`__le_chromium_ok`)
+    },
+    error = function(e) FALSE
+  )
+
   ok
 }
 
 #' @keywords internal
 db_install_playwright_chromium <- function() {
   message("Ensuring Playwright Chromium is installed (may download ~100-200MB)...")
-  tryCatch({
-    reticulate::py_run_string(
-      "
+  tryCatch(
+    {
+      reticulate::py_run_string(
+        "
 import sys
 from playwright.__main__ import main
 sys.argv = ['playwright', 'install', 'chromium']
@@ -193,25 +199,27 @@ try:
 except SystemExit:
     pass
 "
-    )
-  }, error = function(e) {
-    stop(
-      "Playwright is installed, but Chromium failed to install.\n",
-      "You can retry manually with:\n",
-      "  reticulate::py_run_string(\"from playwright.__main__ import main; import sys; sys.argv=['playwright','install','chromium']; main()\")\n\n",
-      "Active python: ", tryCatch(reticulate::py_config()$python, error = function(e2) "(unknown)"), "\n",
-      "Original error: ", conditionMessage(e),
-      call. = FALSE
-    )
-  })
-  
+      )
+    },
+    error = function(e) {
+      stop(
+        "Playwright is installed, but Chromium failed to install.\n",
+        "You can retry manually with:\n",
+        "  reticulate::py_run_string(\"from playwright.__main__ import main; import sys; sys.argv=['playwright','install','chromium']; main()\")\n\n",
+        "Active python: ", tryCatch(reticulate::py_config()$python, error = function(e2) "(unknown)"), "\n",
+        "Original error: ", conditionMessage(e),
+        call. = FALSE
+      )
+    }
+  )
+
   invisible(TRUE)
 }
 
 #' @keywords internal
 db_install_plan <- function(pkgs, reinstall = FALSE, install_chromium = TRUE) {
   missing_pkgs <- db_missing_python_packages(pkgs, reinstall = reinstall)
-  
+
   chromium_missing <- FALSE
   if (isTRUE(install_chromium) && !isTRUE(reinstall)) {
     chromium_missing <- !db_playwright_chromium_is_installed()
@@ -219,7 +227,7 @@ db_install_plan <- function(pkgs, reinstall = FALSE, install_chromium = TRUE) {
   if (isTRUE(install_chromium) && isTRUE(reinstall)) {
     chromium_missing <- TRUE
   }
-  
+
   list(
     missing_pkgs = missing_pkgs,
     chromium_missing = chromium_missing
@@ -249,28 +257,27 @@ downballot_install_python <- function(
     python = NULL,
     reinstall = FALSE,
     install_chromium = TRUE,
-    quiet = FALSE
-) {
+    quiet = FALSE) {
   pkgs <- db_required_python_packages()
-  
+
   .msg <- function(...) if (!isTRUE(quiet)) message(...)
-  
+
   # If Python already initialized in this session, ensure it's the right interpreter
   db_stop_if_python_initialized_to_other(envname)
-  
+
   # Create env if needed
   db_ensure_virtualenv(envname, python = python)
-  
+
   # Prefer this env in this session
   db_use_virtualenv(envname)
-  
+
   # (2) Force reticulate to initialize to the selected interpreter now,
   # so status checks and py_module_available reflect the correct Python.
   db_force_reticulate_init()
-  
+
   # Determine what to install (packages + chromium)
   plan <- db_install_plan(pkgs, reinstall = reinstall, install_chromium = install_chromium)
-  
+
   # If nothing to do, stop early with a friendly message
   if (length(plan$missing_pkgs) == 0 && !isTRUE(plan$chromium_missing)) {
     .msg(
@@ -279,24 +286,24 @@ downballot_install_python <- function(
       "Playwright Chromium: Correctly installed\n",
       "Nothing to do."
     )
-    
+
     # Still ensure Python is usable in-session (already forced above, but keep safe)
     db_force_reticulate_init()
     return(invisible(TRUE))
   }
-  
+
   # Install missing packages
   if (length(plan$missing_pkgs) > 0) {
     db_install_python_packages(envname, plan$missing_pkgs, reinstall = reinstall)
-    
+
     # Verify imports (also keeps reticulate initialized to this interpreter)
     db_verify_python_imports(pkgs = pkgs)
   }
-  
+
   # Install Chromium if requested and missing
   if (isTRUE(install_chromium) && isTRUE(plan$chromium_missing)) {
     db_install_playwright_chromium()
-    
+
     if (!isTRUE(db_playwright_chromium_is_installed())) {
       stop(
         "Playwright Chromium install step ran, but Chromium still appears unavailable.\n",
@@ -305,7 +312,7 @@ downballot_install_python <- function(
       )
     }
   }
-  
+
   .msg("Python setup complete for env '", envname, "'.")
   invisible(TRUE)
 }

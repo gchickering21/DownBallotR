@@ -1,9 +1,9 @@
 testthat::test_that("python status returns expected structure and class", {
   st <- downballot_python_status(quiet = TRUE)
-  
+
   testthat::expect_true(is.list(st))
   testthat::expect_s3_class(st, "downballot_python_status")
-  
+
   # Required fields (keep this list short + stable)
   required <- c(
     "envname",
@@ -16,7 +16,7 @@ testthat::test_that("python status returns expected structure and class", {
     "advice"
   )
   testthat::expect_true(all(required %in% names(st)))
-  
+
   # Types / sanity
   testthat::expect_true(is.character(st$envname) && length(st$envname) == 1)
   testthat::expect_true(is.logical(st$virtualenv_exists) && length(st$virtualenv_exists) == 1)

@@ -17,15 +17,14 @@
 downballot_python_status <- function(
     envname = "downballotR",
     required_pkgs = db_required_python_packages(),
-    quiet = FALSE
-) {
+    quiet = FALSE) {
   status <- db_python_status_collect(envname = envname, required_pkgs = required_pkgs)
-  
+
   if (!quiet) {
     print(status)
     return(invisible(status))
   }
-  
+
   status
 }
 
@@ -34,24 +33,23 @@ downballot_python_status <- function(
 db_python_status_collect <- function(envname, required_pkgs) {
   ve <- db_status_virtualenv(envname)
   rt <- db_status_reticulate()
-  
+
   # Detect whether active python matches the virtualenv python (when both exist)
   active_matches_env <- NA
   if (isTRUE(rt$reticulate_initialized) && isTRUE(ve$virtualenv_exists) &&
-      !is.null(rt$active_python) && !is.null(ve$virtualenv_python) &&
-      nzchar(rt$active_python) && nzchar(ve$virtualenv_python)) {
-    
+    !is.null(rt$active_python) && !is.null(ve$virtualenv_python) &&
+    nzchar(rt$active_python) && nzchar(ve$virtualenv_python)) {
     wanted <- tryCatch(normalizePath(ve$virtualenv_python, winslash = "/"), error = function(e) ve$virtualenv_python)
     current <- tryCatch(normalizePath(rt$active_python, winslash = "/"), error = function(e) rt$active_python)
     active_matches_env <- identical(current, wanted)
   }
-  
+
   # Package/chromium checks only make sense if:
   # - reticulate is initialized AND
   # - it is initialized to the correct env python
   missing <- character(0)
   chromium_ok <- FALSE
-  
+
   if (!isTRUE(rt$reticulate_initialized)) {
     missing <- required_pkgs
     chromium_ok <- FALSE
@@ -64,22 +62,17 @@ db_python_status_collect <- function(envname, required_pkgs) {
     missing <- db_status_missing_packages(required_pkgs)
     chromium_ok <- db_playwright_chromium_is_installed()
   }
-  
+
   status <- list(
     envname = envname,
     required_pkgs = required_pkgs,
-    
     virtualenv_exists = ve$virtualenv_exists,
     virtualenv_python = ve$virtualenv_python,
-    
     reticulate_initialized = rt$reticulate_initialized,
     active_python = rt$active_python,
-    
     active_python_matches_env = active_matches_env,
-    
     missing_packages = missing,
     playwright_chromium_installed = chromium_ok,
-    
     advice = db_python_status_advice(
       envname = envname,
       virtualenv_exists = ve$virtualenv_exists,
@@ -89,7 +82,7 @@ db_python_status_collect <- function(envname, required_pkgs) {
       playwright_chromium_installed = chromium_ok
     )
   )
-  
+
   class(status) <- c("downballot_python_status", class(status))
   status
 }
@@ -99,21 +92,21 @@ db_status_virtualenv <- function(envname) {
     virtualenv_exists = FALSE,
     virtualenv_python = NULL
   )
-  
+
   exists <- tryCatch(
     reticulate::virtualenv_exists(envname),
     error = function(e) FALSE
   )
-  
+
   out$virtualenv_exists <- isTRUE(exists)
-  
+
   if (out$virtualenv_exists) {
     out$virtualenv_python <- tryCatch(
       reticulate::virtualenv_python(envname),
       error = function(e) NA_character_
     )
   }
-  
+
   out
 }
 
@@ -149,7 +142,7 @@ db_status_missing_packages <- function(required_pkgs) {
   if (length(required_pkgs) == 0) {
     return(character(0))
   }
-  
+
   ok <- vapply(
     required_pkgs,
     FUN = function(pkg) {
@@ -157,7 +150,7 @@ db_status_missing_packages <- function(required_pkgs) {
     },
     FUN.VALUE = logical(1)
   )
-  
+
   required_pkgs[!ok]
 }
 
@@ -167,16 +160,15 @@ db_python_status_advice <- function(
     reticulate_initialized,
     active_python_matches_env,
     missing_packages,
-    playwright_chromium_installed
-) {
+    playwright_chromium_installed) {
   if (!isTRUE(virtualenv_exists)) {
     return(c("Next step:", "  downballot_install_python()"))
   }
-  
+
   if (!isTRUE(reticulate_initialized)) {
     return(c("Next step:", sprintf("  downballot_use_python('%s')", envname)))
   }
-  
+
   if (identical(active_python_matches_env, FALSE)) {
     return(c(
       "reticulate is initialized to a different Python than this virtualenv.",
@@ -184,11 +176,11 @@ db_python_status_advice <- function(
       sprintf("  downballot_use_python('%s')", envname)
     ))
   }
-  
+
   if (length(missing_packages) > 0 || !isTRUE(playwright_chromium_installed)) {
     return(c("Fix issues with:", "  downballot_install_python(reinstall = TRUE)"))
   }
-  
+
   c("Python environment is ready for use.")
 }
 
@@ -200,21 +192,21 @@ print.downballot_python_status <- function(x, ...) {
   cat("--------------------------------------\n")
   cat("Virtualenv name:         ", x$envname, "\n", sep = "")
   cat("Virtualenv exists:       ", x$virtualenv_exists, "\n", sep = "")
-  
+
   if (isTRUE(x$virtualenv_exists)) {
     cat("Virtualenv python:       ", x$virtualenv_python, "\n", sep = "")
   }
-  
+
   cat("reticulate initialized:  ", x$reticulate_initialized, "\n", sep = "")
-  
+
   if (isTRUE(x$reticulate_initialized)) {
     cat("Active python:           ", x$active_python, "\n", sep = "")
-    
+
     if (identical(x$active_python_matches_env, FALSE)) {
       cat(" Active python does NOT match the virtualenv python for '", x$envname, "'.\n", sep = "")
     }
   }
-  
+
   if (identical(x$active_python_matches_env, FALSE)) {
     cat("Python packages:         (not checked - wrong interpreter)\n")
     cat("Playwright Chromium:     (not checked - wrong interpreter)\n")
@@ -235,7 +227,7 @@ print.downballot_python_status <- function(x, ...) {
       sep = ""
     )
   }
-  
+
   if (!is.null(x$advice) && length(x$advice) > 0) {
     cat("\n")
     cat(paste0("- ", x$advice[[1]], "\n"), sep = "")
@@ -243,6 +235,6 @@ print.downballot_python_status <- function(x, ...) {
       cat(paste0(x$advice[-1], collapse = "\n"), "\n", sep = "")
     }
   }
-  
+
   invisible(x)
 }

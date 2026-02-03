@@ -13,7 +13,6 @@ knitr::opts_chunk$set(
   comment = "#>",
   eval = FALSE
 )
-
 ```
 
 ## 1. Install the package

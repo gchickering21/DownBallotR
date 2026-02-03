@@ -10,41 +10,51 @@ db_get_venv_python <- function(envname) {
   reticulate::virtualenv_python(envname)
 }
 
+#' Internal: stop if reticulate initialized to a different python
 #' @keywords internal
-#' @keywords internal
-db_stop_if_python_initialized_to_other <- function(envname) {
-  # IMPORTANT: Don't call py_config() unless Python is already initialized.
-  # py_config() can initialize reticulate and cause it to auto-select (e.g., uv).
-  already_init <- isTRUE(tryCatch(reticulate::py_available(initialize = FALSE), error = function(e) FALSE))
-  if (!already_init) {
-    return(invisible(TRUE))
-  }
+db_stop_if_python_initialized_to_other <- function(envname = "downballotR") {
+  if (!requireNamespace("reticulate", quietly = TRUE)) return(invisible(TRUE))
+
+  # Only check if python is already initialized
+  already_init <- isTRUE(
+    tryCatch(reticulate::py_available(initialize = FALSE), error = function(e) FALSE)
+  )
+  if (!already_init) return(invisible(TRUE))
 
   cfg <- tryCatch(reticulate::py_config(), error = function(e) NULL)
 
-  # If config is unavailable, treat as not initialized
-  if (is.null(cfg) || is.null(cfg$python) || !nzchar(cfg$python)) {
-    return(invisible(TRUE))
+  current_raw <- if (!is.null(cfg) && !is.null(cfg$python) && nzchar(cfg$python)) {
+    cfg$python
+  } else {
+    NA_character_
   }
 
-  wanted_raw <- tryCatch(db_get_venv_python(envname), error = function(e) NA_character_)
-  wanted <- tryCatch(normalizePath(wanted_raw, winslash = "/"), error = function(e) NA_character_)
-  current <- tryCatch(normalizePath(cfg$python, winslash = "/"), error = function(e) cfg$python)
+  wanted_raw <- tryCatch(
+    reticulate::virtualenv_python(envname),
+    error = function(e) NA_character_
+  )
 
-  if (!is.na(wanted) && !identical(current, wanted)) {
+  current <- .db_norm_path(current_raw)
+  wanted  <- .db_norm_path(wanted_raw)
+
+  # If we can't resolve either path, don't warn; just skip the strict check.
+  # (This prevents noisy normalizePath(NA) warnings.)
+  if (is.na(current) || is.na(wanted)) return(invisible(TRUE))
+
+  if (!identical(current, wanted)) {
     stop(
       "reticulate is already initialized to a different Python interpreter.\n",
-      "  current: ", cfg$python, "\n",
+      "  current: ", current_raw, "\n",
       "  wanted:  ", wanted_raw, "\n\n",
       "Fix: Restart your R session, then run:\n",
       "  downballot_use_python('", envname, "')\n",
-      "  downballot_install_python('", envname, "')\n",
       call. = FALSE
     )
   }
 
   invisible(TRUE)
 }
+
 
 
 #' @keywords internal

@@ -7,6 +7,8 @@
 .nc_scrape_missing_dates(start_date = NULL, end_date = NULL)
 }
 \description{
-Scrape only missing NC election dates for a requested range
+Returns NULL if no missing dates are detected (signals "no scrape needed").
+Currently uses a simple strategy: scrape the entire requested range.
+(Later optimization: scrape per missing date.)
 }
 \keyword{internal}

@@ -2,7 +2,7 @@
 % Please edit documentation in R/downballot_use_python.R
 \name{downballot_use_python}
 \alias{downballot_use_python}
-\title{Use the downballotR Python virtualenv in this R session}
+\title{Use the DownBallotR Python virtualenv in this R session}
 \usage{
 downballot_use_python(envname = "downballotR")
 }
@@ -14,7 +14,6 @@ Invisibly TRUE on success.
 }
 \description{
 Pins reticulate to the package's virtualenv for the current R session.
-If reticulate is already initialized to a different interpreter, this will
-error with a clear message (because reticulate cannot switch interpreters
-mid-session).
+If reticulate is already initialized to a different interpreter, this
+errors with a clear message (reticulate cannot switch interpreters mid-session).
 }

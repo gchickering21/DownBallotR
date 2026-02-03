@@ -18,3 +18,15 @@ downballot_ensure_python <- function(envname = "downballot") {
 
   invisible(TRUE)
 }
+
+
+#' Normalize a path safely (no warnings on NA)
+#' @keywords internal
+.db_norm_path <- function(x) {
+  if (is.null(x) || length(x) == 0 || isTRUE(is.na(x)) || !nzchar(x)) return(NA_character_)
+  suppressWarnings(
+    tryCatch(normalizePath(x, winslash = "/", mustWork = FALSE), error = function(e) x)
+  )
+}
+
+

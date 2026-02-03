@@ -49,6 +49,13 @@ nrows <- as.integer(reticulate::py_to_r(df_py$shape[[0]]))
 if (is.na(nrows) || nrows <= 0) stop("Pipeline returned 0 rows.")
 message("Python rows: ", nrows)
 
+
+
+
+
+
+
+
 # ---- 5) Python helper to sanitize + write CSV ----
 reticulate::py_run_string("
 import pandas as pd

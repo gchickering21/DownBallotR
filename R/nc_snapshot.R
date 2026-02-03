@@ -6,6 +6,7 @@
 
 #' Load shipped NC election results snapshot
 #'
+#' @importFrom utils data
 #' @return a data.frame
 #' @export
 get_nc_snapshot <- function() {

@@ -52,3 +52,8 @@ inst/doc
 docs
 
 downBallotPython/
+.vscode/
+.vscode
+
+__pycache__/
+**/__pycache__/

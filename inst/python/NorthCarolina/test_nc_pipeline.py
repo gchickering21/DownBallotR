@@ -1,7 +1,7 @@
 import pandas as pd
 
-from pipeline import NcElectionPipeline
-from constants import NC_MIN_SUPPORTED_ELECTION_DATE
+from .pipeline import NcElectionPipeline
+from .constants import NC_MIN_SUPPORTED_ELECTION_DATE
 
 pd.set_option("display.max_columns", 50)
 pd.set_option("display.width", 140)
@@ -10,7 +10,7 @@ print("\n=== RUN FULL NC PIPELINE (LATEST) ===")
 
 pipeline = NcElectionPipeline()
 
-df = pipeline.run()  # default = all available elections
+df, county_final, state_final = pipeline.run()  # default = all available elections
 assert df.empty or df["year"].min() >= NC_MIN_SUPPORTED_ELECTION_DATE.year
 print(f"✅ Confirmed: no results earlier than {NC_MIN_SUPPORTED_ELECTION_DATE}")
 
@@ -27,11 +27,9 @@ print("\nJurisdiction examples:")
 print(
     df[["office", "jurisdiction", "jurisdiction_type"]]
     .drop_duplicates()
+   
     .head(10)
 )
-
-print("\nDistrict examples:")
-print(df["district"].dropna().drop_duplicates().head(10).tolist())
 
 print("\nVote share summary:")
 print(df["vote_share"].describe())

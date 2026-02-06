@@ -1,0 +1,147 @@
+{
+  "election_type_rules": {
+    "general_dates": [
+        "2000-11-07",
+        "2002-11-05",
+        "2004-11-02",
+        "2006-11-07",
+        "2008-11-04",
+        "2010-11-02",
+        "2012-11-06",
+        "2014-11-04",
+        "2016-11-08",
+        "2018-11-06",
+        "2020-11-03",
+        "2022-11-08",
+        "2024-11-05"
+    ],
+    "special_dates": ["2019-09-10"],
+    "default": "Primary"
+  },
+  "canonical": {
+    "join_cols": [
+      "county","election_date","election_type", "precinct","contest_group_id","contest_type","contest_name",
+      "choice","choice_party","vote_for",
+      "election_day","early_voting","absentee_by_mail","absentee_or_early","provisional","total_votes",
+      "runoff_status","recount_status","winner_status","real_precinct","precinct_abbrv","ftp_date"
+    ],
+    "numeric_cols": [
+      "vote_for","election_day","early_voting","absentee_by_mail","absentee_or_early","provisional","total_votes"
+    ],
+    "string_cols": [
+      "county","precinct","contest_group_id","contest_type","contest_name","choice","choice_party",
+      "runoff_status","recount_status","winner_status","real_precinct","precinct_abbrv","ftp_date"
+    ],
+    "county_cols":[
+      "state","county","election_date","contest_name", "jurisdiction", "office","district", "choice", "choice_party",
+      "election_day", "early_voting", "absentee_by_mail", "absentee_or_early", "provisional","total_votes"
+    ],
+    "state_cols":[
+      "state","election_date","contest_name", "jurisdiction", "office","district", "choice", "choice_party",
+      "election_day", "early_voting", "absentee_by_mail", "absentee_or_early", "provisional","total_votes", "vote_share","contest_outcome"
+    ]
+  },
+  "col_map": {
+    "county": "county",
+    "election date": "election_date",
+    "precinct": "precinct",
+    "contest group id": "contest_group_id",
+    "contest type": "contest_type",
+    "contest name": "contest_name",
+    "choice": "choice",
+    "choice party": "choice_party",
+    "vote for": "vote_for",
+    "election day": "election_day",
+    "early voting": "early_voting",
+    "absentee by mail": "absentee_by_mail",
+    "provisional": "provisional",
+    "total votes": "total_votes",
+    "real precinct": "real_precinct",
+
+    "absentee / one stop": "absentee_or_early",
+    "absentee/one stop": "absentee_or_early",
+    "one stop": "absentee_or_early",
+
+    "county_name": "county",
+    "contest": "contest_name",
+    "party": "choice_party",
+    "contest_type": "contest_type",
+    "runoff_status": "runoff_status",
+    "recount_status": "recount_status",
+    "winner_status": "winner_status",
+
+    "absentee/early voting": "absentee_or_early",
+
+    "election_dt": "election_date",
+    "name_on_ballot": "choice",
+    "party_cd": "choice_party",
+    "election_day_count": "election_day",
+    "absentee_count": "absentee_or_early",
+    "provisional_count": "provisional",
+    "total_vote_count": "total_votes",
+
+    "precinct_abbrv": "precinct_abbrv",
+    "ballot_count": "total_votes",
+    "ftp_date": "ftp_date"
+  },
+  "layouts": [
+    {
+      "key": "post_2018_07_01",
+      "start_inclusive": "2018-07-01",
+      "end_exclusive": "9999-12-31",
+      "columns": [
+        "county","election date","precinct","contest group id","contest type","contest name",
+        "choice","choice party","vote for","election day","early voting","absentee by mail",
+        "provisional","total votes","real precinct"
+      ]
+    },
+    {
+      "key": "2014_01_01_to_2018_07_01",
+      "start_inclusive": "2014-01-01",
+      "end_exclusive": "2018-07-01",
+      "columns": [
+        "county","election date","precinct","contest group id","contest type","contest name",
+        "choice","choice party","vote for","election day","early voting","absentee by mail",
+        "provisional","total votes"
+      ]
+    },
+    {
+      "key": "2010_01_01_to_2014_01_01",
+      "start_inclusive": "2010-01-01",
+      "end_exclusive": "2014-01-01",
+      "columns": [
+        "county_name","precinct","contest_type","runoff_status","recount_status","contest",
+        "choice","winner_status","party","election day","early voting","absentee by mail",
+        "provisional","total votes"
+      ]
+    },
+    {
+      "key": "2008_11_01_to_2010_01_01",
+      "start_inclusive": "2008-11-01",
+      "end_exclusive": "2010-01-01",
+      "columns": [
+        "county_name","precinct","contest_type","runoff_status","recount_status","contest",
+        "choice","winner_status","party","election day","absentee/early voting","provisional",
+        "total votes"
+      ]
+    },
+    {
+      "key": "2007_01_01_to_2008_10_31",
+      "start_inclusive": "2007-01-01",
+      "end_exclusive": "2008-10-31",
+      "columns": [
+        "county","election_dt","precinct","contest","name_on_ballot","party_cd",
+        "election_day_count","absentee_count","provisional_count","total_vote_count"
+      ]
+    },
+    {
+      "key": "pre_2007_01_01",
+      "start_inclusive": "0001-01-01",
+      "end_exclusive": "2007-01-01",
+      "columns": [
+        "county","election_dt","precinct_abbrv","precinct","contest_name",
+        "name_on_ballot","party_cd","ballot_count","ftp_date"
+      ]
+    }
+  ]
+}

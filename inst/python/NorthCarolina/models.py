@@ -10,11 +10,3 @@ class NcElectionZip:
     zip_url: str
     label: str
 
-
-@dataclass(frozen=True)
-class NcScrapeResult:
-    state: str
-    election_date: date
-    source_url: str
-    member_name: str
-    df: pd.DataFrame

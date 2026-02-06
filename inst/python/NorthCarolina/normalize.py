@@ -1,89 +1,121 @@
 from __future__ import annotations
 
+import json
 import re
-from datetime import datetime
-from typing import Optional
+from dataclasses import dataclass
+from datetime import date, datetime
+from pathlib import Path
+from typing import Iterable, Optional, Sequence
 
 import pandas as pd
 
+from .election_type_rules import ElectionTypeRules, add_election_type
+from .canonicalize import extract_jurisdiction_office_and_district
+
+# =========================================================
+# Config model + loader
+# =========================================================
+
+@dataclass(frozen=True)
+class Layout:
+    key: str
+    start_inclusive: date
+    end_exclusive: date
+    columns: list[str]
+
+
+@dataclass(frozen=True)
+class CanonicalSchema:
+    join_cols: list[str]
+    numeric_cols: list[str]
+    string_cols: list[str]
+    county_cols: list[str]
+    state_cols : list[str]
+
+
+@dataclass(frozen=True)
+class NcResultsConfig:
+    schema: CanonicalSchema
+    col_map: dict[str, str] 
+    layouts: list[Layout]
+    election_type_rules: ElectionTypeRules
+
+
+def _parse_iso_date(s: str) -> date:
+    return datetime.strptime(s, "%Y-%m-%d").date()
+
+
+def load_nc_results_config(config_path: str | Path) -> NcResultsConfig:
+    """
+    Load NC results_pct normalization config from JSON.
+    Keeps the main code small and makes updates easy/safe.
+    """
+    p = Path(config_path)
+    data = json.loads(p.read_text(encoding="utf-8"))
+
+    schema = CanonicalSchema(
+        join_cols=list(data["canonical"]["join_cols"]),
+        numeric_cols=list(data["canonical"]["numeric_cols"]),
+        string_cols=list(data["canonical"]["string_cols"]),
+        county_cols=list(data["canonical"]["county_cols"]),
+        state_cols=list(data["canonical"]["state_cols"]),
+    )
+
+    col_map = {str(k): str(v) for k, v in data["col_map"].items()}
+
+    layouts: list[Layout] = []
+    for item in data["layouts"]:
+        layouts.append(
+            Layout(
+                key=str(item["key"]),
+                start_inclusive=_parse_iso_date(item["start_inclusive"]),
+                end_exclusive=_parse_iso_date(item["end_exclusive"]),
+                columns=list(item["columns"]),
+            )
+        )
+
+    etr = data.get("election_type_rules", {})
+    election_type_rules = ElectionTypeRules(
+        general_dates={_parse_iso_date(s) for s in etr.get("general_dates", [])},
+        special_dates={_parse_iso_date(s) for s in etr.get("special_dates", [])},
+        default=str(etr.get("default", "Primary")),
+    )
+
+    return NcResultsConfig(
+        schema=schema,
+        col_map=col_map,
+        layouts=layouts,
+        election_type_rules=election_type_rules,
+    )
+
+
+
+
+# =========================================================
+# Normalization helpers
+# =========================================================
+
+_WHITESPACE_RE = re.compile(r"\s+")
+
 
 def _norm_col(c: object) -> str:
-    return re.sub(r"\s+", " ", str(c).strip().lower())
+    """Normalize raw column labels for robust matching."""
+    return _WHITESPACE_RE.sub(" ", str(c).strip().lower())
 
 
-# -------------------------------------------------------------------
-# Canonical intermediate columns we want downstream:
-# county, election_date, precinct, contest_group_id, contest_type,
-# contest_name, choice, choice_party, vote_for,
-# election_day, early_voting, absentee_by_mail, provisional, total_votes,
-# plus optional older-era fields:
-# district, runoff_status, recount_status, winner_status, absentee_or_early, ftp_date, precinct_abbrv
-# -------------------------------------------------------------------
-_COL_MAP = {
-    # ----------------------------
-    # After Jan 1, 2014 (tab delimited) and after July 1, 2018
-    # ----------------------------
-    "county": "county",
-    "election date": "election_date",
-    "precinct": "precinct",
-    "contest group id": "contest_group_id",
-    "contest type": "contest_type",
-    "contest name": "contest_name",
-    "choice": "choice",
-    "choice party": "choice_party",
-    "vote for": "vote_for",
-    "election day": "election_day",
-    "early voting": "early_voting",
-    "absentee by mail": "absentee_by_mail",
-    "provisional": "provisional",
-    "total votes": "total_votes",
-    "real precinct": "real_precinct",
-
-    # common variants on older files
-    "absentee / one stop": "absentee_or_early",
-    "absentee/one stop": "absentee_or_early",
-    "one stop": "absentee_or_early",
-
-    # ----------------------------
-    # 2010–2014 (CSV)
-    # ----------------------------
-    "county_name": "county",
-    "contest": "contest_name",
-    "party": "choice_party",
-    "contest_type": "contest_type",
-    "runoff_status": "runoff_status",
-    "recount_status": "recount_status",
-    "winner_status": "winner_status",
-    "district": "district",
-    "total votes": "total_votes",
-
-    # ----------------------------
-    # 2008–2010 (CSV)
-    # ----------------------------
-    "absentee/early voting": "absentee_or_early",
-
-    # ----------------------------
-    # 2007–2008 (CSV)
-    # ----------------------------
-    "election_dt": "election_date",
-    "name_on_ballot": "choice",
-    "party_cd": "choice_party",
-    "election_day_count": "election_day",
-    "absentee_count": "absentee_or_early",
-    "provisional_count": "provisional",
-    "total_vote_count": "total_votes",
-
-    # ----------------------------
-    # Before 2007 (CSV)
-    # ----------------------------
-    "precinct_abbrv": "precinct_abbrv",
-    "contest_name": "contest_name",
-    "ballot_count": "total_votes",  # total votes all total
-    "ftp_date": "ftp_date",
-}
+def _as_date(d: object) -> Optional[date]:
+    """Accept date or datetime; return date; otherwise None."""
+    if d is None:
+        return None
+    if isinstance(d, datetime):
+        return d.date()
+    if isinstance(d, date):
+        return d
+    return None
 
 
 def _parse_nc_date(x: object) -> object:
+    """Parse NC election dates into datetime.date, else NA."""
     if x is None or (isinstance(x, float) and pd.isna(x)):
         return pd.NA
     s = str(x).strip()
@@ -98,186 +130,228 @@ def _parse_nc_date(x: object) -> object:
     return pd.NA
 
 
-# -------------------------------------------------------------------
-# Headerless / positional layouts
-# When io_utils detects "no real header", it reads with header=None,
-# giving integer columns 0..N-1. We map by column count to the known
-# NC layouts from layout_results_pct.txt.
-# -------------------------------------------------------------------
-def _is_headerless(df: pd.DataFrame) -> bool:
-    # header=None -> RangeIndex-like integer columns
+def _layout_for_fallback(layouts: list[Layout], fallback_election_date: Optional[object]) -> Optional[Layout]:
+    d = _as_date(fallback_election_date)
+    if d is None:
+        return None
+    for L in layouts:
+        if L.start_inclusive <= d < L.end_exclusive:
+            return L
+    return None
+
+
+# =========================================================
+# Header repair logic
+# =========================================================
+
+def _is_int_columns(df: pd.DataFrame) -> bool:
+    """True when df was read with header=None (integer columns)."""
     return all(isinstance(c, int) for c in df.columns)
 
 
-def _assign_positional_columns(df: pd.DataFrame) -> pd.DataFrame:
+def _normalized_tokens(objs: Iterable[object]) -> list[str]:
+    return [_norm_col(x) for x in objs]
+
+
+def _header_overlap_ratio(tokens: Sequence[str], expected: Sequence[str]) -> float:
     """
-    Assign column names for headerless files using known NC layouts.
-
-    We use column-count-based heuristics that match the NC documentation:
-      - Before 2007: 9 cols  (county, election_dt, precinct_abbrv, precinct, contest_name, name_on_ballot, party_cd, ballot_count, ftp_date)
-      - 2007–2008: 11 cols  (county, election_dt, precinct, contest, name_on_ballot, party_cd, election_day_count, absentee_count, provisional_count, total_vote_count)  <-- some zips omit fields; see note
-      - 2008–2010: 13 cols  (county_name, precinct, contest_type, runoff_status, recount_status, contest, choice, winner_status, party, election day, absentee/early voting, provisional, total votes, district)
-      - 2010–2014: 15 cols  (county_name, precinct, contest_type, runoff_status, recount_status, contest, choice, winner_status, party, election day, early voting, absentee by mail, provisional, total votes, district)
-
-    Reality: some files omit "district" or include ftp_date; so we handle a few near-matches.
+    Overlap ratio between token sets, using expected as denominator.
+    1.0 => all expected tokens appear in tokens (order not required).
     """
-    n = df.shape[1]
+    exp = set(_normalized_tokens(expected))
+    got = set(tokens)
+    if not exp:
+        return 0.0
+    return len(exp & got) / len(exp)
 
-    # --- Before 2007 (9 columns) ---
-    if n == 9:
-        cols = [
-            "county",
-            "election_dt",
-            "precinct_abbrv",
-            "precinct",
-            "contest_name",
-            "name_on_ballot",
-            "party_cd",
-            "ballot_count",
-            "ftp_date",
-        ]
-        return df.set_axis(cols, axis=1, copy=False)
 
-    # --- 2007–2008-ish (10 columns) ---
-    # Some files appear as 10 cols without an explicit total_vote_count vs ballot_count split.
-    # In practice, if it has election_day_count + absentee_count + provisional_count + total_vote_count, it’s 10.
-    if n == 10:
-        cols = [
-            "county",
-            "election_dt",
-            "precinct",
-            "contest",
-            "name_on_ballot",
-            "party_cd",
-            "election_day_count",
-            "absentee_count",
-            "provisional_count",
-            "total_vote_count",
-        ]
-        return df.set_axis(cols, axis=1, copy=False)
+def _df_columns_look_like_expected_header(df: pd.DataFrame, expected_cols: list[str], threshold: float = 0.6) -> bool:
+    return _header_overlap_ratio(_normalized_tokens(df.columns), expected_cols) >= threshold
 
-    # --- 2008–2010 (14 columns) ---
-    # Docs show 14 including district; sometimes district missing -> 13.
-    if n == 14:
-        cols = [
-            "county_name",
-            "precinct",
-            "contest_type",
-            "runoff_status",
-            "recount_status",
-            "contest",
-            "choice",
-            "winner_status",
-            "party",
-            "election day",
-            "absentee/early voting",
-            "provisional",
-            "total votes",
-            "district",
-        ]
-        return df.set_axis(cols, axis=1, copy=False)
 
-    if n == 13:
-        # same as above but no district
-        cols = [
-            "county_name",
-            "precinct",
-            "contest_type",
-            "runoff_status",
-            "recount_status",
-            "contest",
-            "choice",
-            "winner_status",
-            "party",
-            "election day",
-            "absentee/early voting",
-            "provisional",
-            "total votes",
-        ]
-        return df.set_axis(cols, axis=1, copy=False)
+def _first_row_looks_like_expected_header(df: pd.DataFrame, expected_cols: list[str], threshold: float = 0.6) -> bool:
+    if df.empty:
+        return False
+    return _header_overlap_ratio(_normalized_tokens(df.iloc[0].tolist()), expected_cols) >= threshold
 
-    # --- 2010–2014 (15 columns) ---
-    if n == 15:
-        cols = [
-            "county_name",
-            "precinct",
-            "contest_type",
-            "runoff_status",
-            "recount_status",
-            "contest",
-            "choice",
-            "winner_status",
-            "party",
-            "election day",
-            "early voting",
-            "absentee by mail",
-            "provisional",
-            "total votes",
-            "district",
-        ]
-        return df.set_axis(cols, axis=1, copy=False)
 
-    # If we can't confidently map, leave as-is (upstream will warn/fail gracefully).
+def _shift_columns_into_first_row(df: pd.DataFrame, expected_cols: list[str]) -> pd.DataFrame:
+    """
+    Fix: headerless file read with header=0 → first data row became df.columns.
+
+    We move df.columns into row 0, then apply expected_cols as headers.
+    """
+    first_data_row = pd.DataFrame([list(df.columns)], columns=range(len(df.columns)))
+
+    body = df.copy()
+    body.columns = range(len(body.columns))
+
+    rebuilt = pd.concat([first_data_row, body], ignore_index=True)
+    rebuilt.columns = expected_cols[: rebuilt.shape[1]]
+    return rebuilt
+
+
+def _ensure_expected_raw_layout(df: pd.DataFrame, layout: Layout) -> pd.DataFrame:
+    """
+    Ensure df has the raw layout header for the chosen layout.
+    Handles:
+      A) header=None integer columns
+      B) df.columns already correct
+      C) first row is the header
+      D) df.columns are actually first data row
+      E) best-effort positional assignment
+    """
+    expected = layout.columns
+
+    if _is_int_columns(df):  # A
+        out = df.copy()
+        out.columns = expected[: out.shape[1]]
+        return out
+
+    if _df_columns_look_like_expected_header(df, expected):  # B
+        out = df.copy()
+        if out.shape[1] == len(expected):
+            out.columns = expected
+        return out
+
+    if _first_row_looks_like_expected_header(df, expected):  # C
+        out = df.copy()
+        out.columns = expected[: out.shape[1]]
+        return out.iloc[1:].reset_index(drop=True)
+
+    if len(df.columns) == len(expected):  # D
+        return _shift_columns_into_first_row(df, expected)
+
+    # E
+    out = df.copy()
+    out.columns = expected[: out.shape[1]]
+    return out
+
+
+# =========================================================
+# Finalization for concat across years
+# =========================================================
+
+def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) -> pd.DataFrame:
+    """
+    Make output safe to concatenate across years:
+      - force a stable set/order of columns
+      - coerce numeric vote fields
+      - coerce strings
+      - add election_year
+    """
+    df = out.copy()
+
+    df = df.reindex(columns=schema.join_cols)
+
+    for col in schema.numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+
+
+    for col in schema.string_cols:
+        if col in df.columns:
+            df[col] = df[col].astype("string").str.strip().replace({"": pd.NA})
+
+    if "election_date" in df.columns:
+        df["election_year"] = (
+            df["election_date"]
+            .apply(lambda d: d.year if pd.notna(d) else pd.NA)
+            .astype("Int64")
+        )
+    else:
+        df["election_year"] = pd.NA
+
+    if "contest_type" in df.columns:
+        mapping = {"S": "State", "C": "County"}
+        df["contest_type"] = df["contest_type"].map(mapping).fillna(df["contest_type"])
+
+    if "state" not in df.columns:
+        df.insert(0, "state", "NC")
+
+    df[["jurisdiction", "office", "district"]] = (
+        df["contest_name"]
+        .apply(extract_jurisdiction_office_and_district)
+        .apply(pd.Series)
+    )
+
+    cols = df.columns.tolist()
+
+    i = cols.index("contest_name") + 1
+    new_order = (
+        cols[:i]
+        + ["jurisdiction", "office"]
+        + [c for c in cols[i:] if c not in {"jurisdiction", "office"}]
+    )
+
+    df = df[new_order]
+
+
+    df["choice_party"] = df["choice_party"].fillna(
+        df["contest_name"].str.extract(r"\(([^)]+)\)$", expand=False)
+    )
+
     return df
+
+
+# =========================================================
+# Public API
+# =========================================================
+def get_config() -> NcResultsConfig:
+    _DEFAULT_CONFIG_PATH = Path(__file__).with_name("nc_results_pct_config.json")
+    _CONFIG: NcResultsConfig = load_nc_results_config(_DEFAULT_CONFIG_PATH)
+
+    return _CONFIG
 
 
 def normalize_nc_results_cols(
     df: pd.DataFrame,
     fallback_election_date: Optional[date] = None,
 ) -> pd.DataFrame:
+
     """
-    Normalize NC results file columns across eras.
-    If election_date is missing in the file, optionally fill it from fallback_election_date.
+    Normalize NC results file columns across eras, then finalize into a stable schema
+    suitable for concatenating across years.
+
+    If `config` is None, you should pass one in (loaded from JSON) in the pipeline.
     """
+    cfg = get_config()
+
+   # Work on a shallow copy to avoid mutating caller state
     work = df.copy()
 
-    if _is_headerless(work):
-        work = _assign_positional_columns(work)
+    # Select expected raw layout from fallback election date (if available)
+    layout = _layout_for_fallback(cfg.layouts, fallback_election_date)
+    if layout:
+        work = _ensure_expected_raw_layout(work, layout)
 
-    rename = {}
-    for c in work.columns:
-        key = _norm_col(c)
-        if key in _COL_MAP:
-            rename[c] = _COL_MAP[key]
+    # Build rename mapping from normalized raw column names → canonical names
+    rename = {
+        col: cfg.col_map[norm]
+        for col in work.columns
+        if (norm := _norm_col(col)) in cfg.col_map
+    }
 
-    out = work.rename(columns=rename).copy()
+    # Apply canonical renaming
+    out = work.rename(columns=rename)
 
-    # Parse election_date if present
+
+    # election_date parsing + fallback fill (fill ANY NA, not just all-NA)
     if "election_date" in out.columns:
         out["election_date"] = out["election_date"].apply(_parse_nc_date)
 
-    # If election_date missing OR all NA, fill from fallback
-    if fallback_election_date is not None:
+    fb = _as_date(fallback_election_date)
+    if fb is not None:
         if "election_date" not in out.columns:
-            out["election_date"] = fallback_election_date
+            out["election_date"] = fb
         else:
-            if out["election_date"].isna().all():
-                out["election_date"] = fallback_election_date
+            out["election_date"] = out["election_date"].fillna(fb)
 
-    # numeric coercions
-    numeric_cols = [
-        "vote_for",
-        "election_day",
-        "early_voting",
-        "absentee_by_mail",
-        "provisional",
-        "total_votes",
-        "absentee_or_early",
-    ]
-    for col in numeric_cols:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce")
+    # Add election_type BEFORE finalizing (finalizer reindexes columns and can drop it)
+    out = add_election_type(out, cfg.election_type_rules)
 
-    if "choice_party" in out.columns:
-        out["choice_party"] = (
-            out["choice_party"]
-            .astype(str)
-            .str.strip()
-            .replace({"nan": pd.NA, "none": pd.NA, "": pd.NA})
-        )
-
-    for col in ["county", "precinct", "contest_name", "choice"]:
-        if col in out.columns:
-            out[col] = out[col].astype(str).replace({"nan": pd.NA, "None": pd.NA}).str.strip()
+    # force stable schema for cross-year concatenation
+    out = _finalize_for_cross_year_concat(out, cfg.schema)
 
     return out
+

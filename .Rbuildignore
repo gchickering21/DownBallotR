@@ -5,4 +5,5 @@
 ^pkgdown$
 ^downBallotPython$
 .vscode
-**/__pycache__/
+(^|/)__pycache__($|/)
+

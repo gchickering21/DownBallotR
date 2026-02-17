@@ -6,4 +6,7 @@
 ^downBallotPython$
 .vscode
 (^|/)__pycache__($|/)
-
+.*_output$
+.Rhistory
+.claude
+.claude/

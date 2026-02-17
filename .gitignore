@@ -58,3 +58,9 @@ downBallotPython/
 __pycache__/
 **/__pycache__/
 *.pyc
+
+# Ignore any folder ending in _output
+*_output/
+
+.claude
+.claude/

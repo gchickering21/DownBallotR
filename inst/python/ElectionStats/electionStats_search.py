@@ -9,6 +9,7 @@ from lxml import html
 
 from .electionStats_client import StateHttpClient
 from .electionStats_models import ElectionSearchRow
+from .state_config import get_scraper_type
 
 # Accept both VA/MA: election-id-#### and CO: contest-id-####
 _ROW_ID_RE = re.compile(r"^(?:election|contest)-id-(\d+)$")
@@ -162,7 +163,14 @@ def _extract_contest_outcome(tr) -> str:
     cls = (tr.get("class") or "")
     return "Winner" if "is_winner" in cls else "Loser"
 
-
+def _parse_percentage(p):
+    if not p:
+        return None
+    try:
+        return float(str(p).replace("%", "").strip())
+    except ValueError:
+        return None
+    
 def _extract_candidate_record(tr) -> Optional[Tuple[str, Optional[str], int, Optional[str], str]]:
     """
     Return:
@@ -182,6 +190,10 @@ def _extract_candidate_record(tr) -> Optional[Tuple[str, Optional[str], int, Opt
     party = _extract_party(tr)
     vote_percentage = _extract_vote_percentage(tr)
     contest_outcome = _extract_contest_outcome(tr)
+
+    vote_percentage_num = _parse_percentage(vote_percentage)
+    if vote_percentage_num is not None and vote_percentage_num > 50 and contest_outcome != 'Winner':
+        contest_outcome = "Winner"
 
     return (candidate_name, party, total_vote_count, vote_percentage, contest_outcome)
 
@@ -294,27 +306,153 @@ def _parse_search_row_vama(tr) -> Optional[Tuple[int, int, str, str, str, object
     return election_id, year, stage, office, district, candidates_cell
 
 
+def _parse_v2_results_text(results_text: str) -> List[Tuple[str, Optional[str], int, Optional[str], str]]:
+    """
+    Parse v2 results summary text into candidate records.
+
+    Example format:
+    "Rusty Streetman won the race (51%) against Susan Hill Smith."
+    "John McManus won the race (52%) against Ed Leese."
+
+    Returns list of:
+      (candidate_name, party, vote_count, vote_percentage, contest_outcome)
+
+    Note: v2 summary text doesn't provide vote counts, only percentages.
+    We'll mark vote_count as 0 as placeholder.
+    """
+    results: List[Tuple[str, Optional[str], int, Optional[str], str]] = []
+
+    # Pattern: "Name1 won the race (XX%) against Name2"
+    # Or: "Name1 (XX%) and Name2 (YY%)"
+    # Extract all name-percentage pairs
+
+    # Try "won the race" pattern first
+    winner_pattern = r"([^(]+)\s+won the race\s+\((\d+)%\)\s+against\s+(.+)"
+    match = re.match(winner_pattern, results_text)
+
+    if match:
+        winner_name = match.group(1).strip()
+        winner_pct = match.group(2).strip() + "%"
+        loser_names = match.group(3).strip()
+
+        # Add winner
+        results.append((winner_name, None, 0, winner_pct, "Winner"))
+
+        # Extract loser(s) - may have multiple "Name and Name2 and Name3"
+        # Clean up trailing punctuation
+        loser_names = loser_names.rstrip(".").strip()
+
+        # Split by "and" or ","
+        for loser in re.split(r"\s+and\s+|,\s*", loser_names):
+            loser = loser.strip()
+            if loser:
+                results.append((loser, None, 0, None, "Loser"))
+
+    # If no match, try to extract any name-percentage pairs
+    else:
+        # Pattern: Name (XX%)
+        pct_pattern = r"([^(]+?)\s+\((\d+)%\)"
+        for match in re.finditer(pct_pattern, results_text):
+            name = match.group(1).strip()
+            pct = match.group(2).strip() + "%"
+            outcome = "Winner" if int(match.group(2)) > 50 else "Loser"
+            results.append((name, None, 0, pct, outcome))
+
+    return results
+
+
+def _parse_search_row_v2(tr) -> Optional[Tuple[int, int, str, str, str, str]]:
+    """
+    V2 states (SC/NM) row structure after React rendering.
+
+    Table: contestCollectionTable
+    Row structure: 5 cells without ID attributes
+    - Cell 0: Date (e.g., "Nov 2024")
+    - Cell 1: Stage (e.g., "General", "Primary")
+    - Cell 2: Office (e.g., "City Council")
+    - Cell 3: District (e.g., "City of Isle of Palms")
+    - Cell 4: Results summary with link to /contest/{election_id}
+
+    Returns:
+      (election_id, year, stage, office, district, results_text)
+    """
+    tds = tr.xpath("./td")
+    if len(tds) < 5:
+        return None
+
+    # Extract data from cells
+    date_text = _safe_text(tds[0])
+    stage = _safe_text(tds[1])
+    office = _safe_text(tds[2])
+    district = _safe_text(tds[3])
+    results_text = _safe_text(tds[4])
+
+    # Extract year from date (e.g., "Nov 2024" -> 2024)
+    year_match = re.search(r"\b(19|20)\d{2}\b", date_text)
+    if not year_match:
+        return None
+    year = int(year_match.group(0))
+
+    # Extract election_id from link (e.g., /contest/8119 -> 8119)
+    link = tds[4].xpath(".//a/@href")
+    if not link:
+        return None
+
+    id_match = re.search(r"/contest/(\d+)", link[0])
+    if not id_match:
+        return None
+    election_id = int(id_match.group(1))
+
+    if not office or not stage:
+        return None
+
+    return election_id, year, stage, office, district, results_text
+
+
 def _choose_row_parser(state_key: str):
     """
-    Choose a specialized row parser by state key.
+    Choose a specialized row parser by state key and scraper type.
     """
+    scraper_type = get_scraper_type(state_key)
+
+    # V2 states (SC/NM): different table structure
+    if scraper_type == "v2":
+        return _parse_search_row_v2
+
+    # Classic states with special handling
     s = (state_key or "").strip().lower()
     if s == "colorado":
         return _parse_search_row_colorado
+
+    # Default classic (VA/MA)
     return _parse_search_row_vama
 
 
 # =============================
 # Main parser
 # =============================
-def parse_search_results(page_html: str, client: StateHttpClient, state_name: str, url:str) -> List[ElectionSearchRow]:
+def parse_search_results(page_html: str, client, state_name: str, url:str) -> List[ElectionSearchRow]:
+    """
+    Parse search results HTML for both classic and v2 states.
+
+    Classic states (VA/MA/CO): table#search_results_table with rows having ID attributes
+    V2 states (SC/NM): table#contestCollectionTable without row IDs
+    """
     doc = html.fromstring(page_html)
 
-    trs = doc.xpath(
-        "//table[@id='search_results_table']//tr["
-        "starts-with(@id,'election-id-') or starts-with(@id,'contest-id-')"
-        "]"
-    )
+    # Determine scraper type to use appropriate XPath
+    scraper_type = get_scraper_type(state_name)
+
+    if scraper_type == "v2":
+        # V2: contestCollectionTable tbody rows
+        trs = doc.xpath("//table[@id='contestCollectionTable']//tbody/tr")
+    else:
+        # Classic: search_results_table with ID attributes on rows
+        trs = doc.xpath(
+            "//table[@id='search_results_table']//tr["
+            "starts-with(@id,'election-id-') or starts-with(@id,'contest-id-')"
+            "]"
+        )
 
     parse_row = _choose_row_parser(state_name)
 
@@ -325,9 +463,18 @@ def parse_search_results(page_html: str, client: StateHttpClient, state_name: st
         if parsed is None:
             continue
 
-        election_id, year, stage, office, district, candidates_cell = parsed
+        # Classic parsers return: (election_id, year, stage, office, district, candidates_cell)
+        # V2 parser returns: (election_id, year, stage, office, district, results_text)
 
-        candidate_rows = _extract_candidates_table(candidates_cell)
+        if scraper_type == "v2":
+            election_id, year, stage, office, district, results_text = parsed
+            # Parse candidates from text summary
+            candidate_rows = _parse_v2_results_text(results_text)
+        else:
+            election_id, year, stage, office, district, candidates_cell = parsed
+            # Extract candidates from nested table
+            candidate_rows = _extract_candidates_table(candidates_cell)
+
         if not candidate_rows:
             continue
 
@@ -458,10 +605,68 @@ def fetch_all_search_results(
 
 
 
-def rows_to_dataframe(rows: list[ElectionSearchRow], client: StateHttpClient) -> pd.DataFrame:
+def fetch_all_search_results_v2(
+    playwright_client,
+    year_from: int,
+    year_to: int,
+    state_name: str
+) -> List[ElectionSearchRow]:
+    """
+    Fetch search results using Playwright for v2 states (SC/NM).
+
+    V2 states use React apps with dynamic loading, so we render with Playwright
+    and then parse the resulting HTML.
+
+    Parameters
+    ----------
+    playwright_client : PlaywrightClient
+        Initialized Playwright client (must be in context manager)
+    year_from : int
+        Start year for search
+    year_to : int
+        End year for search
+    state_name : str
+        State identifier (e.g., 'south_carolina')
+
+    Returns
+    -------
+    List[ElectionSearchRow]
+        Parsed election results
+
+    Notes
+    -----
+    V2 states may handle pagination differently. Currently fetches first page.
+    May need to implement scroll/load-more logic if results exceed one page.
+    """
+    # Get rendered HTML from Playwright
+    html = playwright_client.get_search_page(year_from, year_to)
+
+    # Parse with lxml after JS has rendered
+    return parse_search_results(html, playwright_client, state_name, url="")
+
+
+def rows_to_dataframe(rows: list[ElectionSearchRow], client) -> pd.DataFrame:
     """
     Convert parsed ElectionSearchRow objects into a pandas DataFrame.
     Includes computed detail_url.
+
+    Parameters
+    ----------
+    rows : list[ElectionSearchRow]
+        Parsed election search results
+    client : StateHttpClient or PlaywrightClient
+        Client that can build detail URLs
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with election results and detail_url column
     """
-    records = [asdict(r) | {"detail_url": client.build_detail_url(r.election_id)} for r in rows]
+    # For v2/Playwright clients, build detail URL differently
+    if hasattr(client, 'base_url'):
+        # PlaywrightClient
+        records = [asdict(r) | {"detail_url": f"{client.base_url}/contest/{r.election_id}"} for r in rows]
+    else:
+        # StateHttpClient
+        records = [asdict(r) | {"detail_url": client.build_detail_url(r.election_id)} for r in rows]
     return pd.DataFrame.from_records(records)

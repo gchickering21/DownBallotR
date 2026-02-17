@@ -1,0 +1,5 @@
+# Ignore all HTML files saved by test scripts
+*.html
+
+# But keep this .gitignore
+!.gitignore

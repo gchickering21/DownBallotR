@@ -10,19 +10,24 @@ import pyreadr
 
 from ElectionStats.electionStats_client import HttpConfig, StateHttpClient
 from ElectionStats.electionStats_models import ElectionSearchRow
-from ElectionStats.electionStats_search import fetch_all_search_results, rows_to_dataframe
-from ElectionStats.electionStats_county_search  import build_county_dataframe_parallel, build_county_dataframe
+from ElectionStats.electionStats_search import (
+    fetch_all_search_results,
+    fetch_all_search_results_v2,
+    rows_to_dataframe,
+)
+from ElectionStats.electionStats_county_search import (
+    build_county_dataframe_parallel,
+    build_county_dataframe,
+    build_county_dataframe_v2,
+)
+from ElectionStats.state_config import get_state_config
+from ElectionStats.playwright_client import PlaywrightClient
 
 
 # ---------------------------
-# Edit-friendly registry
+# State configuration now managed in state_config.py
+# Use get_state_config() to access state URLs and scraping methods
 # ---------------------------
-STATE_REGISTRY: dict[str, dict[str, str]] = {
-    "virginia": {"base_url": "https://historical.elections.virginia.gov/elections", "search_path": "/search"},
-    "massachusetts": {"base_url": "https://electionstats.state.ma.us/elections", "search_path": "/search"},
-    # Colorado: do NOT include /search
-    "colorado": {"base_url": "https://co.elstats2.civera.com/eng/contests", "search_path": ""},
-}
 
 
 # ---------------------------
@@ -93,80 +98,120 @@ def _make_client_factory(state_key: str, base_url: str, sleep_s: float, search_p
 # ---------------------------
 def scrape_one_year(
     state_key: str,
-    state_name: str,   # ✅ added
+    state_name: str,
     base_url: str,
     search_path: str,
     year: int,
-    parallel: True
+    parallel: bool,
+    scraping_method: str,  # NEW: "requests" or "playwright"
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Returns (state_df, county_df) for a single year.
+    Dispatches to requests-based or Playwright-based scraping.
 
     state_df: candidate-exploded search results (includes detail_url)
     county_df: long county votes (includes candidate_id)
     """
-    # Use state_key for registry lookup / file naming, but carry state_name through
-    # if you want a nicer label (e.g., "Colorado") downstream.
-    state_client = _make_client(
-        state_key=state_key,
-        base_url=base_url,
-        sleep_s=_SLEEP_S_STATE,
-        search_path=search_path,
-    )
 
-    rows = fetch_all_search_results(
-        state_client,
-        year_from=year,
-        year_to=year,
-        start_page=1,
-        state_name=state_name,   
-    )
-    state_df = rows_to_dataframe(rows, client=state_client)
+    if scraping_method == "playwright":
+        # =============================
+        # V2 states: use Playwright
+        # =============================
+        with PlaywrightClient(state_key, base_url) as pw_client:
+            rows = fetch_all_search_results_v2(
+                pw_client,
+                year_from=year,
+                year_to=year,
+                state_name=state_name
+            )
+            state_df = rows_to_dataframe(rows, client=pw_client)
 
-    if state_df.empty:
-        return state_df, pd.DataFrame(columns=COUNTY_COLS)
+            if state_df.empty:
+                return state_df, pd.DataFrame(columns=COUNTY_COLS)
 
-    # ✅ ensure the state column is set consistently (useful if parsers differ)
-    if "state" not in state_df.columns:
-        state_df.insert(0, "state", state_name)
+            # Ensure state column
+            if "state" not in state_df.columns:
+                state_df.insert(0, "state", state_name)
+            else:
+                state_df["state"] = state_name
+
+            if "year" not in state_df.columns:
+                state_df.insert(0, "year", year)
+
+            # Only hit each election detail page once
+            unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
+
+            # County scraping with Playwright (no parallel support yet for v2)
+            county_df = build_county_dataframe_v2(
+                state_df=unique_elections,
+                playwright_client=pw_client,
+            )
+
     else:
-        state_df["state"] = state_name
+        # =============================
+        # Classic states: use requests
+        # =============================
+        state_client = _make_client(
+            state_key=state_key,
+            base_url=base_url,
+            sleep_s=_SLEEP_S_STATE,
+            search_path=search_path,
+        )
 
-    # Ensure a year column exists (useful when concatenating multiple years)
-    if "year" not in state_df.columns:
-        state_df.insert(0, "year", year)
+        rows = fetch_all_search_results(
+            state_client,
+            year_from=year,
+            year_to=year,
+            start_page=1,
+            state_name=state_name,
+        )
+        state_df = rows_to_dataframe(rows, client=state_client)
 
-    # Only hit each election detail page once
-    unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
+        if state_df.empty:
+            return state_df, pd.DataFrame(columns=COUNTY_COLS)
 
-    if parallel == True:
-        county_df = build_county_dataframe_parallel(
-            state_df=unique_elections,
-            client_factory=_make_client_factory(
+        # Ensure the state column is set consistently
+        if "state" not in state_df.columns:
+            state_df.insert(0, "state", state_name)
+        else:
+            state_df["state"] = state_name
+
+        # Ensure a year column exists
+        if "year" not in state_df.columns:
+            state_df.insert(0, "year", year)
+
+        # Only hit each election detail page once
+        unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
+
+        if parallel == True:
+            county_df = build_county_dataframe_parallel(
+                state_df=unique_elections,
+                client_factory=_make_client_factory(
+                    state_key=state_key,
+                    base_url=base_url,
+                    sleep_s=_SLEEP_S_COUNTY,
+                    search_path=search_path,
+                ),
+                max_workers=_MAX_WORKERS,
+            )
+        else:
+            county_client = _make_client(
                 state_key=state_key,
                 base_url=base_url,
                 sleep_s=_SLEEP_S_COUNTY,
                 search_path=search_path,
-            ),
-            max_workers=_MAX_WORKERS,
-        )
-    else:
-        county_client = _make_client(
-            state_key=state_key,
-            base_url=base_url,
-            sleep_s=_SLEEP_S_COUNTY,
-            search_path=search_path,
-        )
+            )
 
-        county_df = build_county_dataframe(
-            state_df=unique_elections,
-            client=county_client,
-        )
+            county_df = build_county_dataframe(
+                state_df=unique_elections,
+                client=county_client,
+            )
 
+    # Common cleanup for both paths
     if county_df.empty:
         return state_df, pd.DataFrame(columns=COUNTY_COLS)
 
-    # ✅ ensure county df also uses the same state label
+    # Ensure county df also uses the same state label
     if "state" not in county_df.columns:
         county_df.insert(0, "state", state_name)
     else:
@@ -175,7 +220,7 @@ def scrape_one_year(
     if "year" not in county_df.columns:
         county_df.insert(0, "year", year)
 
-    # Normalize/ensure expected output columns exist (helpful if upstream changes)
+    # Normalize/ensure expected output columns exist
     for c in COUNTY_COLS:
         if c not in county_df.columns:
             county_df[c] = pd.NA
@@ -229,22 +274,23 @@ def main() -> None:
     # -------------------------
     # ✏️ EDIT THESE ONLY
     # -------------------------
-    state = "massachusetts"
-    year_from = 2026
-    year_to = 2026
+    state = "south_carolina"  # Can be: virginia, massachusetts, colorado, south_carolina, new_mexico
+    year_from = 2024
+    year_to = 2024
     parallel = True
     # -------------------------
 
     state_key = _normalize_state(state)
 
-    if state_key not in STATE_REGISTRY:
-        raise ValueError(
-            f"Unknown state {state!r}. Available: {sorted(STATE_REGISTRY.keys())}"
-        )
+    # Get state configuration from state_config.py
+    config = get_state_config(state_key)
+    base_url = config["base_url"]
+    search_path = config["search_path"]
+    scraping_method = config["scraping_method"]
 
-    cfg = STATE_REGISTRY[state_key]
-    base_url = cfg["base_url"]
-    search_path = cfg.get("search_path", "/search")
+    print(f"State: {state_key}")
+    print(f"Scraping method: {scraping_method}")
+    print(f"Base URL: {base_url}")
 
     out = _ensure_outdir(f"{state_key}_outputs")
 
@@ -254,14 +300,14 @@ def main() -> None:
     for year in range(year_from, year_to + 1):
         print(f"\n=== Scraping {state_key} year {year} ===")
 
-        # ✅ pass state_name as well
         state_df, county_df = scrape_one_year(
             state_key=state_key,
-            state_name=state,          
+            state_name=state,
             base_url=base_url,
             search_path=search_path,
             year=year,
-            parallel = parallel
+            parallel=parallel,
+            scraping_method=scraping_method,  # NEW: dispatch to correct scraper
         )
 
         print(f"[{year}] state rows:  {len(state_df):,}")

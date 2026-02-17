@@ -10,3 +10,7 @@
 .Rhistory
 .claude
 .claude/
+_outputs$
+^inst/python/.*/.*_outputs$
+^inst/python/.*/__pycache__$
+^inst/python/.*\.pyc$

@@ -61,6 +61,7 @@ __pycache__/
 
 # Ignore any folder ending in _output
 *_outputs/
+output_*/
 
 .claude
 .claude/

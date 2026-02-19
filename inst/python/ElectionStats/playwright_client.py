@@ -106,7 +106,9 @@ class PlaywrightClient:
             params.append(f"dt={year_to}")
 
         url = f"{self.base_url}/search?{'&'.join(params)}"
-        self.page.goto(url, wait_until="networkidle")
+        # self.page.goto(url, wait_until="networkidle")
+        self.page.goto(url, wait_until="domcontentloaded")
+
 
         # Wait for the results table to appear (React rendering)
         # Try multiple possible selectors to handle different table structures

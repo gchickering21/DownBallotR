@@ -1,0 +1,373 @@
+---
+title: "Scraping election data with DownBallotR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Scraping election data with DownBallotR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+## Prerequisites
+
+Before scraping data you need a working Python environment. If you have not
+done so yet, follow the steps in the
+[Python setup vignette](python-setup.html):
+
+```{r}
+# One-time setup (downloads ~100-200 MB the first time)
+downballot_install_python()
+```
+
+At the start of each R session:
+
+```{r}
+library(DownBallotR)
+downballot_use_python()
+```
+
+---
+
+## The single entry point: `scrape_elections()`
+
+All data retrieval flows through one function:
+
+```r
+scrape_elections(source, ...)
+```
+
+The `source` argument selects the backend scraper. Every other argument
+is source-specific and documented in the sections below.
+
+To see which sources and states are available:
+
+```{r}
+db_list_sources()
+#> [1] "ballotpedia"    "election_stats" "nc_results"
+
+db_list_states("election_stats")
+#> [1] "colorado"       "massachusetts"  "new_hampshire"  "new_mexico"
+#> [5] "new_york"       "south_carolina" "virginia"
+```
+
+---
+
+## Source 1 — ElectionStats (`source = "election_stats"`)
+
+### What it covers
+
+The ElectionStats scraper pulls candidate-level and county-level election
+results from state-hosted ElectionStats sites. Supported states:
+
+| State | Site type | Notes |
+|---|---|---|
+| Virginia | Classic (requests) | |
+| Massachusetts | Classic (requests) | |
+| Colorado | Classic (requests) | |
+| New Hampshire | Classic (requests) | |
+| South Carolina | v2 (Playwright) | Requires Chromium |
+| New Mexico | v2 (Playwright) | Requires Chromium |
+| New York | v2 (Playwright) | Requires Chromium |
+
+Classic states use simple HTTP requests and are fast. v2 states use a
+headless Chromium browser (via Playwright) to render JavaScript — they are
+slower but fully automated.
+
+### Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | required | State name, snake\_case (e.g. `"virginia"`) |
+| `year_from` | `1789` | Start year, inclusive |
+| `year_to` | current year | End year, inclusive |
+| `level` | `"all"` | What to return (see below) |
+| `parallel` | `FALSE` | Parallel county scraping (classic states only) |
+
+### The `level` parameter
+
+| Value | Returns |
+|---|---|
+| `"all"` (default) | Named list with `$state` and `$county` data frames |
+| `"state"` | Candidate-level results data frame |
+| `"county"` | County vote breakdown data frame |
+| `"joined"` | County rows merged with candidate metadata |
+
+### Examples
+
+```{r}
+# Candidate-level results for Virginia, 2023
+state_df <- scrape_elections(
+  "election_stats",
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023,
+  level     = "state"
+)
+
+head(state_df)
+```
+
+```{r}
+# County-level vote counts only
+county_df <- scrape_elections(
+  "election_stats",
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023,
+  level     = "county"
+)
+```
+
+```{r}
+# Both levels at once (default) — returns a named list
+res <- scrape_elections(
+  "election_stats",
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023
+)
+
+res$state   # candidate-level data frame
+res$county  # county breakdown data frame
+```
+
+```{r}
+# Multi-year range
+ma_results <- scrape_elections(
+  "election_stats",
+  state     = "massachusetts",
+  year_from = 2018,
+  year_to   = 2022,
+  level     = "state"
+)
+```
+
+```{r}
+# South Carolina (v2 / Playwright — slower but automatic)
+sc_results <- scrape_elections(
+  "election_stats",
+  state     = "south_carolina",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "state"
+)
+```
+
+```{r}
+# Parallel county scraping for classic states (6 workers)
+res_parallel <- scrape_elections(
+  "election_stats",
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023,
+  level     = "joined",
+  parallel  = TRUE
+)
+```
+
+### Columns returned — state level
+
+The candidate-level (`"state"`) data frame typically includes:
+
+- `state`, `year`, `election_id`, `candidate_id`
+- `office`, `district`, `stage` (General, Primary, etc.)
+- `candidate`, `party`
+- `total_vote_count`, `vote_percentage`, `contest_outcome`
+- `detail_url`
+
+### Columns returned — county level
+
+- `state`, `year`, `election_id`, `candidate_id`
+- `county_or_city`, `candidate_name`, `votes`
+
+---
+
+## Source 2 — Ballotpedia (`source = "ballotpedia"`)
+
+### What it covers
+
+The Ballotpedia scraper collects school board election data from Ballotpedia's
+annual school board election pages (2013 to present, all US states).
+
+### Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `year` | `NULL` | Election year. Required for `mode = "results"` or `"joined"`. |
+| `state` | `NULL` | State name (e.g. `"Alabama"`), or `NULL` for all states. |
+| `mode` | `"districts"` | What to return (see below). |
+| `start_year` | `2013` | Earliest year for multi-year district scrape. |
+| `end_year` | `NULL` | Latest year (default: current calendar year). |
+
+### The `mode` parameter
+
+| Value | Returns | Speed |
+|---|---|---|
+| `"districts"` (default) | District-level metadata (one request per year-page) | Fast |
+| `"results"` | Candidate names, votes, percentages per race | Slower — one extra request per district |
+| `"joined"` | Districts + candidates in a single merged data frame | Slower |
+
+### Examples
+
+```{r}
+# District metadata for all states, 2024 (fast — one page request)
+districts_2024 <- scrape_elections(
+  "ballotpedia",
+  year = 2024
+)
+
+head(districts_2024)
+```
+
+```{r}
+# Filter to one state
+alabama_2024 <- scrape_elections(
+  "ballotpedia",
+  year  = 2024,
+  state = "Alabama"
+)
+```
+
+```{r}
+# Full candidate results for one year + state (slower — follows each district)
+results <- scrape_elections(
+  "ballotpedia",
+  year  = 2024,
+  state = "New Jersey",
+  mode  = "results"
+)
+
+# One row per candidate per race
+head(results)
+```
+
+```{r}
+# Districts + candidates joined into one table
+joined <- scrape_elections(
+  "ballotpedia",
+  year  = 2024,
+  state = "Texas",
+  mode  = "joined"
+)
+```
+
+```{r}
+# Multi-year district metadata (no year argument, use start_year / end_year)
+multi_year <- scrape_elections(
+  "ballotpedia",
+  state      = "Ohio",
+  start_year = 2020,
+  end_year   = 2024
+)
+```
+
+### Columns returned — `mode = "districts"`
+
+- `year`, `state`, `district`, `district_url`
+- `primary`, `primary_runoff`, `general_election`, `general_runoff`
+- `term_length`, `seats_up`, `total_board_seats`, `enrollment`
+
+### Columns returned — `mode = "results"` / `"joined"`
+
+All district columns plus:
+
+- `race`, `election_type` (General / Primary / Primary Runoff / Other)
+- `candidate`, `candidate_url`, `party`
+- `is_winner`, `is_incumbent`
+- `pct`, `votes`
+
+---
+
+## Source 3 — North Carolina Results (`source = "nc_results"`)
+
+### What it covers
+
+Returns local election results from the North Carolina State Board of
+Elections for a specific election date.
+
+### Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `date` | `NULL` | Election date string (e.g. `"2024-11-05"`), or `NULL` for all available. |
+
+### Examples
+
+```{r}
+# All available NC election results
+nc_all <- scrape_elections("nc_results")
+```
+
+```{r}
+# Results for a specific election date
+nc_nov2024 <- scrape_elections(
+  "nc_results",
+  date = "2024-11-05"
+)
+
+head(nc_nov2024)
+```
+
+---
+
+## Working with the results
+
+All sources return standard R `data.frame` objects (or a named list of them
+when `level = "all"`). You can use any tidyverse tools on them directly:
+
+```{r}
+library(dplyr)
+
+# ElectionStats: winners only, sorted by vote count
+scrape_elections(
+  "election_stats",
+  state = "virginia", year_from = 2023, year_to = 2023, level = "state"
+) |>
+  filter(contest_outcome == "Winner") |>
+  arrange(desc(total_vote_count)) |>
+  select(office, district, candidate, party, total_vote_count)
+```
+
+```{r}
+library(dplyr)
+
+# Ballotpedia: competitive races (seats_up > 1)
+scrape_elections("ballotpedia", year = 2024, state = "Texas") |>
+  filter(as.integer(seats_up) > 1) |>
+  select(district, general_election, seats_up, total_board_seats, enrollment)
+```
+
+---
+
+## Choosing the right source
+
+| Goal | Recommended source |
+|---|---|
+| Candidate + vote totals for VA, MA, CO, NH | `"election_stats"` |
+| Candidate + vote totals for SC, NM, NY | `"election_stats"` (uses Playwright automatically) |
+| School board district schedules, any state | `"ballotpedia"`, `mode = "districts"` |
+| School board candidates + results | `"ballotpedia"`, `mode = "results"` |
+| NC local election results | `"nc_results"` |
+
+---
+
+## Performance tips
+
+- **Start small**: test with a single year and state before requesting large
+  date ranges.
+- **Playwright states are slower**: South Carolina, New Mexico, and New York
+  launch a headless browser for each scrape. Expect several seconds per year.
+- **Ballotpedia `mode = "results"`** makes one HTTP request per district;
+  large states with many districts (e.g. Texas) can take several minutes.
+- **`parallel = TRUE`** for ElectionStats speeds up county data collection on
+  classic (requests-based) states by fetching detail pages concurrently.
+- **Be polite**: the scrapers include built-in delays between requests. Do not
+  disable them or reduce them aggressively — excessive requests may result in
+  temporary IP blocks.

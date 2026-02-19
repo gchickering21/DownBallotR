@@ -662,11 +662,13 @@ def rows_to_dataframe(rows: list[ElectionSearchRow], client) -> pd.DataFrame:
     pd.DataFrame
         DataFrame with election results and detail_url column
     """
-    # For v2/Playwright clients, build detail URL differently
-    if hasattr(client, 'base_url'):
-        # PlaywrightClient
-        records = [asdict(r) | {"detail_url": f"{client.base_url}/contest/{r.election_id}"} for r in rows]
-    else:
-        # StateHttpClient
+    # Check for build_detail_url method to distinguish client types
+    # StateHttpClient has this method (uses /view/ URLs for VA/MA/CO)
+    # PlaywrightClient does not (uses /contest/ URLs for SC/NM)
+    if hasattr(client, 'build_detail_url'):
+        # StateHttpClient (classic states: VA/MA/CO)
         records = [asdict(r) | {"detail_url": client.build_detail_url(r.election_id)} for r in rows]
+    else:
+        # PlaywrightClient (v2 states: SC/NM)
+        records = [asdict(r) | {"detail_url": f"{client.base_url}/contest/{r.election_id}"} for r in rows]
     return pd.DataFrame.from_records(records)

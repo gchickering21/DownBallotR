@@ -38,6 +38,12 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "classic",
         "scraping_method": "requests",
     },
+    "new_hampshire": {
+        "base_url": "https://nh.electionstats.com/elections",
+        "search_path": "/search",
+        "scraper_type": "classic",
+        "scraping_method": "requests",
+    },
     "south_carolina": {
         "base_url": "https://electionhistory.scvotes.gov",
         "search_path": "/search",
@@ -46,6 +52,12 @@ STATE_CONFIGS: dict[str, StateConfig] = {
     },
     "new_mexico": {
         "base_url": "https://electionstats.sos.nm.gov",
+        "search_path": "/search",
+        "scraper_type": "v2",
+        "scraping_method": "playwright",
+    },
+    "new_york": {
+        "base_url": "https://results.elections.ny.gov",
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",

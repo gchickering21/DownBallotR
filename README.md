@@ -23,82 +23,31 @@ pak::pak("gchickering21/Downballot")
 
 ---
 
-## Quick start
+## Overview
 
-### 1. One-time Python setup
+`DownBallotR` requires a one-time Python setup and exposes all data retrieval
+through a single function, `scrape_elections()`, which routes to the appropriate
+backend scraper based on a `source` argument. Three sources are currently
+supported:
 
-```r
-library(DownBallotR)
-downballot_install_python()   # downloads ~100–200 MB the first time
-```
-
-### 2. Activate Python each session
-
-```r
-library(DownBallotR)
-downballot_use_python()
-```
-
-### 3. Scrape data
-
-All data retrieval uses a single function:
-
-```r
-scrape_elections(source, ...)
-```
-
-```r
-# School board district metadata — Ballotpedia, 2024, Alabama
-scrape_elections("ballotpedia", year = 2024, state = "Alabama")
-
-# Candidate-level results — ElectionStats, Virginia 2023
-scrape_elections("election_stats",
-                 state = "virginia", year_from = 2023, year_to = 2023,
-                 level = "state")
-
-# Both state and county levels at once (returns a named list)
-res <- scrape_elections("election_stats",
-                        state = "virginia", year_from = 2023, year_to = 2023)
-res$state    # candidate-level data frame
-res$county   # county vote breakdown data frame
-
-# North Carolina local results
-scrape_elections("nc_results", date = "2024-11-05")
-```
+| Source | `source =` | Coverage |
+|---|---|---|
+| ElectionStats | `"election_stats"` | VA, MA, CO, NH, SC, NM, NY — candidate + county results |
+| Ballotpedia | `"ballotpedia"` | All US states, 2013–present — school board elections |
+| NC State Board of Elections | `"nc_results"` | North Carolina local election results |
 
 ---
 
-## Data sources
+## Vignettes
 
-| Source | `source =` | States / coverage | Notes |
-|---|---|---|---|
-| [ElectionStats](https://historical.elections.virginia.gov) | `"election_stats"` | VA, MA, CO, NH, SC, NM, NY | Classic states use HTTP requests; SC/NM/NY use Playwright |
-| [Ballotpedia](https://ballotpedia.org) | `"ballotpedia"` | All US states, 2013–present | School board elections only |
-| NC State Board of Elections | `"nc_results"` | North Carolina | Local election results |
+📘 **Python setup** — environment installation, session activation, and troubleshooting:
 
-Discover sources and supported states at runtime:
+- 📄 Source: [vignettes/python-setup.Rmd](vignettes/python-setup.Rmd)
+- 🧭 In R (after installing): `vignette("python-setup", package = "DownBallotR")`
+- 🌐 Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/python-setup.html>
 
-```r
-db_list_sources()
-db_list_states("election_stats")
-```
+📊 **Scraping data** — all sources, arguments, and worked examples:
 
----
-
-## Documentation
-
-| Resource | Link |
-|---|---|
-| Python setup & troubleshooting | [vignettes/python-setup.Rmd](vignettes/python-setup.Rmd) · `vignette("python-setup", package = "DownBallotR")` |
-| Scraping data (all sources, examples) | [vignettes/scraping-data.Rmd](vignettes/scraping-data.Rmd) · `vignette("scraping-data", package = "DownBallotR")` |
-| pkgdown site | <https://gchickering21.github.io/DownBallotR/> |
-
----
-
-## Design notes
-
-- `DownBallotR` intentionally does **not** auto-install Python dependencies on
-  `library(DownBallotR)` — this avoids unexpected downloads and ensures
-  predictable behavior
-- Python is only initialized when explicitly requested by the user
-- All scrapers include built-in polite delays between requests
+- 📄 Source: [vignettes/scraping-data.Rmd](vignettes/scraping-data.Rmd)
+- 🧭 In R (after installing): `vignette("scraping-data", package = "DownBallotR")`
+- 🌐 Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/scraping-data.html>

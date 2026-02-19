@@ -18,4 +18,8 @@ articles:
     navbar: ~
     contents:
       - python-setup
+  - title: Using the package
+    navbar: ~
+    contents:
+      - scraping-data
 

@@ -75,40 +75,38 @@
 #' \code{source}. Use \code{db_list_sources()} to see available sources and
 #' \code{db_list_states(source)} to see supported states.
 #'
-#' @param source Which data source to use. One of:
-#'   \describe{
-#'     \item{"election_stats"}{Multi-state ElectionStats scraper (VA, MA, CO, NH, SC, NM, NY).}
-#'     \item{"ballotpedia"}{Ballotpedia school board elections (all US states, 2013–present).}
-#'     \item{"nc_results"}{North Carolina local election results.}
-#'   }
-#'
-#' @section ElectionStats arguments (\code{source = "election_stats"}):
-#' \describe{
-#'   \item{\code{state}}{State name, e.g. \code{"virginia"}. See \code{db_list_states("election_stats")}.}
-#'   \item{\code{year_from}}{Start year (default \code{1789}).}
-#'   \item{\code{year_to}}{End year, inclusive (default: current calendar year).}
-#'   \item{\code{level}}{What to return:
-#'     \code{"all"} (default, named list with \code{$state} and \code{$county} data frames),
-#'     \code{"state"}, \code{"county"}, or \code{"joined"}.}
-#'   \item{\code{parallel}}{Use parallel county scraping for classic (requests-based) states.}
-#' }
-#'
-#' @section Ballotpedia arguments (\code{source = "ballotpedia"}):
-#' \describe{
-#'   \item{\code{year}}{Election year (e.g. \code{2024}).
-#'     Required for \code{mode = "results"} or \code{mode = "joined"}.}
-#'   \item{\code{state}}{Filter to one state name (e.g. \code{"Alabama"}), or \code{NULL} for all.}
-#'   \item{\code{mode}}{\code{"districts"} (default, fast district metadata),
-#'     \code{"results"} (follows each district for candidate data),
-#'     or \code{"joined"} (districts + candidates merged).}
-#'   \item{\code{start_year}}{Earliest year for multi-year district scrape (default \code{2013}).}
-#'   \item{\code{end_year}}{Latest year for multi-year district scrape (default: current year).}
-#' }
-#'
-#' @section NC Results arguments (\code{source = "nc_results"}):
-#' \describe{
-#'   \item{\code{date}}{Election date string (e.g. \code{"2024-11-05"}), or \code{NULL} for all.}
-#' }
+#' @param source Which data source to use. One of \code{"election_stats"},
+#'   \code{"ballotpedia"}, or \code{"nc_results"}.
+#'   Call \code{db_list_sources()} to see all options.
+#' @param state (\code{election_stats} / \code{ballotpedia})
+#'   State name. For \code{election_stats}: snake_case key such as
+#'   \code{"virginia"} — see \code{db_list_states("election_stats")}. For
+#'   \code{ballotpedia}: title-case name such as \code{"Alabama"}, or
+#'   \code{NULL} for all states.
+#' @param year_from (\code{election_stats}) Start year, inclusive (default \code{1789}).
+#' @param year_to (\code{election_stats}) End year, inclusive (default: current
+#'   calendar year).
+#' @param level (\code{election_stats}) What to return. \code{"all"} (default)
+#'   returns a named list with \code{$state} and \code{$county} data frames;
+#'   \code{"state"} returns candidate-level results; \code{"county"} returns
+#'   county vote breakdowns; \code{"joined"} returns county rows merged with
+#'   candidate metadata.
+#' @param parallel (\code{election_stats}) Use parallel county scraping for
+#'   classic (requests-based) states (default \code{FALSE}).
+#' @param year (\code{ballotpedia}) Election year (e.g. \code{2024}). Required
+#'   when \code{mode = "results"} or \code{mode = "joined"}. If \code{NULL}
+#'   with \code{mode = "districts"}, use \code{start_year} / \code{end_year}
+#'   for a multi-year scrape.
+#' @param mode (\code{ballotpedia}) What to return. \code{"districts"} (default)
+#'   returns fast district metadata (one request per year-page);
+#'   \code{"results"} follows each district URL for candidate/vote data;
+#'   \code{"joined"} returns districts and candidates merged into one data frame.
+#' @param start_year (\code{ballotpedia}) Earliest year for a multi-year
+#'   district scrape when \code{year} is \code{NULL} (default \code{2013}).
+#' @param end_year (\code{ballotpedia}) Latest year for a multi-year district
+#'   scrape when \code{year} is \code{NULL} (default: current calendar year).
+#' @param date (\code{nc_results}) Election date string (e.g.
+#'   \code{"2024-11-05"}), or \code{NULL} to return all available results.
 #'
 #' @return A \code{data.frame}, or a named list with elements \code{$state} and
 #'   \code{$county} when \code{level = "all"} for \code{source = "election_stats"}.

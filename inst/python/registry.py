@@ -64,7 +64,7 @@ def _scrape_election_stats(
     year_from: "int | None" = 1789,
     year_to: "int | None" = None,
     level: str = "all",
-    parallel: bool = False,
+    parallel: bool = True,
     **_,
 ) -> "pd.DataFrame | dict":
     """Scrape ElectionStats data for a given state and year range.

@@ -10,7 +10,7 @@ scrape_elections(
   year_from = NULL,
   year_to = NULL,
   level = c("all", "state", "county", "joined"),
-  parallel = FALSE,
+  parallel = TRUE,
   year = NULL,
   mode = c("districts", "results", "joined"),
   start_year = 2013L,
@@ -43,7 +43,8 @@ results; \code{"county"} returns county vote breakdowns; \code{"joined"}
 returns county rows merged with candidate metadata.}
 
 \item{parallel}{(\code{general} / ElectionStats) Use parallel county
-scraping for classic (requests-based) states (default \code{FALSE}).}
+scraping for classic (requests-based) states (default \code{TRUE}).
+Ignored automatically for Playwright-based states (SC, NM, NY).}
 
 \item{year}{(\code{school_district}) Election year (e.g. \code{2024}).
 Required when \code{mode = "results"} or \code{mode = "joined"}. If

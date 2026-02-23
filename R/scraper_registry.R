@@ -36,7 +36,7 @@
     year_from = 1789L,
     year_to   = NULL,
     level     = "all",
-    parallel  = FALSE) {
+    parallel  = TRUE) {
 
   level <- match.arg(level, c("all", "state", "county", "joined"))
   .db_registry()$scrape(
@@ -122,7 +122,8 @@
 #'   results; \code{"county"} returns county vote breakdowns; \code{"joined"}
 #'   returns county rows merged with candidate metadata.
 #' @param parallel (\code{general} / ElectionStats) Use parallel county
-#'   scraping for classic (requests-based) states (default \code{FALSE}).
+#'   scraping for classic (requests-based) states (default \code{TRUE}).
+#'   Ignored automatically for Playwright-based states (SC, NM, NY).
 #' @param year (\code{school_district}) Election year (e.g. \code{2024}).
 #'   Required when \code{mode = "results"} or \code{mode = "joined"}. If
 #'   \code{NULL} with \code{mode = "districts"}, use \code{start_year} /
@@ -176,7 +177,7 @@ scrape_elections <- function(
     year_from  = NULL,
     year_to    = NULL,
     level      = c("all", "state", "county", "joined"),
-    parallel   = FALSE,
+    parallel   = TRUE,
     # School-district (Ballotpedia) args
     year       = NULL,
     mode       = c("districts", "results", "joined"),
@@ -186,6 +187,18 @@ scrape_elections <- function(
   office <- match.arg(office)
   level  <- match.arg(level)
   mode   <- match.arg(mode)
+
+  # Guard against old source= positional usage (e.g. scrape_elections("ballotpedia", ...))
+  if (!is.null(state) &&
+      tolower(trimws(state)) %in% c("ballotpedia", "election_stats", "nc_results")) {
+    stop(
+      "The 'source' argument has been removed. Route by state instead:\n",
+      "  - For school board elections:  office = \"school_district\"\n",
+      "  - For NC results:              state = \"NC\"\n",
+      "  - For other states:            state = \"virginia\"  (or any ElectionStats state)",
+      call. = FALSE
+    )
+  }
 
   year_from <- .to_year(year_from)
   year_to   <- .to_year(year_to)

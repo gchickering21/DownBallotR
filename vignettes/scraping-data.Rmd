@@ -89,7 +89,7 @@ slower but fully automated.
 | `year_from` | `NULL` (→ `1789`) | Start year, inclusive |
 | `year_to` | `NULL` (→ current year) | End year, inclusive |
 | `level` | `"all"` | What to return (see below) |
-| `parallel` | `FALSE` | Parallel county scraping (classic states only) |
+| `parallel` | `TRUE` | Parallel county scraping (classic states only; ignored for Playwright states) |
 
 ### The `level` parameter
 
@@ -157,13 +157,13 @@ sc_results <- scrape_elections(
 ```
 
 ```{r}
-# Parallel county scraping for classic states
-res_parallel <- scrape_elections(
+# Parallel county scraping is on by default; pass parallel = FALSE to disable
+res_sequential <- scrape_elections(
   state     = "virginia",
   year_from = 2023,
   year_to   = 2023,
   level     = "joined",
-  parallel  = TRUE
+  parallel  = FALSE
 )
 ```
 
@@ -373,8 +373,8 @@ scrape_elections(state = "Texas", office = "school_district", year = 2024) |>
   launch a headless browser for each scrape. Expect several seconds per year.
 - **Ballotpedia `mode = "results"`** makes one HTTP request per district;
   large states with many districts (e.g. Texas) can take several minutes.
-- **`parallel = TRUE`** for ElectionStats speeds up county data collection on
-  classic (requests-based) states by fetching detail pages concurrently.
+- **Parallel scraping is on by default** for classic (requests-based) states.
+  Pass `parallel = FALSE` to fetch county detail pages sequentially if needed.
 - **Be polite**: the scrapers include built-in delays between requests. Do not
   disable them or reduce them aggressively — excessive requests may result in
   temporary IP blocks.

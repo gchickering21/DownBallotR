@@ -87,7 +87,7 @@ The table below summarises what is currently tracked in the registry:
 | ElectionStats | New York | 1994 | 2024 |
 | ElectionStats | New Mexico | 2000 | 2024 |
 | ElectionStats | South Carolina | 2008 | 2025 |
-| NC State Board | North Carolina | 2000 | 2025 |
+| NC State Board | North Carolina | 2025 | 2025 |
 | Ballotpedia | All US states | 2013 | present |
 
 ---
@@ -224,6 +224,11 @@ The candidate-level (`"state"`) data frame typically includes:
 Returns precinct-level election results from the NC State Board of Elections,
 filtered by year range.
 
+> **Note:** The scraper currently supports the 2025 election file layout only.
+> Elections before 2025 use an older format that has not yet been implemented;
+> they are automatically skipped with an informational message.
+> `year_from` / `year_to` filters are applied on top of this constraint.
+
 ### Arguments
 
 | Argument | Default | Description |
@@ -235,27 +240,27 @@ filtered by year range.
 ### Examples
 
 ```{r}
-# All available NC election results
+# All currently supported NC election results (2025+)
 nc_all <- scrape_elections(state = "NC")
 ```
 
 ```{r}
-# Single year
-nc_2024 <- scrape_elections(
+# Single year (2025 is currently the earliest supported year)
+nc_2025 <- scrape_elections(
   state     = "NC",
-  year_from = 2024,
-  year_to   = 2024
+  year_from = 2025,
+  year_to   = 2025
 )
 
-head(nc_2024)
+head(nc_2025)
 ```
 
 ```{r}
-# Multi-year range
+# Multi-year range (once pre-2025 layouts are supported)
 nc_range <- scrape_elections(
   state     = "NC",
-  year_from = 2022,
-  year_to   = 2024
+  year_from = 2025,
+  year_to   = 2026
 )
 ```
 

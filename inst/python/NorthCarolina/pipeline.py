@@ -6,7 +6,6 @@ from typing import Iterable
 
 import pandas as pd
 
-from .constants import NC_MIN_SUPPORTED_ELECTION_DATE
 from .discovery import discover_nc_results_zips
 from .selection import select_elections
 from .io_utils import download_zip_bytes, read_results_pct_from_zip
@@ -36,6 +35,8 @@ class NcElectionPipeline:
         self,
         start_date: date | None = None,
         end_date: date | None = None,
+        min_supported_date: date | None = None,
+        max_supported_date: date | None = None,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         cfg = get_config()
 
@@ -50,16 +51,19 @@ class NcElectionPipeline:
 
         for e in elections:
             ed = _get_attr(e, "election_date")
-            if ed < NC_MIN_SUPPORTED_ELECTION_DATE:
+            if min_supported_date is not None and ed < min_supported_date:
+                skipped.append(e)
+            elif max_supported_date is not None and ed > max_supported_date:
                 skipped.append(e)
             else:
                 supported.append(e)
 
         if skipped:
+            lo = min_supported_date.isoformat() if min_supported_date else "–"
+            hi = max_supported_date.isoformat() if max_supported_date else "–"
             print(
-                f"[NC] NOTE: skipping {len(skipped)} election(s) before "
-                f"{NC_MIN_SUPPORTED_ELECTION_DATE.isoformat()} "
-                f"(legacy layouts not yet supported)."
+                f"[NC] NOTE: skipping {len(skipped)} election(s) outside "
+                f"supported range {lo} – {hi}."
             )
 
         precinct_frames: list[pd.DataFrame] = []
@@ -119,6 +123,8 @@ class NcElectionPipeline:
 def get_nc_election_results(
     year_from: "int | None" = None,
     year_to: "int | None" = None,
+    min_supported_date: "date | None" = None,
+    max_supported_date: "date | None" = None,
 ) -> pd.DataFrame:
     """Return precinct-level NC election results.
 
@@ -130,12 +136,21 @@ def get_nc_election_results(
     year_to : int | None
         End year, inclusive.  Elections on or before Dec 31 of this year.
         ``None`` applies no upper bound.
+    min_supported_date : date | None
+        Pipeline lower-bound guard.  Elections before this date are skipped.
+        ``None`` (default) attempts all elections in the requested range.
+    max_supported_date : date | None
+        Pipeline upper-bound guard.  Elections after this date are skipped.
+        ``None`` (default) attempts all elections in the requested range.
     """
-    from datetime import date as _date
-
-    start = _date(int(year_from), 1, 1) if year_from is not None else None
-    end   = _date(int(year_to),   12, 31) if year_to   is not None else None
+    start = date(int(year_from), 1, 1) if year_from is not None else None
+    end   = date(int(year_to),   12, 31) if year_to   is not None else None
 
     pipeline = NcElectionPipeline()
-    precinct_df, _county_df, _state_df = pipeline.run(start_date=start, end_date=end)
+    precinct_df, _county_df, _state_df = pipeline.run(
+        start_date=start,
+        end_date=end,
+        min_supported_date=min_supported_date,
+        max_supported_date=max_supported_date,
+    )
     return precinct_df

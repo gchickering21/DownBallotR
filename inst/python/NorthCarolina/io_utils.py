@@ -65,6 +65,9 @@ def _select_results_member(zf: zipfile.ZipFile) -> str:
 
 
 def _read_delimited(data: bytes, filename: str) -> pd.DataFrame:
+    # Strip embedded NUL bytes — some NC ZIP files contain \x00 padding that
+    # causes "Embedded NUL in string" errors when R receives the DataFrame.
+    data = data.replace(b"\x00", b"")
     raw = io.BytesIO(data)
 
     lower = filename.lower()

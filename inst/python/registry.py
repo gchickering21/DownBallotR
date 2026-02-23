@@ -55,8 +55,18 @@ def _scrape_nc(
     )
     print(f"[NC] Starting scrape | {label}")
 
+    # Mirror year_from/year_to as pipeline date guards so only elections
+    # within the requested range are attempted.
+    min_date = datetime.date(year_from, 1,  1)  if year_from is not None else None
+    max_date = datetime.date(year_to,   12, 31) if year_to   is not None else None
+
     from NorthCarolina.pipeline import get_nc_election_results
-    return get_nc_election_results(year_from=year_from, year_to=year_to)
+    return get_nc_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        min_supported_date=min_date,
+        max_supported_date=max_date,
+    )
 
 
 def _scrape_election_stats(
@@ -187,6 +197,11 @@ def _scrape_ballotpedia(
     end_year : int | None
         Latest year when year is None (default: current calendar year).
     """
+    # Reticulate passes R numerics as Python floats; coerce to int where needed.
+    year       = int(year)       if year       is not None else None
+    start_year = int(start_year) if start_year is not None else 2013
+    end_year   = int(end_year)   if end_year   is not None else None
+
     from Ballotpedia.school_board_elections import SchoolBoardScraper
 
     scraper = SchoolBoardScraper()

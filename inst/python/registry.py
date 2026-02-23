@@ -214,6 +214,33 @@ def _scrape_ballotpedia(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Year availability registry
+# ──────────────────────────────────────────────────────────────────────────────
+
+# (start_year, end_year) tuples per source / state.
+# end_year of None means "through current calendar year" (open-ended).
+_YEAR_RANGES: dict = {
+    "election_stats": {
+        "vermont":        (1789, 2024),
+        "virginia":       (1789, 2025),
+        "colorado":       (1902, 2024),
+        "massachusetts":  (1970, 2026),
+        "new_hampshire":  (1970, 2024),
+        "new_york":       (1994, 2024),
+        "new_mexico":     (2000, 2024),
+        "south_carolina": (2008, 2025),
+    },
+    "nc_results": {
+        "NC": (2000, 2025),
+    },
+    "ballotpedia": {
+        # Ballotpedia covers all US states from 2013 onward (open-ended).
+        "_all": (2013, None),
+    },
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Registry
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -268,6 +295,54 @@ def list_states(source: str) -> List[str]:
         )
     states = _SOURCES[source]["states"]
     return states() if callable(states) else list(states)
+
+
+def get_available_years(source: str, state: "str | None" = None) -> dict:
+    """Return the earliest and latest available year for a source/state.
+
+    Parameters
+    ----------
+    source : str
+        One of 'nc_results', 'election_stats', 'ballotpedia'.
+    state : str | None
+        State key for 'election_stats' (e.g. 'virginia').
+        Pass None to get the earliest year across all ElectionStats states.
+        Ignored for 'nc_results' and 'ballotpedia'.
+
+    Returns
+    -------
+    dict with keys 'start_year' (int) and 'end_year' (int, current calendar year).
+    """
+    if source not in _YEAR_RANGES:
+        raise ValueError(
+            f"Unknown source: {source!r}. Available: {sorted(_YEAR_RANGES.keys())}"
+        )
+    ranges = _YEAR_RANGES[source]
+    current_year = datetime.date.today().year
+
+    if source == "ballotpedia":
+        start, end = ranges["_all"]
+        return {"start_year": start, "end_year": end or current_year}
+
+    if source == "nc_results":
+        start, end = ranges["NC"]
+        return {"start_year": start, "end_year": end or current_year}
+
+    # election_stats
+    if state is None:
+        start_year = min(v[0] for v in ranges.values())
+        end_year   = max(v[1] or current_year for v in ranges.values())
+        return {"start_year": start_year, "end_year": end_year}
+
+    state_key = state.strip().lower().replace(" ", "_")
+    if state_key not in ranges:
+        raise ValueError(
+            f"No year range recorded for state {state!r} "
+            f"(looked up as {state_key!r}). "
+            f"Available: {sorted(ranges.keys())}"
+        )
+    start, end = ranges[state_key]
+    return {"start_year": start, "end_year": end or current_year}
 
 
 def scrape(source: str, **kwargs) -> "pd.DataFrame | dict":

@@ -213,6 +213,22 @@ scrape_elections <- function(
     "election_stats"
   }
 
+  # ── Print available year range for chosen source/state ────────────────────
+  tryCatch({
+    avail <- .db_registry()$get_available_years(
+      source = source,
+      state  = if (source == "election_stats") state else NULL
+    )
+    label <- switch(
+      source,
+      "ballotpedia"    = "school district elections (Ballotpedia)",
+      "nc_results"     = "North Carolina (NC State Board of Elections)",
+      "election_stats" = paste0(state, " (ElectionStats)")
+    )
+    message("Available years for ", label, ": ",
+            avail$start_year, "\u2013", avail$end_year)
+  }, error = function(e) NULL)  # silently skip if year registry lookup fails
+
   result <- switch(
     source,
     "election_stats" = .scrape_election_stats(
@@ -257,4 +273,86 @@ db_list_sources <- function() {
 #' @export
 db_list_states <- function(source) {
   unlist(.db_registry()$list_states(source))
+}
+
+
+#' Show data availability for election scrapers
+#'
+#' Returns a data frame listing the earliest available year for each state and
+#' scraper source tracked by DownBallotR. All sources include data through the
+#' current calendar year.
+#'
+#' @param state Optional state name to filter results (e.g. \code{"virginia"}).
+#'   Pass \code{NULL} (default) to return all states for the chosen source(s).
+#' @param office Type of election, matching \code{scrape_elections()}.
+#'   \code{"general"} (default) returns availability for ElectionStats states
+#'   and North Carolina; \code{"school_district"} returns Ballotpedia
+#'   availability.
+#'
+#' @return A \code{data.frame} with columns \code{source}, \code{state},
+#'   \code{start_year}, and \code{end_year}.
+#'
+#' @examples
+#' \dontrun{
+#' # General election sources
+#' db_available_years()
+#'
+#' # School district (Ballotpedia)
+#' db_available_years(office = "school_district")
+#'
+#' # Filter to one state
+#' db_available_years(state = "virginia")
+#' }
+#'
+#' @export
+db_available_years <- function(state = NULL, office = c("general", "school_district")) {
+  office <- match.arg(office)
+  reg    <- .db_registry()
+
+  if (office == "school_district") {
+    avail <- reg$get_available_years("ballotpedia")
+    return(data.frame(
+      source     = "ballotpedia",
+      state      = "All US states",
+      start_year = avail$start_year,
+      end_year   = avail$end_year,
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  # General elections: ElectionStats states + NC
+  es_states <- db_list_states("election_stats")
+  es_rows <- lapply(es_states, function(s) {
+    avail <- reg$get_available_years("election_stats", state = s)
+    data.frame(
+      source     = "election_stats",
+      state      = s,
+      start_year = avail$start_year,
+      end_year   = avail$end_year,
+      stringsAsFactors = FALSE
+    )
+  })
+  es_df <- do.call(rbind, es_rows)
+
+  nc_avail <- reg$get_available_years("nc_results")
+  nc_row <- data.frame(
+    source     = "nc_results",
+    state      = "NC",
+    start_year = nc_avail$start_year,
+    end_year   = nc_avail$end_year,
+    stringsAsFactors = FALSE
+  )
+
+  result <- rbind(es_df, nc_row)
+
+  if (!is.null(state)) {
+    state_key <- tolower(trimws(state))
+    result <- result[
+      tolower(result$state) == state_key | result$state == state, ,
+      drop = FALSE
+    ]
+  }
+
+  rownames(result) <- NULL
+  result
 }

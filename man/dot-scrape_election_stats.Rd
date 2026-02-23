@@ -9,7 +9,7 @@
   year_from = 1789L,
   year_to = NULL,
   level = "all",
-  parallel = FALSE
+  parallel = TRUE
 )
 }
 \description{

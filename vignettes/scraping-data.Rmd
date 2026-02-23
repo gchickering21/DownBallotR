@@ -60,6 +60,38 @@ db_list_states("election_stats")
 
 ---
 
+## Data availability
+
+Use `db_available_years()` to query available year ranges programmatically:
+
+```{r}
+# General election sources (ElectionStats + NC)
+db_available_years()
+
+# School district elections (Ballotpedia)
+db_available_years(office = "school_district")
+
+# Filter to one state
+db_available_years(state = "virginia")
+```
+
+The table below summarises what is currently tracked in the registry:
+
+| Source | State | Start year | End year |
+|---|---|---|---|
+| ElectionStats | Vermont | 1789 | 2024 |
+| ElectionStats | Virginia | 1789 | 2025 |
+| ElectionStats | Colorado | 1902 | 2024 |
+| ElectionStats | Massachusetts | 1970 | 2026 |
+| ElectionStats | New Hampshire | 1970 | 2024 |
+| ElectionStats | New York | 1994 | 2024 |
+| ElectionStats | New Mexico | 2000 | 2024 |
+| ElectionStats | South Carolina | 2008 | 2025 |
+| NC State Board | North Carolina | 2000 | 2025 |
+| Ballotpedia | All US states | 2013 | present |
+
+---
+
 ## General elections — ElectionStats states
 
 ### What it covers
@@ -67,15 +99,16 @@ db_list_states("election_stats")
 The ElectionStats scraper pulls candidate-level and county-level election
 results from state-hosted ElectionStats sites. Supported states:
 
-| State | Site type | Notes |
-|---|---|---|
-| Virginia | Classic (requests) | |
-| Massachusetts | Classic (requests) | |
-| Colorado | Classic (requests) | |
-| New Hampshire | Classic (requests) | |
-| South Carolina | v2 (Playwright) | Requires Chromium |
-| New Mexico | v2 (Playwright) | Requires Chromium |
-| New York | v2 (Playwright) | Requires Chromium |
+| State | Site type | Start year | End year |
+|---|---|---|---|
+| Vermont | Classic (requests) | 1789 | 2024 |
+| Virginia | Classic (requests) | 1789 | 2025 |
+| Colorado | Classic (requests) | 1902 | 2024 |
+| Massachusetts | Classic (requests) | 1970 | 2026 |
+| New Hampshire | Classic (requests) | 1970 | 2024 |
+| New York | v2 (Playwright) | 1994 | 2024 |
+| New Mexico | v2 (Playwright) | 2000 | 2024 |
+| South Carolina | v2 (Playwright) | 2008 | 2025 |
 
 Classic states use simple HTTP requests and are fast. v2 states use a
 headless Chromium browser (via Playwright) to render JavaScript — they are

@@ -49,6 +49,23 @@ scrape_elections(state = "Alabama", office = "school_district", year = 2024)
 
 ---
 
+## Python requirement
+
+`DownBallotR` uses Python internally via **reticulate**. **Python 3.10 or later
+must be installed on your machine** before running `downballot_install_python()`.
+
+If you do not have Python installed, download it from the official site:
+<https://www.python.org/downloads/>
+
+Once Python is available, the one-time setup command handles everything else
+(creating an isolated virtual environment and installing all required packages):
+
+```r
+downballot_install_python()
+```
+
+---
+
 ## Vignettes
 
 📘 **Python setup** — environment installation, session activation, and troubleshooting:

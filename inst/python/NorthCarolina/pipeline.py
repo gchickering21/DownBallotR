@@ -100,7 +100,6 @@ class NcElectionPipeline:
 
         return precinct_final, county_final, state_final
 
-
     def _scrape_one(self, election) -> pd.DataFrame:
         zip_url = _get_attr(election, "zip_url")
         election_date = _get_attr(election, "election_date")
@@ -109,9 +108,34 @@ class NcElectionPipeline:
         _member, raw = read_results_pct_from_zip(zip_bytes)
 
         norm = normalize_nc_results_cols(raw, fallback_election_date=election_date)
-        
+
         county_df = aggregate_to_county_level(norm)
         state_df = aggregate_county_to_state(county_df)
 
         print(f"[NC SCRAPE] Finished scraping election results for {election_date}")
         return norm, county_df, state_df
+
+
+def get_nc_election_results(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+) -> pd.DataFrame:
+    """Return precinct-level NC election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive.  Elections on or after Jan 1 of this year.
+        ``None`` applies no lower bound.
+    year_to : int | None
+        End year, inclusive.  Elections on or before Dec 31 of this year.
+        ``None`` applies no upper bound.
+    """
+    from datetime import date as _date
+
+    start = _date(int(year_from), 1, 1) if year_from is not None else None
+    end   = _date(int(year_to),   12, 31) if year_to   is not None else None
+
+    pipeline = NcElectionPipeline()
+    precinct_df, _county_df, _state_df = pipeline.run(start_date=start, end_date=end)
+    return precinct_df

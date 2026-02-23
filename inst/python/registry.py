@@ -13,23 +13,60 @@ import pandas as pd
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Shared helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _to_year(v) -> "int | None":
+    """Coerce *v* to an integer year, accepting int/float/str/None."""
+    if v is None:
+        return None
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        raise ValueError(f"Cannot convert {v!r} to a year integer.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Internal scraper functions
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _scrape_nc(date: str | None = None, **_) -> pd.DataFrame:
-    """Scrape North Carolina local election results."""
+def _scrape_nc(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    **_,
+) -> pd.DataFrame:
+    """Scrape North Carolina local election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive.  Elections on or after Jan 1 of this year.
+    year_to : int | None
+        End year, inclusive.  Elections on or before Dec 31 of this year.
+    """
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+
+    label = (
+        f"{year_from}–{year_to}" if year_from and year_to
+        else f"{year_from}–" if year_from
+        else f"–{year_to}" if year_to
+        else "all years"
+    )
+    print(f"[NC] Starting scrape | {label}")
+
     from NorthCarolina.pipeline import get_nc_election_results
-    return get_nc_election_results(date=date)
+    return get_nc_election_results(year_from=year_from, year_to=year_to)
 
 
 def _scrape_election_stats(
     state: str,
-    year_from: int = 1789,
-    year_to: int | None = None,
+    year_from: "int | None" = 1789,
+    year_to: "int | None" = None,
     level: str = "all",
     parallel: bool = False,
     **_,
-) -> pd.DataFrame | dict:
+) -> "pd.DataFrame | dict":
     """Scrape ElectionStats data for a given state and year range.
 
     Parameters
@@ -50,6 +87,9 @@ def _scrape_election_stats(
     parallel : bool
         Enable parallel county scraping for classic (requests-based) states.
     """
+    year_from = _to_year(year_from) if year_from is not None else 1789
+    year_to   = _to_year(year_to)
+
     from ElectionStats.state_config import get_state_config, STATE_CONFIGS
     from ElectionStats.run_scrape_yearly import (
         scrape_one_year,
@@ -68,12 +108,21 @@ def _scrape_election_stats(
     if year_to is None:
         year_to = datetime.date.today().year
 
+    n_years = year_to - year_from + 1
+    method  = get_state_config(state_key)["scraping_method"]
+    print(
+        f"[ElectionStats] Starting: {state_key} | "
+        f"{year_from}–{year_to} ({n_years} year(s)) | "
+        f"method={method}"
+    )
+
     config = get_state_config(state_key)
 
     state_frames: list[pd.DataFrame] = []
     county_frames: list[pd.DataFrame] = []
 
     for year in range(year_from, year_to + 1):
+        print(f"[ElectionStats] Scraping {state_key} {year}...", flush=True)
         s_df, c_df = scrape_one_year(
             state_key=state_key,
             state_name=state_key,
@@ -83,6 +132,10 @@ def _scrape_election_stats(
             parallel=parallel,
             scraping_method=config["scraping_method"],
         )
+        print(
+            f"[ElectionStats] {year}: "
+            f"{len(s_df):,} election rows, {len(c_df):,} county rows"
+        )
         if not s_df.empty:
             state_frames.append(s_df)
         if not c_df.empty:
@@ -90,6 +143,12 @@ def _scrape_election_stats(
 
     state_all = _concat_or_empty(state_frames)
     county_all = _concat_or_empty(county_frames)
+
+    print(
+        f"[ElectionStats] Done. "
+        f"{len(state_all):,} total election rows, "
+        f"{len(county_all):,} total county rows."
+    )
 
     if level == "state":
         return state_all

@@ -2,97 +2,111 @@
 % Please edit documentation in R/scraper_registry.R
 \name{scrape_elections}
 \alias{scrape_elections}
-\title{Scrape election data from a registered source}
+\title{Scrape election data}
 \usage{
 scrape_elections(
-  source = c("election_stats", "ballotpedia", "nc_results"),
   state = NULL,
-  year_from = 1789L,
+  office = c("general", "school_district"),
+  year_from = NULL,
   year_to = NULL,
   level = c("all", "state", "county", "joined"),
   parallel = FALSE,
   year = NULL,
   mode = c("districts", "results", "joined"),
   start_year = 2013L,
-  end_year = NULL,
-  date = NULL
+  end_year = NULL
 )
 }
 \arguments{
-\item{source}{Which data source to use. One of \code{"election_stats"},
-\code{"ballotpedia"}, or \code{"nc_results"}.
-Call \code{db_list_sources()} to see all options.}
+\item{state}{State name used both for routing and filtering. For the
+general-election scraper use snake_case (e.g. \code{"virginia"});
+for the school-district scraper use title-case (e.g. \code{"Alabama"}),
+or \code{NULL} to return all states. North Carolina can be passed as
+\code{"NC"}, \code{"north_carolina"}, or \code{"north carolina"}.}
 
-\item{state}{(\code{election_stats} / \code{ballotpedia})
-State name. For \code{election_stats}: snake_case key such as
-\code{"virginia"} — see \code{db_list_states("election_stats")}. For
-\code{ballotpedia}: title-case name such as \code{"Alabama"}, or
-\code{NULL} for all states.}
+\item{office}{Type of election to retrieve. \code{"general"} (default)
+fetches general election results via ElectionStats or the NC scraper;
+\code{"school_district"} fetches school board elections via Ballotpedia.}
 
-\item{year_from}{(\code{election_stats}) Start year, inclusive (default \code{1789}).}
+\item{year_from}{(\code{general} / NC) Start year, inclusive (default
+\code{NULL}). When \code{NULL}, ElectionStats starts at \code{1789};
+the NC scraper applies no lower bound.}
 
-\item{year_to}{(\code{election_stats}) End year, inclusive (default: current
-calendar year).}
+\item{year_to}{(\code{general} / NC) End year, inclusive (default
+\code{NULL}). When \code{NULL}, ElectionStats uses the current calendar
+year; the NC scraper applies no upper bound.}
 
-\item{level}{(\code{election_stats}) What to return. \code{"all"} (default)
-returns a named list with \code{$state} and \code{$county} data frames;
-\code{"state"} returns candidate-level results; \code{"county"} returns
-county vote breakdowns; \code{"joined"} returns county rows merged with
-candidate metadata.}
+\item{level}{(\code{general} / ElectionStats) What to return.
+\code{"all"} (default) returns a named list with \code{$state} and
+\code{$county} data frames; \code{"state"} returns candidate-level
+results; \code{"county"} returns county vote breakdowns; \code{"joined"}
+returns county rows merged with candidate metadata.}
 
-\item{parallel}{(\code{election_stats}) Use parallel county scraping for
-classic (requests-based) states (default \code{FALSE}).}
+\item{parallel}{(\code{general} / ElectionStats) Use parallel county
+scraping for classic (requests-based) states (default \code{FALSE}).}
 
-\item{year}{(\code{ballotpedia}) Election year (e.g. \code{2024}). Required
-when \code{mode = "results"} or \code{mode = "joined"}. If \code{NULL}
-with \code{mode = "districts"}, use \code{start_year} / \code{end_year}
-for a multi-year scrape.}
+\item{year}{(\code{school_district}) Election year (e.g. \code{2024}).
+Required when \code{mode = "results"} or \code{mode = "joined"}. If
+\code{NULL} with \code{mode = "districts"}, use \code{start_year} /
+\code{end_year} for a multi-year scrape.}
 
-\item{mode}{(\code{ballotpedia}) What to return. \code{"districts"} (default)
-returns fast district metadata (one request per year-page);
+\item{mode}{(\code{school_district}) What to return. \code{"districts"}
+(default) returns fast district metadata (one request per year-page);
 \code{"results"} follows each district URL for candidate/vote data;
-\code{"joined"} returns districts and candidates merged into one data frame.}
+\code{"joined"} returns districts and candidates merged into one data
+frame.}
 
-\item{start_year}{(\code{ballotpedia}) Earliest year for a multi-year
+\item{start_year}{(\code{school_district}) Earliest year for a multi-year
 district scrape when \code{year} is \code{NULL} (default \code{2013}).}
 
-\item{end_year}{(\code{ballotpedia}) Latest year for a multi-year district
-scrape when \code{year} is \code{NULL} (default: current calendar year).}
-
-\item{date}{(\code{nc_results}) Election date string (e.g.
-\code{"2024-11-05"}), or \code{NULL} to return all available results.}
+\item{end_year}{(\code{school_district}) Latest year for a multi-year
+district scrape when \code{year} is \code{NULL} (default: current
+calendar year).}
 }
 \value{
-A \code{data.frame}, or a named list with elements \code{$state} and
-\code{$county} when \code{level = "all"} for \code{source = "election_stats"}.
+A \code{data.frame}, or a named list with elements \code{$state}
+and \code{$county} when \code{level = "all"} and \code{office =
+  "general"} for a non-NC state.
 }
 \description{
-A single entry point that routes to the appropriate Python scraper based on
-\code{source}. Use \code{db_list_sources()} to see available sources and
-\code{db_list_states(source)} to see supported states.
+A single entry point that automatically routes to the appropriate scraper
+based on \code{state} and \code{office}. Use \code{db_list_states("election_stats")}
+to see states supported by the general-election scraper.
+}
+\details{
+Routing rules (applied in order):
+\enumerate{
+\item \code{office = "school_district"} → Ballotpedia school board scraper
+(all US states; use \code{state} to filter to one state).
+\item \code{state} matches North Carolina (e.g. \code{"NC"},
+\code{"north_carolina"}) → NC State Board of Elections scraper.
+\item All other states → ElectionStats multi-state scraper.
+}
 }
 \examples{
 \dontrun{
-# List available sources and states
-db_list_sources()
-db_list_states("election_stats")
-
-# Ballotpedia — district metadata for one year and state (fast)
-df <- scrape_elections("ballotpedia", year = 2024, state = "Alabama")
-
-# ElectionStats — state-level results
-df <- scrape_elections("election_stats",
-                       state = "virginia", year_from = 2023, year_to = 2023,
+# General election results — Virginia
+df <- scrape_elections(state = "virginia", year_from = 2023, year_to = 2023,
                        level = "state")
 
-# ElectionStats — both state and county levels
-res <- scrape_elections("election_stats",
-                        state = "virginia", year_from = 2023, year_to = 2023)
+# General election results — Virginia, both state and county levels
+res <- scrape_elections(state = "virginia", year_from = 2023, year_to = 2023)
 res$state   # candidate-level data frame
 res$county  # county vote breakdown data frame
 
-# North Carolina results
-df <- scrape_elections("nc_results", date = "2024-11-05")
+# North Carolina — single year
+df <- scrape_elections(state = "NC", year_from = 2024, year_to = 2024)
+
+# North Carolina — multi-year range
+df <- scrape_elections(state = "NC", year_from = 2022, year_to = 2024)
+
+# School district elections — one state, one year (fast district metadata)
+df <- scrape_elections(state = "Alabama", office = "school_district",
+                       year = 2024)
+
+# School district elections — all states, multi-year
+df <- scrape_elections(office = "school_district",
+                       start_year = 2020, end_year = 2024)
 }
 
 }

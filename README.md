@@ -26,15 +26,26 @@ pak::pak("gchickering21/Downballot")
 ## Overview
 
 `DownBallotR` requires a one-time Python setup and exposes all data retrieval
-through a single function, `scrape_elections()`, which routes to the appropriate
-backend scraper based on a `source` argument. Three sources are currently
-supported:
+through a single function, `scrape_elections()`. The appropriate backend scraper
+is selected **automatically** based on the `state` and `office` arguments — no
+need to specify a source by name.
 
-| Source | `source =` | Coverage |
-|---|---|---|
-| ElectionStats | `"election_stats"` | VA, MA, CO, NH, SC, NM, NY — candidate + county results |
-| Ballotpedia | `"ballotpedia"` | All US states, 2013–present — school board elections |
-| NC State Board of Elections | `"nc_results"` | North Carolina local election results |
+| `office` | `state` | Scraper | Coverage |
+|---|---|---|---|
+| `"general"` (default) | any ElectionStats state | ElectionStats | VA, MA, CO, NH, SC, NM, NY — candidate + county results |
+| `"general"` (default) | `"NC"` / `"north_carolina"` | NC State Board of Elections | North Carolina local election results |
+| `"school_district"` | any state or `NULL` | Ballotpedia | All US states, 2013–present — school board elections |
+
+```r
+# General election results — routes automatically by state
+scrape_elections(state = "virginia", year_from = 2023, year_to = 2023)
+
+# North Carolina results by year range
+scrape_elections(state = "NC", year_from = 2022, year_to = 2024)
+
+# School board elections — Ballotpedia
+scrape_elections(state = "Alabama", office = "school_district", year = 2024)
+```
 
 ---
 

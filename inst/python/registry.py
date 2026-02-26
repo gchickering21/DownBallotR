@@ -141,6 +141,7 @@ def _scrape_election_stats(
             year=year,
             parallel=parallel,
             scraping_method=config["scraping_method"],
+            url_style=config.get("url_style", "path_params"),
         )
         print(
             f"[ElectionStats] {year}: "

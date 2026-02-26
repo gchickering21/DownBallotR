@@ -78,18 +78,19 @@ def _normalize_state(state: str) -> str:
     return state.strip().lower().replace(" ", "_")
 
 
-def _make_client(state_key: str, base_url: str, sleep_s: float, search_path: str) -> StateHttpClient:
+def _make_client(state_key: str, base_url: str, sleep_s: float, search_path: str, url_style: str = "path_params") -> StateHttpClient:
     return StateHttpClient(
         state=state_key,
         base_url=base_url,
         config=HttpConfig(timeout_s=_TIMEOUT_S, sleep_s=sleep_s),
         search_path=search_path,
+        url_style=url_style,
     )
 
 
-def _make_client_factory(state_key: str, base_url: str, sleep_s: float, search_path: str):
+def _make_client_factory(state_key: str, base_url: str, sleep_s: float, search_path: str, url_style: str = "path_params"):
     def factory() -> StateHttpClient:
-        return _make_client(state_key, base_url, sleep_s, search_path)
+        return _make_client(state_key, base_url, sleep_s, search_path, url_style)
     return factory
 
 
@@ -103,7 +104,8 @@ def scrape_one_year(
     search_path: str,
     year: int,
     parallel: bool,
-    scraping_method: str,  # NEW: "requests" or "playwright"
+    scraping_method: str,
+    url_style: str = "path_params",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Returns (state_df, county_df) for a single year.
@@ -156,6 +158,7 @@ def scrape_one_year(
             base_url=base_url,
             sleep_s=_SLEEP_S_STATE,
             search_path=search_path,
+            url_style=url_style,
         )
 
         rows = fetch_all_search_results(
@@ -191,6 +194,7 @@ def scrape_one_year(
                     base_url=base_url,
                     sleep_s=_SLEEP_S_COUNTY,
                     search_path=search_path,
+                    url_style=url_style,
                 ),
                 max_workers=_MAX_WORKERS,
             )
@@ -200,6 +204,7 @@ def scrape_one_year(
                 base_url=base_url,
                 sleep_s=_SLEEP_S_COUNTY,
                 search_path=search_path,
+                url_style=url_style,
             )
 
             county_df = build_county_dataframe(
@@ -287,9 +292,11 @@ def main() -> None:
     base_url = config["base_url"]
     search_path = config["search_path"]
     scraping_method = config["scraping_method"]
+    url_style = config.get("url_style", "path_params")
 
     print(f"State: {state_key}")
     print(f"Scraping method: {scraping_method}")
+    print(f"URL style: {url_style}")
     print(f"Base URL: {base_url}")
 
     out = _ensure_outdir(f"{state_key}_outputs")
@@ -307,7 +314,8 @@ def main() -> None:
             search_path=search_path,
             year=year,
             parallel=parallel,
-            scraping_method=scraping_method,  # NEW: dispatch to correct scraper
+            scraping_method=scraping_method,
+            url_style=url_style,
         )
 
         print(f"[{year}] state rows:  {len(state_df):,}")

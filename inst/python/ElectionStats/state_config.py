@@ -8,6 +8,7 @@ from typing import Literal, TypedDict
 
 ScraperType = Literal["classic", "v2"]
 ScrapingMethod = Literal["requests", "playwright"]
+UrlStyle = Literal["path_params", "query_params"]
 
 
 class StateConfig(TypedDict):
@@ -17,6 +18,7 @@ class StateConfig(TypedDict):
     search_path: str
     scraper_type: ScraperType
     scraping_method: ScrapingMethod
+    url_style: UrlStyle
 
 
 STATE_CONFIGS: dict[str, StateConfig] = {
@@ -25,42 +27,49 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "search_path": "/search",
         "scraper_type": "classic",
         "scraping_method": "requests",
+        "url_style": "path_params",
     },
     "massachusetts": {
         "base_url": "https://electionstats.state.ma.us/elections",
         "search_path": "/search",
         "scraper_type": "classic",
         "scraping_method": "requests",
+        "url_style": "path_params",
     },
     "colorado": {
         "base_url": "https://co.elstats2.civera.com/eng/contests",
         "search_path": "",
         "scraper_type": "classic",
         "scraping_method": "requests",
+        "url_style": "query_params",
     },
     "new_hampshire": {
         "base_url": "https://nh.electionstats.com/elections",
         "search_path": "/search",
         "scraper_type": "classic",
         "scraping_method": "requests",
+        "url_style": "path_params",
     },
     "south_carolina": {
         "base_url": "https://electionhistory.scvotes.gov",
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
+        "url_style": "path_params",
     },
     "new_mexico": {
         "base_url": "https://electionstats.sos.nm.gov",
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
+        "url_style": "path_params",
     },
     "new_york": {
         "base_url": "https://results.elections.ny.gov",
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
+        "url_style": "path_params",
     },
 }
 

@@ -52,6 +52,7 @@ class StateHttpClient:
     base_url: str
     config: "HttpConfig"
     search_path: str = "/search"   # default for VA, MA, etc.
+    url_style: str = "path_params"  # "path_params" (VA/MA/NH) or "query_params" (CO)
 
     # ---------------------------
     # URL Builders
@@ -75,12 +76,20 @@ class StateHttpClient:
     ) -> str:
         """
         Builds a search URL.
-        If search_path == "", the base URL is used directly (Colorado case).
+
+        For electionstats-style sites (VA, MA, NH) url_style="path_params":
+            {base_url}/search/year_from:{year_from}/year_to:{year_to}
+
+        For Civera-style sites (CO) url_style="query_params":
+            {base_url}?year_from={year_from}&year_to={year_to}&page={page}
         """
         base = self._normalize_base()
         path = self._normalize_path()
 
         url = f"{base}{path}" if path else base
+
+        if self.url_style == "path_params":
+            return f"{url}/year_from:{year_from}/year_to:{year_to}"
 
         query = urlencode(
             {
@@ -89,7 +98,6 @@ class StateHttpClient:
                 "page": page,
             }
         )
-
         return f"{url}?{query}"
 
     def build_detail_url(self, election_id: int) -> str:

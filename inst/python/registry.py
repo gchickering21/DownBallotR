@@ -171,6 +171,100 @@ def _scrape_election_stats(
     return {"state": state_all, "county": county_all}
 
 
+def _scrape_ballotpedia_elections(
+    year: "int | None" = None,
+    state: "str | None" = None,
+    mode: str = "listings",
+    election_level: str = "all",
+    start_year: int = 2024,
+    end_year: "int | None" = None,
+    **_,
+) -> pd.DataFrame:
+    """Scrape Ballotpedia state-level election candidate data.
+
+    Parameters
+    ----------
+    year : int | None
+        Election year (e.g. 2024). Required for mode='results'.
+        If provided with mode='listings', scrapes that single year.
+    state : str | None
+        State name (e.g. 'Maine'). Required — state pages are state-specific.
+    mode : str
+        - 'listings' (default) candidate listing from state+year page; fast,
+          one HTTP request. Returns candidate names, offices, parties, status
+          but no vote counts.
+        - 'results'   follows each unique contest URL for vote counts and
+                      percentages. Requires year. Slower.
+    election_level : str
+        Filter by candidate level:
+          - 'all'     (default) all levels
+          - 'federal' U.S. House, Senate, Presidential Electors
+          - 'state'   state-level races (Governor, state legislature, etc.)
+          - 'local'   local races (mayor, city council, etc.)
+    start_year : int
+        Earliest year for multi-year listing scrape when year is None (default: 2024).
+    end_year : int | None
+        Latest year for multi-year listing scrape when year is None (default: current year).
+    """
+    year       = int(year)       if year       is not None else None
+    start_year = int(start_year) if start_year is not None else 2024
+    end_year   = int(end_year)   if end_year   is not None else None
+
+    if state is None:
+        raise ValueError("'state' is required for Ballotpedia state elections scraper.")
+
+    # ── Year validation ──────────────────────────────────────────────────────
+    _SUPPORTED_FROM = 2024
+    _available_msg = (
+        f"Available years for the Ballotpedia state elections scraper: "
+        f"{_SUPPORTED_FROM}–present (not all states have pages for every year)."
+    )
+    # Determine the effective year range being requested
+    _effective_years = (
+        [year] if year is not None
+        else list(range(start_year, (end_year or datetime.date.today().year) + 1))
+    )
+    _unsupported = [y for y in _effective_years if y < _SUPPORTED_FROM]
+    if _unsupported:
+        if all(y < _SUPPORTED_FROM for y in _effective_years):
+            # Every requested year is unsupported — bail early
+            print(
+                f"[Ballotpedia state elections] No data for year(s) "
+                f"{sorted(_unsupported)} — the widget-table layout used by "
+                f"this scraper was introduced in {_SUPPORTED_FROM}.\n"
+                f"{_available_msg}"
+            )
+            return pd.DataFrame()
+        else:
+            # Partial overlap — warn but proceed
+            print(
+                f"[Ballotpedia state elections] WARNING: year(s) "
+                f"{sorted(_unsupported)} are not supported (layout introduced "
+                f"in {_SUPPORTED_FROM}). Those years will return no data.\n"
+                f"{_available_msg}"
+            )
+
+    from Ballotpedia.state_elections import StateElectionsScraper
+
+    scraper = StateElectionsScraper()
+
+    if mode == "results":
+        if year is None:
+            raise ValueError("'year' is required for mode='results'")
+        return scraper.scrape_with_results_to_dataframe(
+            year=year, state=state, level=election_level
+        )
+
+    # mode == "listings"
+    if year is not None:
+        return scraper.scrape_all_to_dataframe(
+            start_year=year, end_year=year, state=state, level=election_level
+        )
+    return scraper.scrape_all_to_dataframe(
+        start_year=start_year, end_year=end_year, state=state, level=election_level
+    )
+
+
 def _scrape_ballotpedia(
     year: int | None = None,
     state: str | None = None,
@@ -253,6 +347,11 @@ _YEAR_RANGES: dict = {
         # Ballotpedia covers all US states from 2013 onward (open-ended).
         "_all": (2013, None),
     },
+    "ballotpedia_elections": {
+        # State-level election pages use the widget-table-container layout
+        # introduced in 2024; not all states have pages for every year.
+        "_all": (2024, None),
+    },
 }
 
 
@@ -284,6 +383,14 @@ _SOURCES: dict = {
         "description": "Ballotpedia school board elections (all US states, 2013–present)",
         "scrape_fn": _scrape_ballotpedia,
         "states": [],  # Ballotpedia covers all states; use state= param to filter
+    },
+    "ballotpedia_elections": {
+        "description": (
+            "Ballotpedia state elections — federal, state, and local candidates "
+            "(all US states, 2024–present)"
+        ),
+        "scrape_fn": _scrape_ballotpedia_elections,
+        "states": [],  # state= param required; covers all US states
     },
 }
 
@@ -319,11 +426,12 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
     Parameters
     ----------
     source : str
-        One of 'nc_results', 'election_stats', 'ballotpedia'.
+        One of 'nc_results', 'election_stats', 'ballotpedia',
+        'ballotpedia_elections'.
     state : str | None
         State key for 'election_stats' (e.g. 'virginia').
         Pass None to get the earliest year across all ElectionStats states.
-        Ignored for 'nc_results' and 'ballotpedia'.
+        Ignored for 'nc_results', 'ballotpedia', and 'ballotpedia_elections'.
 
     Returns
     -------
@@ -336,7 +444,7 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
     ranges = _YEAR_RANGES[source]
     current_year = datetime.date.today().year
 
-    if source == "ballotpedia":
+    if source in ("ballotpedia", "ballotpedia_elections"):
         start, end = ranges["_all"]
         return {"start_year": start, "end_year": end or current_year}
 
@@ -367,8 +475,8 @@ def scrape(source: str, **kwargs) -> "pd.DataFrame | dict":
     Parameters
     ----------
     source : str
-        One of 'nc_results', 'election_stats', 'ballotpedia'.
-        Call list_sources() to see all options.
+        One of 'nc_results', 'election_stats', 'ballotpedia',
+        'ballotpedia_elections'. Call list_sources() to see all options.
     **kwargs
         Passed through to the source's scrape function.
         See the individual _scrape_* functions for parameter details.

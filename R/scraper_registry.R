@@ -4,7 +4,8 @@
 #
 # One primary exported function: scrape_elections()
 # Internal helpers (.db_registry, .scrape_nc, .scrape_election_stats,
-# .scrape_ballotpedia) handle source-specific argument shaping.
+# .scrape_ballotpedia, .scrape_ballotpedia_elections) handle source-specific
+# argument shaping.
 # Utility exports db_list_sources() / db_list_states() aid discoverability.
 
 
@@ -71,6 +72,30 @@
 }
 
 
+#' Call the Ballotpedia state elections scraper
+#' @keywords internal
+.scrape_ballotpedia_elections <- function(
+    year            = NULL,
+    state           = NULL,
+    mode            = "listings",
+    election_level  = "all",
+    start_year      = 2024L,
+    end_year        = NULL) {
+
+  mode            <- match.arg(mode, c("listings", "results"))
+  election_level  <- match.arg(election_level, c("all", "federal", "state", "local"))
+  .db_registry()$scrape(
+    "ballotpedia_elections",
+    year            = year,
+    state           = state,
+    mode            = mode,
+    election_level  = election_level,
+    start_year      = as.integer(start_year),
+    end_year        = end_year        # NULL becomes Python None via reticulate
+  )
+}
+
+
 # NC state identifiers (case-insensitive) recognised for auto-routing
 .nc_state_keys <- c("nc", "north carolina", "north_carolina")
 
@@ -97,6 +122,8 @@
 #' \enumerate{
 #'   \item \code{office = "school_district"} → Ballotpedia school board scraper
 #'         (all US states; use \code{state} to filter to one state).
+#'   \item \code{office = "state_elections"} → Ballotpedia state elections
+#'         scraper (federal, state, and local candidates; 2024–present).
 #'   \item \code{state} matches North Carolina (e.g. \code{"NC"},
 #'         \code{"north_carolina"}) → NC State Board of Elections scraper.
 #'   \item All other states → ElectionStats multi-state scraper.
@@ -109,7 +136,9 @@
 #'   \code{"NC"}, \code{"north_carolina"}, or \code{"north carolina"}.
 #' @param office Type of election to retrieve. \code{"general"} (default)
 #'   fetches general election results via ElectionStats or the NC scraper;
-#'   \code{"school_district"} fetches school board elections via Ballotpedia.
+#'   \code{"school_district"} fetches school board elections via Ballotpedia;
+#'   \code{"state_elections"} fetches federal, state, and local candidate
+#'   listings from Ballotpedia state election pages (2024–present).
 #' @param year_from (\code{general} / NC) Start year, inclusive (default
 #'   \code{NULL}). When \code{NULL}, ElectionStats starts at \code{1789};
 #'   the NC scraper applies no lower bound.
@@ -121,6 +150,10 @@
 #'   \code{$county} data frames; \code{"state"} returns candidate-level
 #'   results; \code{"county"} returns county vote breakdowns; \code{"joined"}
 #'   returns county rows merged with candidate metadata.
+#' @param election_level (\code{state_elections}) Which candidate tier to
+#'   return. \code{"all"} (default) returns all tiers; \code{"federal"}
+#'   returns U.S. House / Senate / Presidential Electors only; \code{"state"}
+#'   returns state-level races only; \code{"local"} returns local races only.
 #' @param parallel (\code{general} / ElectionStats) Use parallel county
 #'   scraping for classic (requests-based) states (default \code{TRUE}).
 #'   Ignored automatically for Playwright-based states (SC, NM, NY).
@@ -132,16 +165,21 @@
 #'   (default) returns fast district metadata (one request per year-page);
 #'   \code{"results"} follows each district URL for candidate/vote data;
 #'   \code{"joined"} returns districts and candidates merged into one data
-#'   frame.
+#'   frame. For \code{state_elections}: \code{"listings"} (default) returns
+#'   one row per candidate from the state+year page (fast); \code{"results"}
+#'   additionally follows each contest URL for vote counts (slower).
 #' @param start_year (\code{school_district}) Earliest year for a multi-year
 #'   district scrape when \code{year} is \code{NULL} (default \code{2013}).
-#' @param end_year (\code{school_district}) Latest year for a multi-year
-#'   district scrape when \code{year} is \code{NULL} (default: current
-#'   calendar year).
+#'   For \code{state_elections}, earliest year when \code{year} is \code{NULL}
+#'   (default \code{2024}).
+#' @param end_year (\code{school_district} / \code{state_elections}) Latest
+#'   year for a multi-year scrape when \code{year} is \code{NULL} (default:
+#'   current calendar year).
 #'
 #' @return A \code{data.frame}, or a named list with elements \code{$state}
 #'   and \code{$county} when \code{level = "all"} and \code{office =
-#'   "general"} for a non-NC state.
+#'   "general"} for a non-NC state.  State-elections always return a
+#'   \code{data.frame} (one row per candidate).
 #'
 #' @examples
 #' \dontrun{
@@ -167,26 +205,41 @@
 #' # School district elections — all states, multi-year
 #' df <- scrape_elections(office = "school_district",
 #'                        start_year = 2020, end_year = 2024)
+#'
+#' # State elections — candidate listings (fast, no vote counts)
+#' df <- scrape_elections(state = "Maine", office = "state_elections",
+#'                        year = 2024)
+#'
+#' # State elections — federal candidates only
+#' df <- scrape_elections(state = "Pennsylvania", office = "state_elections",
+#'                        year = 2024, election_level = "federal")
+#'
+#' # State elections — full results with vote counts (follows contest links)
+#' df <- scrape_elections(state = "Maine", office = "state_elections",
+#'                        year = 2024, mode = "results")
 #' }
 #'
 #' @export
 scrape_elections <- function(
-    state      = NULL,
-    office     = c("general", "school_district"),
+    state           = NULL,
+    office          = c("general", "school_district", "state_elections"),
     # General-election (ElectionStats / NC) args
-    year_from  = NULL,
-    year_to    = NULL,
-    level      = c("all", "state", "county", "joined"),
-    parallel   = TRUE,
+    year_from       = NULL,
+    year_to         = NULL,
+    level           = c("all", "state", "county", "joined"),
+    parallel        = TRUE,
     # School-district (Ballotpedia) args
-    year       = NULL,
-    mode       = c("districts", "results", "joined"),
-    start_year = 2013L,
-    end_year   = NULL) {
+    year            = NULL,
+    mode            = c("districts", "results", "joined", "listings"),
+    start_year      = NULL,
+    end_year        = NULL,
+    # State-elections (Ballotpedia) args
+    election_level  = c("all", "federal", "state", "local")) {
 
-  office <- match.arg(office)
-  level  <- match.arg(level)
-  mode   <- match.arg(mode)
+  office          <- match.arg(office)
+  level           <- match.arg(level)
+  mode            <- match.arg(mode)
+  election_level  <- match.arg(election_level)
 
   # Guard against old source= positional usage (e.g. scrape_elections("ballotpedia", ...))
   if (!is.null(state) &&
@@ -203,9 +256,20 @@ scrape_elections <- function(
   year_from <- .to_year(year_from)
   year_to   <- .to_year(year_to)
 
+  # Set default start_year per office type if not supplied
+  if (is.null(start_year)) {
+    start_year <- switch(office,
+      "school_district"  = 2013L,
+      "state_elections"  = 2024L,
+      NULL  # general / nc_results don't use start_year
+    )
+  }
+
   # ── Auto-route ──────────────────────────────────────────────────────────────
   source <- if (office == "school_district") {
     "ballotpedia"
+  } else if (office == "state_elections") {
+    "ballotpedia_elections"
   } else if (!is.null(state) &&
              tolower(trimws(state)) %in% .nc_state_keys) {
     "nc_results"
@@ -221,9 +285,10 @@ scrape_elections <- function(
     )
     label <- switch(
       source,
-      "ballotpedia"    = "school district elections (Ballotpedia)",
-      "nc_results"     = "North Carolina (NC State Board of Elections)",
-      "election_stats" = paste0(state, " (ElectionStats)")
+      "ballotpedia"            = "school district elections (Ballotpedia)",
+      "ballotpedia_elections"  = paste0(state, " state elections (Ballotpedia)"),
+      "nc_results"             = "North Carolina (NC State Board of Elections)",
+      "election_stats"         = paste0(state, " (ElectionStats)")
     )
     message("Available years for ", label, ": ",
             avail$start_year, "\u2013", avail$end_year)
@@ -244,6 +309,14 @@ scrape_elections <- function(
       mode       = mode,
       start_year = start_year,
       end_year   = end_year
+    ),
+    "ballotpedia_elections" = .scrape_ballotpedia_elections(
+      year           = year,
+      state          = state,
+      mode           = if (mode == "listings") "listings" else "results",
+      election_level = election_level,
+      start_year     = start_year,
+      end_year       = end_year
     ),
     "nc_results" = .scrape_nc(
       year_from = year_from,
@@ -286,8 +359,9 @@ db_list_states <- function(source) {
 #'   Pass \code{NULL} (default) to return all states for the chosen source(s).
 #' @param office Type of election, matching \code{scrape_elections()}.
 #'   \code{"general"} (default) returns availability for ElectionStats states
-#'   and North Carolina; \code{"school_district"} returns Ballotpedia
-#'   availability.
+#'   and North Carolina; \code{"school_district"} returns Ballotpedia school
+#'   board availability; \code{"state_elections"} returns Ballotpedia state
+#'   election availability.
 #'
 #' @return A \code{data.frame} with columns \code{source}, \code{state},
 #'   \code{start_year}, and \code{end_year}.
@@ -300,12 +374,16 @@ db_list_states <- function(source) {
 #' # School district (Ballotpedia)
 #' db_available_years(office = "school_district")
 #'
+#' # State elections (Ballotpedia)
+#' db_available_years(office = "state_elections")
+#'
 #' # Filter to one state
 #' db_available_years(state = "virginia")
 #' }
 #'
 #' @export
-db_available_years <- function(state = NULL, office = c("general", "school_district")) {
+db_available_years <- function(state = NULL,
+                               office = c("general", "school_district", "state_elections")) {
   office <- match.arg(office)
   reg    <- .db_registry()
 
@@ -314,6 +392,17 @@ db_available_years <- function(state = NULL, office = c("general", "school_distr
     return(data.frame(
       source     = "ballotpedia",
       state      = "All US states",
+      start_year = avail$start_year,
+      end_year   = avail$end_year,
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  if (office == "state_elections") {
+    avail <- reg$get_available_years("ballotpedia_elections")
+    return(data.frame(
+      source     = "ballotpedia_elections",
+      state      = "All US states (where page exists)",
       start_year = avail$start_year,
       end_year   = avail$end_year,
       stringsAsFactors = FALSE

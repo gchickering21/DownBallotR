@@ -30,30 +30,25 @@ Usage
 
 from __future__ import annotations
 
-import datetime
 import re
-import time
 from dataclasses import asdict, dataclass
 from typing import Iterable, List, Optional
 
-import requests
-from lxml import html
+from .helpers import (
+    BallotpediaBaseScraper,
+    _BASE_URL,
+    _current_year,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-_BASE_URL = "https://ballotpedia.org"
 _EARLIEST_YEAR = 2013  # earliest year with a dedicated page
-_DEFAULT_USER_AGENT = "DownBallotR (+https://github.com/gchickering21/DownBallotR)"
 
 # Matches "2024 Alabama School Board Elections" → group 1 = "Alabama"
 # Year prefix is optional to handle captions like "New Hampshire School Board Elections"
 _CAPTION_RE = re.compile(r"^(?:\d{4}\s+)?(.+?)\s+School Board", re.IGNORECASE)
-
-
-def _current_year() -> int:
-    return datetime.date.today().year
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +184,7 @@ class SchoolBoardCandidateResult:
 # Scraper
 # ---------------------------------------------------------------------------
 
-class SchoolBoardScraper:
+class SchoolBoardScraper(BallotpediaBaseScraper):
     """Scrape Ballotpedia school board election pages year-by-year, state-by-state.
 
     Submits plain HTTP GET requests (no JavaScript needed — these are standard
@@ -230,23 +225,6 @@ class SchoolBoardScraper:
     >>> df = scraper.scrape_all_to_dataframe(start_year=2020, end_year=2024)
     """
 
-    def __init__(
-        self,
-        sleep_s: float = 1.0,
-        timeout_s: int = 30,
-        user_agent: str = _DEFAULT_USER_AGENT,
-    ) -> None:
-        self.sleep_s = sleep_s
-        self.timeout_s = timeout_s
-
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "User-Agent": user_agent,
-                "Accept": "text/html,*/*",
-            }
-        )
-
     # ------------------------------------------------------------------
     # URL builder
     # ------------------------------------------------------------------
@@ -256,78 +234,8 @@ class SchoolBoardScraper:
         return f"{_BASE_URL}/School_board_elections,_{year}"
 
     # ------------------------------------------------------------------
-    # HTTP
+    # School-board-specific text helpers
     # ------------------------------------------------------------------
-
-    def _is_waf_challenge(self, resp) -> bool:
-        """Return True if Ballotpedia returned an AWS WAF bot-challenge page."""
-        return (
-            resp.headers.get("x-amzn-waf-action", "") == "challenge"
-            or (resp.status_code == 202 and len(resp.text) < 10_000)
-        )
-
-    def _get_html_playwright(self, url: str) -> Optional[str]:
-        """Fetch *url* using a headless Chromium browser (handles WAF challenges)."""
-        try:
-            from playwright.sync_api import sync_playwright
-        except ImportError:
-            print("  WARNING: playwright not installed — cannot bypass WAF challenge")
-            return None
-
-        print(f"  [playwright] fetching {url}")
-        try:
-            with sync_playwright() as pw:
-                browser = pw.chromium.launch(headless=True)
-                page = browser.new_page()
-                page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-                # Wait for the main content to appear
-                try:
-                    page.wait_for_selector(
-                        "table.sortable, div.votebox, table.wikitable",
-                        timeout=15_000,
-                    )
-                except Exception:
-                    pass  # proceed even if selector times out
-                if self.sleep_s:
-                    time.sleep(self.sleep_s)
-                content = page.content()
-                browser.close()
-            return content
-        except Exception as exc:
-            print(f"  WARNING: playwright failed for {url}: {exc}")
-            return None
-
-    def _get_html(self, url: str) -> Optional[str]:
-        """Fetch *url* and return the response body, or ``None`` on 404/5xx.
-
-        If Ballotpedia's AWS WAF returns a bot-challenge (202 + JS puzzle),
-        automatically retries the same URL via a headless Playwright browser.
-        """
-        resp = self.session.get(url, timeout=self.timeout_s)
-        if resp.status_code == 404:
-            return None
-        if resp.status_code >= 500:
-            print(f"  WARNING: {resp.status_code} on {url} — skipping")
-            return None
-        if self._is_waf_challenge(resp):
-            print(f"  WAF challenge on {url} — retrying with Playwright")
-            return self._get_html_playwright(url)
-        resp.raise_for_status()
-        if self.sleep_s:
-            time.sleep(self.sleep_s)
-        return resp.text
-
-    # ------------------------------------------------------------------
-    # Text helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _clean(node) -> str:
-        """Whitespace-normalised text content of an lxml element."""
-        try:
-            return re.sub(r"\s+", " ", node.text_content() or "").strip()
-        except Exception:
-            return ""
 
     @staticmethod
     def _cell_text(td) -> str:
@@ -340,7 +248,7 @@ class SchoolBoardScraper:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _col_index(headers: list[str], *keywords: str) -> Optional[int]:
+    def _col_index(headers: list, *keywords: str) -> Optional[int]:
         """Return the index of the first header matching any of *keywords*.
 
         Matching is case-insensitive substring search.  Returns ``None`` if
@@ -371,7 +279,8 @@ class SchoolBoardScraper:
         columns dynamically from the second header row.  Works for all
         Ballotpedia page layouts from 2013 onward.
         """
-        doc = html.fromstring(page_html)
+        from lxml import html as lhtml
+        doc = lhtml.fromstring(page_html)
         rows: List[SchoolBoardElectionRow] = []
 
         for table in doc.xpath("//table[contains(@class,'sortable')]"):
@@ -455,61 +364,6 @@ class SchoolBoardScraper:
     # District-page parser (candidate / results)
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _infer_election_type(heading: str) -> str:
-        """Infer 'General', 'Primary', 'Primary Runoff', or 'Other'."""
-        h = heading.lower()
-        if "primary runoff" in h or "primary run-off" in h:
-            return "Primary Runoff"
-        if "primary" in h:
-            return "Primary"
-        if "general" in h:
-            return "General"
-        return "Other"
-
-    def _parse_candidate_cell(self, td) -> List[tuple]:
-        """Parse a candidates <td> from the Office/Candidates table format.
-
-        The cell contains interleaved ``<img>`` (green checkmark = winner),
-        ``<a>`` (candidate link), and ``<br/>`` elements.  A checkmark
-        immediately preceding a candidate link marks that candidate as the
-        winner.  Incumbent status is signalled by ``(i)`` in the tail text
-        after the ``<a>``.
-
-        Returns
-        -------
-        List of ``(name, candidate_url, is_winner, is_incumbent)`` tuples.
-        """
-        results = []
-        pending_winner = False
-
-        for child in td:
-            tag = child.tag
-            if tag == "img":
-                alt = (child.get("alt") or "").lower()
-                if "green check mark" in alt or "check" in alt:
-                    pending_winner = True
-                # Candidate Connection logo — ignore, don't reset flag
-            elif tag == "a":
-                href = child.get("href", "")
-                target = child.get("target", "")
-                # Skip Candidate Connection / survey links
-                if target == "_blank" or "#Campaign_themes" in href:
-                    continue
-                name = child.text_content().strip().rstrip("*").strip()
-                if not name:
-                    continue
-                candidate_url = (
-                    href if href.startswith("http") else f"{_BASE_URL}{href}"
-                )
-                tail = child.tail or ""
-                is_incumbent = "(i)" in tail
-                results.append((name, candidate_url, pending_winner, is_incumbent))
-                pending_winner = False
-            # <br>, <p>, text nodes — do not affect pending_winner
-
-        return results
-
     def _parse_district_page(
         self,
         page_html: str,
@@ -534,7 +388,8 @@ class SchoolBoardScraper:
 
         Pages with no data yet (future elections) return an empty list.
         """
-        doc = html.fromstring(page_html)
+        from lxml import html as lhtml
+        doc = lhtml.fromstring(page_html)
         results: List[SchoolBoardCandidateResult] = []
 
         def _make_row(

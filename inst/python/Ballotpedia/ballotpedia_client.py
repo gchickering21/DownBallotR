@@ -16,14 +16,14 @@ from urllib.parse import urlencode
 import requests
 from lxml import html
 
+from .helpers import _BASE_URL, _DEFAULT_USER_AGENT
+
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-_BASE_URL = "https://ballotpedia.org"
 _SEARCH_PATH = "/wiki/index.php"
-_DEFAULT_USER_AGENT = "DownBallotR (+https://github.com/gchickering21/DownBallotR)"
 _DEFAULT_LIMIT = 20  # results per page (MediaWiki default)
 
 

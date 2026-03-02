@@ -124,6 +124,58 @@
 .nc_state_keys <- c("nc", "north carolina", "north_carolina")
 
 
+# All 50 states + DC: 2-letter abbreviation → canonical title-case full name
+.STATE_ABBREV <- c(
+  AL = "Alabama",        AK = "Alaska",         AZ = "Arizona",
+  AR = "Arkansas",       CA = "California",      CO = "Colorado",
+  CT = "Connecticut",    DE = "Delaware",        FL = "Florida",
+  GA = "Georgia",        HI = "Hawaii",          ID = "Idaho",
+  IL = "Illinois",       IN = "Indiana",         IA = "Iowa",
+  KS = "Kansas",         KY = "Kentucky",        LA = "Louisiana",
+  ME = "Maine",          MD = "Maryland",        MA = "Massachusetts",
+  MI = "Michigan",       MN = "Minnesota",       MS = "Mississippi",
+  MO = "Missouri",       MT = "Montana",         NE = "Nebraska",
+  NV = "Nevada",         NH = "New Hampshire",   NJ = "New Jersey",
+  NM = "New Mexico",     NY = "New York",        NC = "North Carolina",
+  ND = "North Dakota",   OH = "Ohio",            OK = "Oklahoma",
+  OR = "Oregon",         PA = "Pennsylvania",    RI = "Rhode Island",
+  SC = "South Carolina", SD = "South Dakota",    TN = "Tennessee",
+  TX = "Texas",          UT = "Utah",            VT = "Vermont",
+  VA = "Virginia",       WA = "Washington",      WV = "West Virginia",
+  WI = "Wisconsin",      WY = "Wyoming",         DC = "District of Columbia"
+)
+
+
+#' Normalise a state to canonical title-case full name
+#'
+#' Accepts 2-letter abbreviations (any case) or full names in any
+#' case/spacing/underscore style. Returns \code{NULL} invisibly when the input
+#' is \code{NULL}.
+#'
+#' @keywords internal
+.normalize_state <- function(state) {
+  if (is.null(state)) return(NULL)
+  s <- trimws(state)
+
+  # 2-letter abbreviation (case-insensitive)
+  s_upper <- toupper(s)
+  if (nchar(s_upper) == 2L && s_upper %in% names(.STATE_ABBREV)) {
+    return(.STATE_ABBREV[[s_upper]])
+  }
+
+  # Full name: replace underscores/hyphens with spaces, then title-case
+  tools::toTitleCase(tolower(gsub("[_\\-]", " ", s)))
+}
+
+
+#' Convert canonical title-case state to ElectionStats key (lowercase, underscores)
+#' @keywords internal
+.state_to_es_key <- function(state) {
+  if (is.null(state)) return(NULL)
+  tolower(gsub(" ", "_", state))
+}
+
+
 #' Coerce a year value to integer, accepting numeric, string, or NULL
 #' @keywords internal
 .to_year <- function(x) {
@@ -155,11 +207,12 @@
 #'   \item All other states → ElectionStats multi-state scraper.
 #' }
 #'
-#' @param state State name used both for routing and filtering. For the
-#'   general-election scraper use snake_case (e.g. \code{"virginia"});
-#'   for the school-district scraper use title-case (e.g. \code{"Alabama"}),
-#'   or \code{NULL} to return all states. North Carolina can be passed as
-#'   \code{"NC"}, \code{"north_carolina"}, or \code{"north carolina"}.
+#' @param state State name or 2-letter abbreviation, accepted in any case or
+#'   spacing style (e.g. \code{"VA"}, \code{"virginia"}, \code{"Virginia"},
+#'   \code{"south_carolina"}, \code{"SC"}).  The value is normalised
+#'   automatically before being passed to the underlying scraper, so callers
+#'   do not need to worry about the exact format. Pass \code{NULL} to return
+#'   all states (Ballotpedia scrapers only).
 #' @param office Type of election to retrieve. \code{"general"} (default)
 #'   fetches general election results via ElectionStats or the NC scraper;
 #'   \code{"school_district"} fetches school board elections via Ballotpedia;
@@ -308,6 +361,7 @@ scrape_elections <- function(
     )
   }
 
+  state     <- .normalize_state(state)
   year_from <- .to_year(year_from)
   year_to   <- .to_year(year_to)
 
@@ -339,7 +393,7 @@ scrape_elections <- function(
   tryCatch({
     avail <- .db_registry()$get_available_years(
       source = source,
-      state  = if (source == "election_stats") state else NULL
+      state  = if (source == "election_stats") .state_to_es_key(state) else NULL
     )
     label <- switch(
       source,
@@ -358,7 +412,7 @@ scrape_elections <- function(
   result <- switch(
     source,
     "election_stats" = .scrape_election_stats(
-      state     = state,
+      state     = .state_to_es_key(state),
       year_from = if (is.null(year_from)) 1789L else year_from,
       year_to   = year_to,
       level     = level,
@@ -521,11 +575,12 @@ db_available_years <- function(state = NULL,
   result <- rbind(es_df, nc_row)
 
   if (!is.null(state)) {
-    state_key <- tolower(trimws(state))
-    result <- result[
-      tolower(result$state) == state_key | result$state == state, ,
-      drop = FALSE
-    ]
+    # Normalise both sides to lowercase-underscore for robust matching
+    # (handles abbreviations, spacing variants, and mixed case).
+    state_key  <- .state_to_es_key(.normalize_state(state))
+    result_key <- vapply(result$state, function(s) .state_to_es_key(.normalize_state(s)),
+                         character(1L))
+    result <- result[result_key == state_key, , drop = FALSE]
   }
 
   rownames(result) <- NULL

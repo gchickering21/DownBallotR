@@ -20,11 +20,12 @@ scrape_elections(
 )
 }
 \arguments{
-\item{state}{State name used both for routing and filtering. For the
-general-election scraper use snake_case (e.g. \code{"virginia"});
-for the school-district scraper use title-case (e.g. \code{"Alabama"}),
-or \code{NULL} to return all states. North Carolina can be passed as
-\code{"NC"}, \code{"north_carolina"}, or \code{"north carolina"}.}
+\item{state}{State name or 2-letter abbreviation, accepted in any case or
+spacing style (e.g. \code{"VA"}, \code{"virginia"}, \code{"Virginia"},
+\code{"south_carolina"}, \code{"SC"}).  The value is normalised
+automatically before being passed to the underlying scraper, so callers
+do not need to worry about the exact format. Pass \code{NULL} to return
+all states (Ballotpedia scrapers only).}
 
 \item{office}{Type of election to retrieve. \code{"general"} (default)
 fetches general election results via ElectionStats or the NC scraper;

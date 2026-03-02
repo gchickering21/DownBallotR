@@ -22,4 +22,12 @@ articles:
     navbar: ~
     contents:
       - scraping-data
+  - title: Scraper reference
+    navbar: ~
+    contents:
+      - election-stats
+      - north-carolina
+      - school-district-elections
+      - state-elections
+      - municipal-elections
 

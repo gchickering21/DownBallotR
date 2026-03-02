@@ -1,0 +1,103 @@
+---
+title: "North Carolina elections"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{North Carolina elections}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+```{r setup}
+library(DownBallotR)
+library(dplyr)
+
+downballot_use_python()
+```
+
+## What it covers
+
+The NC scraper returns precinct-level local election results from the
+NC State Board of Elections, filtered by year range.
+
+> **Note:** Only the 2025 election file layout is currently supported.
+> Elections before 2025 use an older format that has not yet been
+> implemented; they are automatically skipped with an informational message.
+
+---
+
+## Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | `"NC"` (any NC alias) | `"NC"`, `"north_carolina"`, or `"north carolina"` |
+| `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
+| `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
+
+---
+
+## Examples
+
+### All currently supported NC results
+
+```{r}
+nc_all <- scrape_elections(state = "NC")
+
+nc_all %>%
+  select(year, county, office, candidate, party, votes) %>%
+  arrange(county, office)
+```
+
+### Single year
+
+```{r}
+nc_2025 <- scrape_elections(
+  state     = "NC",
+  year_from = 2025,
+  year_to   = 2025
+)
+
+nc_2025 %>%
+  filter(contest_outcome == "Winner") %>%
+  select(county, office, candidate, party, votes)
+```
+
+### Filter to a specific county
+
+```{r}
+scrape_elections(state = "NC") %>%
+  filter(county == "Wake") %>%
+  select(year, office, candidate, party, votes) %>%
+  arrange(office, desc(votes))
+```
+
+### Multi-year range
+
+```{r}
+nc_range <- scrape_elections(
+  state     = "NC",
+  year_from = 2025,
+  year_to   = 2026
+)
+
+nc_range %>%
+  group_by(year, county) %>%
+  summarise(races = n_distinct(election_id), .groups = "drop")
+```
+
+---
+
+## Columns returned
+
+- `state`, `year`, `election_id`
+- `county`, `precinct`
+- `office`, `district`, `stage`
+- `candidate`, `party`
+- `votes`, `contest_outcome`

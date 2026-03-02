@@ -30,6 +30,8 @@ At the start of each R session:
 
 ```{r}
 library(DownBallotR)
+library(dplyr)
+
 downballot_use_python()
 ```
 
@@ -44,46 +46,34 @@ scrape_elections(state, office = "general", ...)
 ```
 
 The scraper is selected **automatically** based on `state` and `office` —
-you never need to specify a backend by name. The routing rules are:
+you never need to specify a backend by name:
 
-1. `office = "school_district"` → Ballotpedia school board scraper (all US states).
-2. `office = "state_elections"` → Ballotpedia state elections scraper — federal, state, and local candidates (2024–present).
-3. `office = "municipal_elections"` → Ballotpedia municipal and mayoral elections scraper (all US states, 2014–present).
-4. `state` is North Carolina (`"NC"`, `"north_carolina"`, or `"north carolina"`) → NC State Board of Elections scraper.
-5. All other states → ElectionStats multi-state scraper.
-
-To see which states are supported by the general-election scraper:
-
-```{r}
-db_list_states("election_stats")
-#> [1] "colorado"       "massachusetts"  "new_hampshire"  "new_mexico"
-#> [5] "new_york"       "south_carolina" "virginia"
-```
+| Priority | Condition | Scraper used |
+|---|---|---|
+| 1 | `office = "school_district"` | Ballotpedia school board scraper (all US states) |
+| 2 | `office = "state_elections"` | Ballotpedia state elections (2024–present) |
+| 3 | `office = "municipal_elections"` | Ballotpedia municipal + mayoral elections (2014–present) |
+| 4 | `state` is North Carolina | NC State Board of Elections scraper |
+| 5 | All other states | ElectionStats multi-state scraper |
 
 ---
 
 ## Data availability
 
-Use `db_available_years()` to query available year ranges programmatically:
+Use `db_available_years()` to check available year ranges programmatically:
 
 ```{r}
-# General election sources (ElectionStats + NC)
+# All sources
 db_available_years()
 
-# School district elections (Ballotpedia)
+# Filter to one office type
 db_available_years(office = "school_district")
-
-# State elections (Ballotpedia)
 db_available_years(office = "state_elections")
-
-# Municipal and mayoral elections (Ballotpedia)
 db_available_years(office = "municipal_elections")
 
 # Filter to one state
 db_available_years(state = "virginia")
 ```
-
-The table below summarises what is currently tracked in the registry:
 
 | Source | State | Start year | End year |
 |---|---|---|---|
@@ -100,604 +90,12 @@ The table below summarises what is currently tracked in the registry:
 | Ballotpedia (state elections) | All US states\* | 2024 | present |
 | Ballotpedia (municipal elections) | All US states | 2014 (`"all"`) / 2020 (`"mayoral"`) | present |
 
----
-
-## General elections — ElectionStats states
-
-### What it covers
-
-The ElectionStats scraper pulls candidate-level and county-level election
-results from state-hosted ElectionStats sites. Supported states:
-
-| State | Site type | Start year | End year |
-|---|---|---|---|
-| Vermont | Classic (requests) | 1789 | 2024 |
-| Virginia | Classic (requests) | 1789 | 2025 |
-| Colorado | Classic (requests) | 1902 | 2024 |
-| Massachusetts | Classic (requests) | 1970 | 2026 |
-| New Hampshire | Classic (requests) | 1970 | 2024 |
-| New York | v2 (Playwright) | 1994 | 2024 |
-| New Mexico | v2 (Playwright) | 2000 | 2024 |
-| South Carolina | v2 (Playwright) | 2008 | 2025 |
-
-Classic states use simple HTTP requests and are fast. v2 states use a
-headless Chromium browser (via Playwright) to render JavaScript — they are
-slower but fully automated.
-
-### Arguments
-
-| Argument | Default | Description |
-|---|---|---|
-| `state` | required | State name, snake\_case (e.g. `"virginia"`) |
-| `year_from` | `NULL` (→ `1789`) | Start year, inclusive |
-| `year_to` | `NULL` (→ current year) | End year, inclusive |
-| `level` | `"all"` | What to return (see below) |
-| `parallel` | `TRUE` | Parallel county scraping (classic states only; ignored for Playwright states) |
-
-### The `level` parameter
-
-| Value | Returns |
-|---|---|
-| `"all"` (default) | Named list with `$state` and `$county` data frames |
-| `"state"` | Candidate-level results data frame |
-| `"county"` | County vote breakdown data frame |
-| `"joined"` | County rows merged with candidate metadata |
-
-### Examples
+To see which states are supported by the ElectionStats scraper:
 
 ```{r}
-# Candidate-level results for Virginia, 2023
-state_df <- scrape_elections(
-  state     = "virginia",
-  year_from = 2023,
-  year_to   = 2023,
-  level     = "state"
-)
-
-head(state_df)
-```
-
-```{r}
-# County-level vote counts only
-county_df <- scrape_elections(
-  state     = "virginia",
-  year_from = 2023,
-  year_to   = 2023,
-  level     = "county"
-)
-```
-
-```{r}
-# Both levels at once (default) — returns a named list
-res <- scrape_elections(
-  state     = "virginia",
-  year_from = 2023,
-  year_to   = 2023
-)
-
-res$state   # candidate-level data frame
-res$county  # county breakdown data frame
-```
-
-```{r}
-# Multi-year range
-ma_results <- scrape_elections(
-  state     = "massachusetts",
-  year_from = 2018,
-  year_to   = 2022,
-  level     = "state"
-)
-```
-
-```{r}
-# South Carolina (v2 / Playwright — slower but automatic)
-sc_results <- scrape_elections(
-  state     = "south_carolina",
-  year_from = 2024,
-  year_to   = 2024,
-  level     = "state"
-)
-```
-
-```{r}
-# Parallel county scraping is on by default; pass parallel = FALSE to disable
-res_sequential <- scrape_elections(
-  state     = "virginia",
-  year_from = 2023,
-  year_to   = 2023,
-  level     = "joined",
-  parallel  = FALSE
-)
-```
-
-### Columns returned — state level
-
-The candidate-level (`"state"`) data frame typically includes:
-
-- `state`, `year`, `election_id`, `candidate_id`
-- `office`, `district`, `stage` (General, Primary, etc.)
-- `candidate`, `party`
-- `total_vote_count`, `vote_percentage`, `contest_outcome`
-- `detail_url`
-
-### Columns returned — county level
-
-- `state`, `year`, `election_id`, `candidate_id`
-- `county_or_city`, `candidate_name`, `votes`
-
----
-
-## General elections — North Carolina
-
-### What it covers
-
-Returns precinct-level election results from the NC State Board of Elections,
-filtered by year range.
-
-> **Note:** The scraper currently supports the 2025 election file layout only.
-> Elections before 2025 use an older format that has not yet been implemented;
-> they are automatically skipped with an informational message.
-> `year_from` / `year_to` filters are applied on top of this constraint.
-
-### Arguments
-
-| Argument | Default | Description |
-|---|---|---|
-| `state` | `"NC"` (any NC key) | Routes to the NC scraper; value is not passed through |
-| `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
-| `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
-
-### Examples
-
-```{r}
-# All currently supported NC election results (2025+)
-nc_all <- scrape_elections(state = "NC")
-```
-
-```{r}
-# Single year (2025 is currently the earliest supported year)
-nc_2025 <- scrape_elections(
-  state     = "NC",
-  year_from = 2025,
-  year_to   = 2025
-)
-
-head(nc_2025)
-```
-
-```{r}
-# Multi-year range (once pre-2025 layouts are supported)
-nc_range <- scrape_elections(
-  state     = "NC",
-  year_from = 2025,
-  year_to   = 2026
-)
-```
-
----
-
-## School district elections — Ballotpedia (`office = "school_district"`)
-
-### What it covers
-
-The Ballotpedia scraper collects school board election data from Ballotpedia's
-annual school board election pages (2013 to present, all US states).
-
-### Arguments
-
-| Argument | Default | Description |
-|---|---|---|
-| `office` | — | Must be `"school_district"` to use this scraper |
-| `state` | `NULL` | State name (e.g. `"Alabama"`), or `NULL` for all states |
-| `year` | `NULL` | Election year. Required for `mode = "results"` or `"joined"`. |
-| `mode` | `"districts"` | What to return (see below). |
-| `start_year` | `2013` | Earliest year for multi-year district scrape. |
-| `end_year` | `NULL` | Latest year (default: current calendar year). |
-
-### The `mode` parameter
-
-| Value | Returns | Speed |
-|---|---|---|
-| `"districts"` (default) | District-level metadata (one request per year-page) | Fast |
-| `"results"` | Candidate names, votes, percentages per race | Slower — one extra request per district |
-| `"joined"` | Districts + candidates in a single merged data frame | Slower |
-
-### Examples
-
-```{r}
-# District metadata for all states, 2024 (fast — one page request)
-districts_2024 <- scrape_elections(
-  office = "school_district",
-  year   = 2024
-)
-
-head(districts_2024)
-```
-
-```{r}
-# Filter to one state
-alabama_2024 <- scrape_elections(
-  state  = "Alabama",
-  office = "school_district",
-  year   = 2024
-)
-```
-
-```{r}
-# Full candidate results for one year + state (slower — follows each district)
-results <- scrape_elections(
-  state  = "New Jersey",
-  office = "school_district",
-  year   = 2024,
-  mode   = "results"
-)
-
-# One row per candidate per race
-head(results)
-```
-
-```{r}
-# Districts + candidates joined into one table
-joined <- scrape_elections(
-  state  = "Texas",
-  office = "school_district",
-  year   = 2024,
-  mode   = "joined"
-)
-```
-
-```{r}
-# Multi-year district metadata (no year argument, use start_year / end_year)
-multi_year <- scrape_elections(
-  state      = "Ohio",
-  office     = "school_district",
-  start_year = 2020,
-  end_year   = 2024
-)
-```
-
-### Columns returned — `mode = "districts"`
-
-- `year`, `state`, `district`, `district_url`
-- `primary`, `primary_runoff`, `general_election`, `general_runoff`
-- `term_length`, `seats_up`, `total_board_seats`, `enrollment`
-
-### Columns returned — `mode = "results"` / `"joined"`
-
-All district columns plus:
-
-- `race`, `election_type` (General / Primary / Primary Runoff / Other)
-- `candidate`, `candidate_url`, `party`
-- `is_winner`, `is_incumbent`
-- `pct`, `votes`
-
----
-
-## State elections — Ballotpedia (`office = "state_elections"`)
-
-### What it covers
-
-The Ballotpedia state elections scraper collects federal, state, and local
-candidate listings from Ballotpedia's per-state election pages (e.g.
-`https://ballotpedia.org/Maine_elections,_2024`). It supports the
-**2024 and 2025** page layout; not all states have pages for every year.
-
-Each page has three subsections — Federal Candidates, State Candidates,
-Local Candidates — so you can filter to just one tier with `election_level`.
-
-> **Note:** Vote counts and percentages require `mode = "results"`, which
-> follows each unique contest URL (one extra request per race). For a quick
-> candidate roster, the default `mode = "listings"` needs only a single
-> page request.
-
-### Arguments
-
-| Argument | Default | Description |
-|---|---|---|
-| `office` | — | Must be `"state_elections"` to use this scraper |
-| `state` | required | State name, title-case (e.g. `"Maine"`, `"Pennsylvania"`) |
-| `year` | `NULL` | Single election year (e.g. `2024`). Required for `mode = "results"`. |
-| `election_level` | `"all"` | Candidate tier to return (see below). |
-| `mode` | `"listings"` | What to return (see below). |
-| `start_year` | `2024` | Earliest year for multi-year listing scrape when `year` is `NULL`. |
-| `end_year` | `NULL` | Latest year (default: current calendar year). |
-
-### The `election_level` parameter
-
-| Value | Returns |
-|---|---|
-| `"all"` (default) | All candidate tiers |
-| `"federal"` | U.S. House, U.S. Senate, Presidential Electors |
-| `"state"` | Governor, state legislature, attorney general, etc. |
-| `"local"` | Mayor, city council, county races, etc. |
-
-### The `mode` parameter
-
-| Value | Returns | Speed |
-|---|---|---|
-| `"listings"` (default) | One row per candidate from the state+year page; no vote counts | Fast — 1 request |
-| `"results"` | All listing columns plus vote counts, percentages, and winner flags | Slower — 1 extra request per unique contest |
-
-### Examples
-
-```{r}
-# All candidates — Maine 2024 (fast listing, one page request)
-maine_2024 <- scrape_elections(
-  state  = "Maine",
-  office = "state_elections",
-  year   = 2024
-)
-
-head(maine_2024)
-```
-
-```{r}
-# Federal candidates only
-fed <- scrape_elections(
-  state           = "Pennsylvania",
-  office          = "state_elections",
-  year            = 2024,
-  election_level  = "federal"
-)
-```
-
-```{r}
-# Full results with vote counts (follows each contest link)
-maine_results <- scrape_elections(
-  state  = "Maine",
-  office = "state_elections",
-  year   = 2024,
-  mode   = "results"
-)
-
-# Winners only
-library(dplyr)
-maine_results |>
-  filter(is_winner) |>
-  select(level, office, jurisdiction, district, candidate, party, pct, votes)
-```
-
-```{r}
-# Local races only, with vote counts
-local_results <- scrape_elections(
-  state           = "Maine",
-  office          = "state_elections",
-  year            = 2024,
-  election_level  = "local",
-  mode            = "results"
-)
-```
-
-```{r}
-# Multi-year listing (2024–2025) — uses start_year / end_year when year is NULL
-multi <- scrape_elections(
-  state      = "Virginia",
-  office     = "state_elections",
-  start_year = 2024,
-  end_year   = 2025
-)
-```
-
-### Columns returned — `mode = "listings"`
-
-- `year`, `state`, `level` (federal / state / local)
-- `contest_name` — raw office text as shown on Ballotpedia
-- `contest_url` — link to the individual election page
-- `jurisdiction` — parsed geographic area (e.g. `"Maine"`, `"Augusta"`)
-- `office` — parsed role (e.g. `"U.S. Senate"`, `"City Council"`)
-- `district` — parsed sub-race qualifier (e.g. `"District 1"`, `"At-large"`)
-- `candidate`, `ballotpedia_url`, `party`, `status`
-  (e.g. `"Won General"`, `"Lost Primary"`)
-
-### Columns returned — `mode = "results"`
-
-All listing columns plus:
-
-- `election_type` (General / Primary / Primary Runoff / General (RCV) / Other)
-- `is_winner`, `is_incumbent`
-- `pct`, `votes`
-
-\* Not all states have Ballotpedia state election pages for every year.
-
----
-
-## Municipal and mayoral elections — Ballotpedia (`office = "municipal_elections"`)
-
-### What it covers
-
-The Ballotpedia municipal elections scraper collects city, county, and mayoral
-election data from two Ballotpedia index pages:
-
-- **`race_type = "all"`** — `United_States_municipal_elections,_{year}` (2014–present):
-  city council, county, and mayoral races across all US states.
-- **`race_type = "mayoral"`** — `United_States_mayoral_elections,_{year}` (2020–present):
-  mayoral races only.
-
-Two modes are supported: a fast **index mode** (`mode = "links"`) that returns one
-row per election sub-URL with location metadata but no vote data, and a slower
-**results mode** (`mode = "results"`) that follows each sub-URL and parses
-candidate names, vote counts, and winner flags.
-
-### Arguments
-
-| Argument | Default | Description |
-|---|---|---|
-| `office` | — | Must be `"municipal_elections"` to use this scraper |
-| `state` | `NULL` | State name (title-case, e.g. `"Texas"`), or `NULL` for all states |
-| `year` | `NULL` | Single election year. Use with `mode = "links"` or `mode = "results"`. |
-| `race_type` | `"all"` | Which index page to use (see below). |
-| `mode` | `"links"` | What to return (see below). |
-| `start_year` | `2014` | Earliest year for a multi-year scrape when `year` is `NULL`. |
-| `end_year` | `NULL` | Latest year (default: current calendar year). |
-
-### The `race_type` parameter
-
-| Value | Index page | Coverage |
-|---|---|---|
-| `"all"` (default) | `United_States_municipal_elections,_{year}` | City, county, and mayoral races; 2014–present |
-| `"mayoral"` | `United_States_mayoral_elections,_{year}` | Mayoral races only; 2020–present |
-
-### The `mode` parameter
-
-| Value | Returns | Speed |
-|---|---|---|
-| `"links"` (default) | One row per election sub-URL with location metadata; no vote data | Fast — 1–2 page requests per year |
-| `"results"` | Full candidate data with vote counts and winner flags | Slower — 1 extra request per election page |
-
-### Examples
-
-```{r}
-# Phase 1: index links for one year and state (fast)
-links <- scrape_elections(
-  office    = "municipal_elections",
-  year      = 2022,
-  state     = "Texas"
-)
-
-head(links)
-```
-
-```{r}
-# Phase 1: all states, 2022 (both city and mayoral races)
-links_all <- scrape_elections(
-  office = "municipal_elections",
-  year   = 2022
-)
-
-# Breakdown by location type
-table(links_all$location_type)
-```
-
-```{r}
-# Phase 1: mayoral index only
-mayoral_links <- scrape_elections(
-  office    = "municipal_elections",
-  year      = 2024,
-  race_type = "mayoral"
-)
-```
-
-```{r}
-# Phase 1: multi-year index links (no year argument, use start_year / end_year)
-multi_links <- scrape_elections(
-  office     = "municipal_elections",
-  start_year = 2020,
-  end_year   = 2022,
-  race_type  = "all"
-)
-```
-
-```{r}
-# Phase 2: full candidate results for one year + state (slower — follows each sub-URL)
-results <- scrape_elections(
-  office = "municipal_elections",
-  year   = 2022,
-  state  = "Texas",
-  mode   = "results"
-)
-
-# One row per candidate per race
-head(results)
-```
-
-```{r}
-# Phase 2: mayoral results for one year, all states
-mayoral_results <- scrape_elections(
-  office    = "municipal_elections",
-  year      = 2022,
-  race_type = "mayoral",
-  mode      = "results"
-)
-```
-
-```{r}
-# Phase 2: multi-year mayoral results
-library(dplyr)
-mayoral_multi <- scrape_elections(
-  office     = "municipal_elections",
-  race_type  = "mayoral",
-  mode       = "results",
-  start_year = 2020,
-  end_year   = 2022
-)
-
-# Winners only
-mayoral_multi |>
-  filter(is_winner) |>
-  select(year, location, state, office, candidate, party, pct, votes)
-```
-
-### Columns returned — `mode = "links"`
-
-- `year`, `location` (city or county name), `state`
-- `location_type` — `"mayoral"`, `"city"`, `"county"`, or `"other"`
-- `url` — full Ballotpedia URL of the individual election page
-
-### Columns returned — `mode = "results"`
-
-All link columns (`year`, `location`, `state`, `location_type`) plus:
-
-- `election_url` — URL of the individual election page
-- `office` — e.g. `"Mayor"`, `"City Council"`, `"Public Defender"`
-- `election_type` — `"General"`, `"Primary"`, `"Primary Runoff"`, `"General (RCV)"`, or `"Other"`
-- `candidate`, `ballotpedia_url`, `party`
-- `is_winner`, `is_incumbent`
-- `pct` — vote percentage (e.g. `"62.3%"`) or `""`
-- `votes` — vote count (e.g. `"12,345"`) or `""`
-
----
-
-## Working with the results
-
-All sources return standard R `data.frame` objects (or a named list of them
-when `level = "all"`). You can use any tidyverse tools on them directly:
-
-```{r}
-library(dplyr)
-
-# ElectionStats: winners only, sorted by vote count
-scrape_elections(
-  state = "virginia", year_from = 2023, year_to = 2023, level = "state"
-) |>
-  filter(contest_outcome == "Winner") |>
-  arrange(desc(total_vote_count)) |>
-  select(office, district, candidate, party, total_vote_count)
-```
-
-```{r}
-library(dplyr)
-
-# Ballotpedia: competitive races (seats_up > 1)
-scrape_elections(state = "Texas", office = "school_district", year = 2024) |>
-  filter(as.integer(seats_up) > 1) |>
-  select(district, general_election, seats_up, total_board_seats, enrollment)
-```
-
-```{r}
-library(dplyr)
-
-# Ballotpedia state elections: local winners with vote share
-scrape_elections(
-  state = "Maine", office = "state_elections",
-  year = 2024, election_level = "local", mode = "results"
-) |>
-  filter(is_winner) |>
-  select(jurisdiction, office, district, candidate, party, pct, votes)
-```
-
-```{r}
-library(dplyr)
-
-# Ballotpedia municipal elections: mayoral winners by year
-scrape_elections(
-  office     = "municipal_elections",
-  race_type  = "mayoral",
-  mode       = "results",
-  start_year = 2020,
-  end_year   = 2022
-) |>
-  filter(is_winner, office == "Mayor") |>
-  select(year, location, state, candidate, party, pct, votes)
+db_list_states("election_stats")
+#> [1] "colorado"       "massachusetts"  "new_hampshire"  "new_mexico"
+#> [5] "new_york"       "south_carolina" "vermont"        "virginia"
 ```
 
 ---
@@ -706,37 +104,48 @@ scrape_elections(
 
 | Goal | Call |
 |---|---|
-| Candidate + vote totals for VA, MA, CO, NH | `scrape_elections(state = "virginia", ...)` |
-| Candidate + vote totals for SC, NM, NY | `scrape_elections(state = "south_carolina", ...)` (Playwright auto) |
-| NC local election results | `scrape_elections(state = "NC", year_from = ..., year_to = ...)` |
+| Candidate + vote totals for VA, MA, CO, NH, VT | `scrape_elections(state = "virginia", ...)` |
+| Candidate + vote totals for SC, NM, NY (Playwright) | `scrape_elections(state = "south_carolina", ...)` |
+| NC precinct-level local results | `scrape_elections(state = "NC", year_from = 2025, year_to = 2025)` |
 | School board district schedules, any state | `scrape_elections(office = "school_district", mode = "districts", ...)` |
 | School board candidates + results | `scrape_elections(office = "school_district", mode = "results", ...)` |
-| All candidates for a state (federal + state + local), 2024–present | `scrape_elections(state = "Maine", office = "state_elections", year = 2024)` |
+| All candidates for a state (federal + state + local), 2024+ | `scrape_elections(state = "Maine", office = "state_elections", year = 2024)` |
 | Federal candidates only, with vote counts | `scrape_elections(state = "Maine", office = "state_elections", year = 2024, election_level = "federal", mode = "results")` |
 | Discover municipal/mayoral election URLs for a year | `scrape_elections(office = "municipal_elections", year = 2022)` |
-| Mayoral election URLs only (2020–present) | `scrape_elections(office = "municipal_elections", year = 2022, race_type = "mayoral")` |
 | Full candidate results for municipal elections | `scrape_elections(office = "municipal_elections", year = 2022, mode = "results")` |
 | Multi-year mayoral results, one state | `scrape_elections(office = "municipal_elections", state = "Texas", race_type = "mayoral", mode = "results", start_year = 2020, end_year = 2024)` |
 
 ---
 
+## Detailed vignettes
+
+Each scraper has its own vignette with full argument documentation,
+worked examples, and column descriptions:
+
+- [ElectionStats states](election-stats.html) —
+  VA, MA, CO, NH, SC, NM, NY, VT; candidate + county results
+- [North Carolina](north-carolina.html) —
+  NC State Board of Elections; precinct-level results
+- [School district elections](school-district-elections.html) —
+  Ballotpedia school board elections, all US states, 2013–present
+- [State elections](state-elections.html) —
+  Ballotpedia federal/state/local candidate listings, 2024–present
+- [Municipal elections](municipal-elections.html) —
+  Ballotpedia city, county, and mayoral races, 2014–present
+
+---
+
 ## Performance tips
 
-- **Start small**: test with a single year and state before requesting large
-  date ranges.
-- **Playwright states are slower**: South Carolina, New Mexico, and New York
+- **Start small** — test with a single year and state before requesting
+  large date ranges.
+- **Playwright states are slower** — South Carolina, New Mexico, and New York
   launch a headless browser for each scrape. Expect several seconds per year.
-- **Ballotpedia school board `mode = "results"`** makes one HTTP request per
-  district; large states with many districts (e.g. Texas) can take several minutes.
-- **Ballotpedia state elections `mode = "results"`** makes one HTTP request per
-  unique contest (race); states with many races can take a few minutes.
-  Use `mode = "listings"` (the default) for a fast candidate roster without vote counts.
-- **Ballotpedia municipal elections `mode = "results"`** makes one HTTP request per
-  election sub-URL (one per city or county). Large years with hundreds of elections
-  can take several minutes. Use `mode = "links"` (the default) to quickly discover
-  available election URLs without fetching vote data.
-- **Parallel scraping is on by default** for classic (requests-based) states.
-  Pass `parallel = FALSE` to fetch county detail pages sequentially if needed.
-- **Be polite**: the scrapers include built-in delays between requests. Do not
-  disable them or reduce them aggressively — excessive requests may result in
-  temporary IP blocks.
+- **Ballotpedia `mode = "results"`** makes one extra HTTP request per
+  district, contest, or election page. Use `mode = "districts"` /
+  `mode = "listings"` / `mode = "links"` for a fast overview without
+  vote counts.
+- **Parallel scraping is on by default** for classic (requests-based)
+  ElectionStats states. Pass `parallel = FALSE` to disable.
+- **Be polite** — built-in delays are intentional. Do not reduce or
+  disable them; excessive requests may result in temporary IP blocks.

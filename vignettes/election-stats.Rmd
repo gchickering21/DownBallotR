@@ -1,0 +1,187 @@
+---
+title: "ElectionStats states"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{ElectionStats states}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+```{r setup}
+library(DownBallotR)
+library(dplyr)
+
+downballot_use_python()
+```
+
+## What it covers
+
+The ElectionStats scraper pulls candidate-level and county-level election
+results from state-hosted ElectionStats sites.
+
+| State | Backend | Start year | End year |
+|---|---|---|---|
+| Vermont | Classic (requests) | 1789 | 2024 |
+| Virginia | Classic (requests) | 1789 | 2025 |
+| Colorado | Classic (requests) | 1902 | 2024 |
+| Massachusetts | Classic (requests) | 1970 | 2026 |
+| New Hampshire | Classic (requests) | 1970 | 2024 |
+| New York | v2 (Playwright) | 1994 | 2024 |
+| New Mexico | v2 (Playwright) | 2000 | 2024 |
+| South Carolina | v2 (Playwright) | 2008 | 2025 |
+
+Classic states use simple HTTP requests and are fast. Playwright states
+(NY, NM, SC) launch a headless Chromium browser to render JavaScript —
+they are slower but fully automated.
+
+---
+
+## Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | required | State name, snake\_case (e.g. `"virginia"`) |
+| `year_from` | `NULL` (earliest) | Start year, inclusive |
+| `year_to` | `NULL` (current year) | End year, inclusive |
+| `level` | `"all"` | What to return — see below |
+| `parallel` | `TRUE` | Parallel county scraping (classic states only) |
+
+### The `level` parameter
+
+| Value | Returns |
+|---|---|
+| `"all"` (default) | Named list with `$state` and `$county` data frames |
+| `"state"` | Candidate-level results data frame |
+| `"county"` | County vote breakdown data frame |
+| `"joined"` | County rows merged with candidate metadata |
+
+---
+
+## Examples
+
+### Candidate-level results for a single year
+
+```{r}
+state_df <- scrape_elections(
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023,
+  level     = "state"
+)
+
+state_df %>%
+  filter(contest_outcome == "Winner") %>%
+  arrange(desc(total_vote_count)) %>%
+  select(office, district, candidate, party, total_vote_count)
+```
+
+### County-level vote counts
+
+```{r}
+county_df <- scrape_elections(
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023,
+  level     = "county"
+)
+
+county_df %>%
+  arrange(desc(votes)) %>%
+  select(county_or_city, candidate_name, votes)
+```
+
+### Both levels at once (default)
+
+`level = "all"` returns a named list with `$state` and `$county` elements:
+
+```{r}
+res <- scrape_elections(
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023
+)
+
+res$state   # candidate-level data frame
+res$county  # county breakdown data frame
+```
+
+### Multi-year range
+
+```{r}
+ma_results <- scrape_elections(
+  state     = "massachusetts",
+  year_from = 2018,
+  year_to   = 2022,
+  level     = "state"
+)
+
+ma_results %>%
+  filter(stage == "General") %>%
+  select(year, office, district, candidate, party, total_vote_count)
+```
+
+### Playwright state (South Carolina)
+
+```{r}
+sc_results <- scrape_elections(
+  state     = "south_carolina",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "state"
+)
+
+sc_results %>%
+  filter(contest_outcome == "Winner") %>%
+  select(office, district, candidate, party, vote_percentage)
+```
+
+### Joined data (county + candidate metadata)
+
+```{r}
+joined <- scrape_elections(
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023,
+  level     = "joined"
+)
+
+joined %>%
+  select(county_or_city, office, candidate, party, votes)
+```
+
+### Disable parallel scraping
+
+```{r}
+res_seq <- scrape_elections(
+  state     = "virginia",
+  year_from = 2023,
+  year_to   = 2023,
+  level     = "joined",
+  parallel  = FALSE
+)
+```
+
+---
+
+## Columns returned
+
+### `level = "state"` (candidate-level)
+
+- `state`, `year`, `election_id`, `candidate_id`
+- `office`, `district`, `stage` (General, Primary, etc.)
+- `candidate`, `party`
+- `total_vote_count`, `vote_percentage`, `contest_outcome`
+- `detail_url`
+
+### `level = "county"`
+
+- `state`, `year`, `election_id`, `candidate_id`
+- `county_or_city`, `candidate_name`, `votes`

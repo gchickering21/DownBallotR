@@ -72,6 +72,30 @@
 }
 
 
+#' Call the Ballotpedia municipal/mayoral elections scraper
+#' @keywords internal
+.scrape_ballotpedia_municipal <- function(
+    year       = NULL,
+    state      = NULL,
+    race_type  = "all",
+    mode       = "links",
+    start_year = 2014L,
+    end_year   = NULL) {
+
+  race_type <- match.arg(race_type, c("all", "mayoral"))
+  mode      <- match.arg(mode, c("links", "results"))
+  .db_registry()$scrape(
+    "ballotpedia_municipal",
+    year       = year,
+    state      = state,
+    race_type  = race_type,
+    mode       = mode,
+    start_year = as.integer(start_year),
+    end_year   = end_year        # NULL becomes Python None via reticulate
+  )
+}
+
+
 #' Call the Ballotpedia state elections scraper
 #' @keywords internal
 .scrape_ballotpedia_elections <- function(
@@ -124,6 +148,8 @@
 #'         (all US states; use \code{state} to filter to one state).
 #'   \item \code{office = "state_elections"} → Ballotpedia state elections
 #'         scraper (federal, state, and local candidates; 2024–present).
+#'   \item \code{office = "municipal_elections"} → Ballotpedia municipal and
+#'         mayoral elections scraper (all US states, 2014–present).
 #'   \item \code{state} matches North Carolina (e.g. \code{"NC"},
 #'         \code{"north_carolina"}) → NC State Board of Elections scraper.
 #'   \item All other states → ElectionStats multi-state scraper.
@@ -138,7 +164,9 @@
 #'   fetches general election results via ElectionStats or the NC scraper;
 #'   \code{"school_district"} fetches school board elections via Ballotpedia;
 #'   \code{"state_elections"} fetches federal, state, and local candidate
-#'   listings from Ballotpedia state election pages (2024–present).
+#'   listings from Ballotpedia state election pages (2024–present);
+#'   \code{"municipal_elections"} fetches city, county, and mayoral election
+#'   data from Ballotpedia municipal election index pages (2014–present).
 #' @param year_from (\code{general} / NC) Start year, inclusive (default
 #'   \code{NULL}). When \code{NULL}, ElectionStats starts at \code{1789};
 #'   the NC scraper applies no lower bound.
@@ -161,6 +189,11 @@
 #'   Required when \code{mode = "results"} or \code{mode = "joined"}. If
 #'   \code{NULL} with \code{mode = "districts"}, use \code{start_year} /
 #'   \code{end_year} for a multi-year scrape.
+#' @param race_type (\code{municipal_elections}) Which index page to use.
+#'   \code{"all"} (default) uses the broader United_States_municipal_elections
+#'   page (2014–present), covering city, county, and mayoral races.
+#'   \code{"mayoral"} uses the United_States_mayoral_elections page
+#'   (2020–present), covering only mayoral races.
 #' @param mode (\code{school_district}) What to return. \code{"districts"}
 #'   (default) returns fast district metadata (one request per year-page);
 #'   \code{"results"} follows each district URL for candidate/vote data;
@@ -168,13 +201,18 @@
 #'   frame. For \code{state_elections}: \code{"listings"} (default) returns
 #'   one row per candidate from the state+year page (fast); \code{"results"}
 #'   additionally follows each contest URL for vote counts (slower).
+#'   For \code{municipal_elections}: \code{"links"} (default) returns index
+#'   discovery only — one row per election sub-URL with location metadata but
+#'   no vote data (fast); \code{"results"} follows each sub-URL for full
+#'   candidate and vote data (slower).
 #' @param start_year (\code{school_district}) Earliest year for a multi-year
 #'   district scrape when \code{year} is \code{NULL} (default \code{2013}).
 #'   For \code{state_elections}, earliest year when \code{year} is \code{NULL}
-#'   (default \code{2024}).
-#' @param end_year (\code{school_district} / \code{state_elections}) Latest
-#'   year for a multi-year scrape when \code{year} is \code{NULL} (default:
-#'   current calendar year).
+#'   (default \code{2024}). For \code{municipal_elections}, earliest year when
+#'   \code{year} is \code{NULL} (default \code{2014}).
+#' @param end_year (\code{school_district} / \code{state_elections} /
+#'   \code{municipal_elections}) Latest year for a multi-year scrape when
+#'   \code{year} is \code{NULL} (default: current calendar year).
 #'
 #' @return A \code{data.frame}, or a named list with elements \code{$state}
 #'   and \code{$county} when \code{level = "all"} and \code{office =
@@ -217,29 +255,46 @@
 #' # State elections — full results with vote counts (follows contest links)
 #' df <- scrape_elections(state = "Maine", office = "state_elections",
 #'                        year = 2024, mode = "results")
+#'
+#' # Municipal elections — index links only (fast, no vote data)
+#' df <- scrape_elections(office = "municipal_elections", year = 2022,
+#'                        state = "Texas")
+#'
+#' # Municipal elections — mayoral only, full candidate results
+#' df <- scrape_elections(office = "municipal_elections", year = 2022,
+#'                        race_type = "mayoral", mode = "results")
+#'
+#' # Municipal elections — multi-year index links
+#' df <- scrape_elections(office = "municipal_elections",
+#'                        start_year = 2020, end_year = 2022,
+#'                        race_type = "all")
 #' }
 #'
 #' @export
 scrape_elections <- function(
     state           = NULL,
-    office          = c("general", "school_district", "state_elections"),
+    office          = c("general", "school_district", "state_elections",
+                        "municipal_elections"),
     # General-election (ElectionStats / NC) args
     year_from       = NULL,
     year_to         = NULL,
     level           = c("all", "state", "county", "joined"),
     parallel        = TRUE,
-    # School-district (Ballotpedia) args
+    # School-district / state-elections (Ballotpedia) args
     year            = NULL,
-    mode            = c("districts", "results", "joined", "listings"),
+    mode            = c("districts", "results", "joined", "listings", "links"),
     start_year      = NULL,
     end_year        = NULL,
     # State-elections (Ballotpedia) args
-    election_level  = c("all", "federal", "state", "local")) {
+    election_level  = c("all", "federal", "state", "local"),
+    # Municipal-elections args
+    race_type       = c("all", "mayoral")) {
 
   office          <- match.arg(office)
   level           <- match.arg(level)
   mode            <- match.arg(mode)
   election_level  <- match.arg(election_level)
+  race_type       <- match.arg(race_type)
 
   # Guard against old source= positional usage (e.g. scrape_elections("ballotpedia", ...))
   if (!is.null(state) &&
@@ -259,8 +314,9 @@ scrape_elections <- function(
   # Set default start_year per office type if not supplied
   if (is.null(start_year)) {
     start_year <- switch(office,
-      "school_district"  = 2013L,
-      "state_elections"  = 2024L,
+      "school_district"     = 2013L,
+      "state_elections"     = 2024L,
+      "municipal_elections" = 2014L,
       NULL  # general / nc_results don't use start_year
     )
   }
@@ -270,6 +326,8 @@ scrape_elections <- function(
     "ballotpedia"
   } else if (office == "state_elections") {
     "ballotpedia_elections"
+  } else if (office == "municipal_elections") {
+    "ballotpedia_municipal"
   } else if (!is.null(state) &&
              tolower(trimws(state)) %in% .nc_state_keys) {
     "nc_results"
@@ -287,6 +345,9 @@ scrape_elections <- function(
       source,
       "ballotpedia"            = "school district elections (Ballotpedia)",
       "ballotpedia_elections"  = paste0(state, " state elections (Ballotpedia)"),
+      "ballotpedia_municipal"  = paste0(
+        "municipal/mayoral elections (Ballotpedia, race_type='", race_type, "')"
+      ),
       "nc_results"             = "North Carolina (NC State Board of Elections)",
       "election_stats"         = paste0(state, " (ElectionStats)")
     )
@@ -317,6 +378,14 @@ scrape_elections <- function(
       election_level = election_level,
       start_year     = start_year,
       end_year       = end_year
+    ),
+    "ballotpedia_municipal" = .scrape_ballotpedia_municipal(
+      year       = year,
+      state      = state,
+      race_type  = race_type,
+      mode       = if (mode == "links") "links" else "results",
+      start_year = start_year,
+      end_year   = end_year
     ),
     "nc_results" = .scrape_nc(
       year_from = year_from,
@@ -361,7 +430,9 @@ db_list_states <- function(source) {
 #'   \code{"general"} (default) returns availability for ElectionStats states
 #'   and North Carolina; \code{"school_district"} returns Ballotpedia school
 #'   board availability; \code{"state_elections"} returns Ballotpedia state
-#'   election availability.
+#'   election availability; \code{"municipal_elections"} returns Ballotpedia
+#'   municipal and mayoral election availability (2014+ for \code{"all"},
+#'   2020+ for \code{"mayoral"}).
 #'
 #' @return A \code{data.frame} with columns \code{source}, \code{state},
 #'   \code{start_year}, and \code{end_year}.
@@ -377,13 +448,17 @@ db_list_states <- function(source) {
 #' # State elections (Ballotpedia)
 #' db_available_years(office = "state_elections")
 #'
+#' # Municipal and mayoral elections (Ballotpedia)
+#' db_available_years(office = "municipal_elections")
+#'
 #' # Filter to one state
 #' db_available_years(state = "virginia")
 #' }
 #'
 #' @export
 db_available_years <- function(state = NULL,
-                               office = c("general", "school_district", "state_elections")) {
+                               office = c("general", "school_district",
+                                          "state_elections", "municipal_elections")) {
   office <- match.arg(office)
   reg    <- .db_registry()
 
@@ -403,6 +478,17 @@ db_available_years <- function(state = NULL,
     return(data.frame(
       source     = "ballotpedia_elections",
       state      = "All US states (where page exists)",
+      start_year = avail$start_year,
+      end_year   = avail$end_year,
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  if (office == "municipal_elections") {
+    avail <- reg$get_available_years("ballotpedia_municipal")
+    return(data.frame(
+      source     = "ballotpedia_municipal",
+      state      = "All US states (race_type='all': 2014+; 'mayoral': 2020+)",
       start_year = avail$start_year,
       end_year   = avail$end_year,
       stringsAsFactors = FALSE

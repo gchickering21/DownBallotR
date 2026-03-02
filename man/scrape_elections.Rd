@@ -6,16 +6,17 @@
 \usage{
 scrape_elections(
   state = NULL,
-  office = c("general", "school_district", "state_elections"),
+  office = c("general", "school_district", "state_elections", "municipal_elections"),
   year_from = NULL,
   year_to = NULL,
   level = c("all", "state", "county", "joined"),
   parallel = TRUE,
   year = NULL,
-  mode = c("districts", "results", "joined", "listings"),
+  mode = c("districts", "results", "joined", "listings", "links"),
   start_year = NULL,
   end_year = NULL,
-  election_level = c("all", "federal", "state", "local")
+  election_level = c("all", "federal", "state", "local"),
+  race_type = c("all", "mayoral")
 )
 }
 \arguments{
@@ -29,7 +30,9 @@ or \code{NULL} to return all states. North Carolina can be passed as
 fetches general election results via ElectionStats or the NC scraper;
 \code{"school_district"} fetches school board elections via Ballotpedia;
 \code{"state_elections"} fetches federal, state, and local candidate
-listings from Ballotpedia state election pages (2024–present).}
+listings from Ballotpedia state election pages (2024–present);
+\code{"municipal_elections"} fetches city, county, and mayoral election
+data from Ballotpedia municipal election index pages (2014–present).}
 
 \item{year_from}{(\code{general} / NC) Start year, inclusive (default
 \code{NULL}). When \code{NULL}, ElectionStats starts at \code{1789};
@@ -60,21 +63,32 @@ Required when \code{mode = "results"} or \code{mode = "joined"}. If
 \code{"joined"} returns districts and candidates merged into one data
 frame. For \code{state_elections}: \code{"listings"} (default) returns
 one row per candidate from the state+year page (fast); \code{"results"}
-additionally follows each contest URL for vote counts (slower).}
+additionally follows each contest URL for vote counts (slower).
+For \code{municipal_elections}: \code{"links"} (default) returns index
+discovery only — one row per election sub-URL with location metadata but
+no vote data (fast); \code{"results"} follows each sub-URL for full
+candidate and vote data (slower).}
 
 \item{start_year}{(\code{school_district}) Earliest year for a multi-year
 district scrape when \code{year} is \code{NULL} (default \code{2013}).
 For \code{state_elections}, earliest year when \code{year} is \code{NULL}
-(default \code{2024}).}
+(default \code{2024}). For \code{municipal_elections}, earliest year when
+\code{year} is \code{NULL} (default \code{2014}).}
 
-\item{end_year}{(\code{school_district} / \code{state_elections}) Latest
-year for a multi-year scrape when \code{year} is \code{NULL} (default:
-current calendar year).}
+\item{end_year}{(\code{school_district} / \code{state_elections} /
+\code{municipal_elections}) Latest year for a multi-year scrape when
+\code{year} is \code{NULL} (default: current calendar year).}
 
 \item{election_level}{(\code{state_elections}) Which candidate tier to
 return. \code{"all"} (default) returns all tiers; \code{"federal"}
 returns U.S. House / Senate / Presidential Electors only; \code{"state"}
 returns state-level races only; \code{"local"} returns local races only.}
+
+\item{race_type}{(\code{municipal_elections}) Which index page to use.
+\code{"all"} (default) uses the broader United_States_municipal_elections
+page (2014–present), covering city, county, and mayoral races.
+\code{"mayoral"} uses the United_States_mayoral_elections page
+(2020–present), covering only mayoral races.}
 }
 \value{
 A \code{data.frame}, or a named list with elements \code{$state}
@@ -94,6 +108,8 @@ Routing rules (applied in order):
 (all US states; use \code{state} to filter to one state).
 \item \code{office = "state_elections"} → Ballotpedia state elections
 scraper (federal, state, and local candidates; 2024–present).
+\item \code{office = "municipal_elections"} → Ballotpedia municipal and
+mayoral elections scraper (all US states, 2014–present).
 \item \code{state} matches North Carolina (e.g. \code{"NC"},
 \code{"north_carolina"}) → NC State Board of Elections scraper.
 \item All other states → ElectionStats multi-state scraper.
@@ -135,6 +151,19 @@ df <- scrape_elections(state = "Pennsylvania", office = "state_elections",
 # State elections — full results with vote counts (follows contest links)
 df <- scrape_elections(state = "Maine", office = "state_elections",
                        year = 2024, mode = "results")
+
+# Municipal elections — index links only (fast, no vote data)
+df <- scrape_elections(office = "municipal_elections", year = 2022,
+                       state = "Texas")
+
+# Municipal elections — mayoral only, full candidate results
+df <- scrape_elections(office = "municipal_elections", year = 2022,
+                       race_type = "mayoral", mode = "results")
+
+# Municipal elections — multi-year index links
+df <- scrape_elections(office = "municipal_elections",
+                       start_year = 2020, end_year = 2022,
+                       race_type = "all")
 }
 
 }

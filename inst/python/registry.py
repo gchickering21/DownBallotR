@@ -265,6 +265,98 @@ def _scrape_ballotpedia_elections(
     )
 
 
+def _scrape_ballotpedia_municipal(
+    year: "int | None" = None,
+    state: "str | None" = None,
+    race_type: str = "all",
+    mode: str = "links",
+    start_year: int = 2014,
+    end_year: "int | None" = None,
+    **_,
+) -> pd.DataFrame:
+    """Scrape Ballotpedia municipal and mayoral election data.
+
+    Parameters
+    ----------
+    year : int | None
+        Election year (e.g. 2022). If provided, scrapes that single year.
+        If None, scrapes start_year through end_year.
+    state : str | None
+        Filter to one state (e.g. 'Texas'), or None for all states.
+    race_type : str
+        ``'all'`` (default) — United_States_municipal_elections (2014–present);
+        includes city, county, and mayoral races.
+        ``'mayoral'`` — United_States_mayoral_elections (2020–present).
+    mode : str
+        ``'links'`` (default) — Phase 1: index discovery only (one request per
+        year); returns location metadata and sub-URLs, no vote data.
+        ``'results'`` — Phase 2: follows every sub-URL for candidate and vote
+        data. One extra request per location; slower.
+    start_year : int
+        Earliest year when year is None (default: 2014).
+    end_year : int | None
+        Latest year when year is None (default: current calendar year).
+    """
+    year       = int(year)       if year       is not None else None
+    start_year = int(start_year) if start_year is not None else 2014
+    end_year   = int(end_year)   if end_year   is not None else None
+
+    _min_year = 2020 if race_type == "mayoral" else 2014
+    _available_msg = (
+        f"Available years for the Ballotpedia municipal elections scraper "
+        f"(race_type='{race_type}'): {_min_year}–present."
+    )
+
+    _effective_years = (
+        [year] if year is not None
+        else list(range(start_year, (end_year or datetime.date.today().year) + 1))
+    )
+    _unsupported = [y for y in _effective_years if y < _min_year]
+    if _unsupported:
+        if all(y < _min_year for y in _effective_years):
+            print(
+                f"[Ballotpedia municipal] No data for year(s) "
+                f"{sorted(_unsupported)} with race_type='{race_type}'.\n"
+                f"{_available_msg}"
+            )
+            return pd.DataFrame()
+        else:
+            print(
+                f"[Ballotpedia municipal] WARNING: year(s) "
+                f"{sorted(_unsupported)} are before {_min_year} for "
+                f"race_type='{race_type}'. Those years will return no data.\n"
+                f"{_available_msg}"
+            )
+
+    from Ballotpedia.municipal_elections import MunicipalElectionsScraper
+
+    scraper = MunicipalElectionsScraper()
+
+    if mode == "results":
+        if year is not None:
+            return scraper.scrape_all_to_dataframe(
+                year=year, race_type=race_type, state=state
+            )
+        return scraper.scrape_years_to_dataframe(
+            start_year=start_year,
+            end_year=end_year or datetime.date.today().year,
+            race_type=race_type,
+            state=state,
+        )
+
+    # mode == "links" — Phase 1 index only
+    if year is not None:
+        return scraper.get_election_links_to_dataframe(
+            year=year, race_type=race_type, state=state
+        )
+    return scraper.get_all_years_links_to_dataframe(
+        start_year=start_year,
+        end_year=end_year or datetime.date.today().year,
+        race_type=race_type,
+        state=state,
+    )
+
+
 def _scrape_ballotpedia(
     year: int | None = None,
     state: str | None = None,
@@ -352,6 +444,11 @@ _YEAR_RANGES: dict = {
         # introduced in 2024; not all states have pages for every year.
         "_all": (2024, None),
     },
+    "ballotpedia_municipal": {
+        # Municipal index (race_type="all") covers 2014–present.
+        # Mayoral-only index (race_type="mayoral") covers 2020–present.
+        "_all": (2014, None),
+    },
 }
 
 
@@ -391,6 +488,14 @@ _SOURCES: dict = {
         ),
         "scrape_fn": _scrape_ballotpedia_elections,
         "states": [],  # state= param required; covers all US states
+    },
+    "ballotpedia_municipal": {
+        "description": (
+            "Ballotpedia municipal and mayoral elections "
+            "(all US states, 2014–present)"
+        ),
+        "scrape_fn": _scrape_ballotpedia_municipal,
+        "states": [],  # use state= param to filter; covers all US states
     },
 }
 
@@ -444,7 +549,7 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
     ranges = _YEAR_RANGES[source]
     current_year = datetime.date.today().year
 
-    if source in ("ballotpedia", "ballotpedia_elections"):
+    if source in ("ballotpedia", "ballotpedia_elections", "ballotpedia_municipal"):
         start, end = ranges["_all"]
         return {"start_year": start, "end_year": end or current_year}
 

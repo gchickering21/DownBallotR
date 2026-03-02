@@ -8,6 +8,11 @@ from .state_elections import (
     StateElectionsScraper,
     StateElectionCandidateRow,
 )
+from .municipal_elections import (
+    MunicipalElectionsScraper,
+    MunicipalElectionLink,
+    MunicipalElectionRow,
+)
 
 __all__ = [
     "BallotpediaClient",
@@ -17,4 +22,7 @@ __all__ = [
     "SchoolBoardCandidateResult",
     "StateElectionsScraper",
     "StateElectionCandidateRow",
+    "MunicipalElectionsScraper",
+    "MunicipalElectionLink",
+    "MunicipalElectionRow",
 ]

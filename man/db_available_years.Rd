@@ -6,7 +6,7 @@
 \usage{
 db_available_years(
   state = NULL,
-  office = c("general", "school_district", "state_elections")
+  office = c("general", "school_district", "state_elections", "municipal_elections")
 )
 }
 \arguments{
@@ -17,7 +17,9 @@ Pass \code{NULL} (default) to return all states for the chosen source(s).}
 \code{"general"} (default) returns availability for ElectionStats states
 and North Carolina; \code{"school_district"} returns Ballotpedia school
 board availability; \code{"state_elections"} returns Ballotpedia state
-election availability.}
+election availability; \code{"municipal_elections"} returns Ballotpedia
+municipal and mayoral election availability (2014+ for \code{"all"},
+2020+ for \code{"mayoral"}).}
 }
 \value{
 A \code{data.frame} with columns \code{source}, \code{state},
@@ -38,6 +40,9 @@ db_available_years(office = "school_district")
 
 # State elections (Ballotpedia)
 db_available_years(office = "state_elections")
+
+# Municipal and mayoral elections (Ballotpedia)
+db_available_years(office = "municipal_elections")
 
 # Filter to one state
 db_available_years(state = "virginia")

@@ -4,6 +4,7 @@ from __future__ import annotations  # Enables postponed evaluation of type hints
 from dataclasses import asdict  # Convert dataclass instances into plain dicts (easy -> DataFrame).
 from concurrent.futures import ThreadPoolExecutor, as_completed  # Thread-based parallelism utilities.
 from typing import Optional, List, Tuple, Dict  # Type annotations for readability + static checking.
+import time
 
 # Third-party imports
 from lxml import html  # HTML parsing + XPath support.
@@ -12,6 +13,38 @@ import pandas as pd  # DataFrame construction/concatenation.
 # Local imports
 from .electionStats_models import CountyVotes  # Dataclass representing one county/city vote record.
 from .state_config import get_scraper_type  # Check if state is classic or v2
+
+import requests  # for requests.exceptions
+
+
+# -----------------------------------------------------------------------------
+# Retry helper
+# -----------------------------------------------------------------------------
+
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+_RETRY_ATTEMPTS = 3
+_RETRY_BACKOFF_S = 5.0  # seconds between retries (doubles each attempt)
+
+
+def _fetch_with_retry(client, url: str) -> str:
+    """Fetch URL with exponential-backoff retries on transient HTTP/timeout errors."""
+    delay = _RETRY_BACKOFF_S
+    last_exc: Exception = RuntimeError("no attempts made")
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+        try:
+            return client.get_html(url)
+        except requests.exceptions.Timeout as e:
+            last_exc = e
+        except requests.exceptions.HTTPError as e:
+            resp = getattr(e, "response", None)
+            if resp is not None and resp.status_code not in _RETRY_STATUSES:
+                raise
+            last_exc = e
+        if attempt < _RETRY_ATTEMPTS:
+            print(f"  [WARN] Transient error on attempt {attempt}/{_RETRY_ATTEMPTS} — retrying in {delay:.0f}s ({url})")
+            time.sleep(delay)
+            delay *= 2
+    raise last_exc
 
 
 # -----------------------------------------------------------------------------
@@ -365,7 +398,7 @@ def parse_county_votes_from_detail_html(
         "normalize-space()='County/City' "
         "or normalize-space()='City/Town' "
         "or normalize-space()='County'"
-        "]]"
+        "]] | //table[@id='precinct_data']"
     )
 
     if not tables:
@@ -667,11 +700,25 @@ def build_county_dataframe_v2(
 
         try:
             # Navigate to detail page
-            playwright_client.page.goto(detail_url, wait_until="networkidle")
+            for attempt in range(1, 4):
+                try:
+                    playwright_client.page.goto(detail_url, wait_until="domcontentloaded", timeout=60000)
+                    break
+                except Exception:
+                    if attempt == 3:
+                        raise
+                    import time as _time
+                    print(f"  [WARN] goto timeout for election_id={election_id}, retry {attempt}/3")
+                    _time.sleep(5 * attempt)
 
-            # Wait for table to load
-            import time
-            time.sleep(1)
+            # Wait for the county results table to render
+            try:
+                playwright_client.page.wait_for_selector(
+                    "#content table, table.MuiTable-root",
+                    timeout=45000,
+                )
+            except Exception:
+                pass
 
             detail_html = playwright_client.page.content()
 
@@ -754,7 +801,7 @@ def build_county_dataframe(state_df: pd.DataFrame, client) -> pd.DataFrame:
     for st, election_id, url in jobs:
         try:
             # Fetch the detail page HTML.
-            detail_html = client.get_html(url)
+            detail_html = _fetch_with_retry(client, url)
 
             # Parse into long-form county votes dataframe.
             df_one = parse_county_votes_from_detail_html(
@@ -801,7 +848,7 @@ def _fetch_and_parse_one_parallel(
         client = client_factory()
 
         # Fetch HTML and parse.
-        detail_html = client.get_html(url)
+        detail_html = _fetch_with_retry(client, url)
         return parse_county_votes_from_detail_html(
             detail_html,
             election_id=election_id,

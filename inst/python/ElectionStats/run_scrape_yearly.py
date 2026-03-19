@@ -33,7 +33,7 @@ from ElectionStats.playwright_client import PlaywrightClient
 # ---------------------------
 # Defaults (kept fixed for now)
 # ---------------------------
-_TIMEOUT_S = 60
+_TIMEOUT_S = 120
 _SLEEP_S_STATE = 0.10
 _SLEEP_S_COUNTY = 0.10
 _MAX_WORKERS = 6

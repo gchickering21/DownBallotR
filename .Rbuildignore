@@ -15,3 +15,4 @@ output_$
 ^inst/python/.*/.*_outputs$
 ^inst/python/.*/__pycache__$
 ^inst/python/.*\.pyc$
+^data$

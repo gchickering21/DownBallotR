@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext, Playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError, Page, Browser, BrowserContext, Playwright
 
 _STEALTH_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -135,12 +135,25 @@ class PlaywrightClient:
         url = f"{self.base_url}/search?{'&'.join(params)}"
         self.page.goto(url, wait_until="domcontentloaded")
 
-        # Wait for the results table to appear (React rendering + Cloudflare challenge)
-        # contestCollectionTable is the v2 standard; MuiTable-root is a fallback
-        self.page.wait_for_selector(
-            "table#contestCollectionTable, table.MuiTable-root",
-            timeout=45000,
-        )
+        # Wait for either a results table or a "No Results Found" message.
+        # This prevents a 45-second timeout on years with no elections.
+        # Wait for either a results table or a "No Results Found" MUI message.
+        # This prevents a 45-second timeout on years with no elections.
+        try:
+            self.page.wait_for_selector(
+                "table#contestCollectionTable, table.MuiTable-root, "
+                "span.MuiTypography-root.MuiTypography-body1",
+                timeout=45000,
+            )
+        except PlaywrightTimeoutError:
+            raise
+
+        # If the page loaded a "No Results Found" span rather than a table, return early.
+        no_results = self.page.locator(
+            "span.MuiTypography-root.MuiTypography-body1"
+        ).filter(has_text="No Results Found")
+        if no_results.count() > 0:
+            return self.page.content()
 
         if self.sleep_s:
             time.sleep(self.sleep_s)
@@ -173,12 +186,22 @@ class PlaywrightClient:
             raise RuntimeError("Browser not initialized. Use context manager (with statement).")
 
         url = f"{self.base_url}/contest/{election_id}"
-        self.page.goto(url, wait_until="domcontentloaded")
+        for attempt in range(1, 4):
+            try:
+                self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                break
+            except PlaywrightTimeoutError:
+                if attempt == 3:
+                    raise
+                print(f"  [WARN] goto timeout for election_id={election_id}, retry {attempt}/3")
+                time.sleep(5 * attempt)
 
         try:
-            self.page.wait_for_selector("table", timeout=45000)
-        except Exception:
-            # Some pages may not have tables or may load differently
+            self.page.wait_for_selector(
+                "#content table, table#contestCollectionTable, table.MuiTable-root",
+                timeout=45000,
+            )
+        except PlaywrightTimeoutError:
             pass
 
         if self.sleep_s:

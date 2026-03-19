@@ -130,19 +130,25 @@ def _scrape_election_stats(
 
     state_frames: list[pd.DataFrame] = []
     county_frames: list[pd.DataFrame] = []
+    failed_years: list[int] = []
 
     for year in range(year_from, year_to + 1):
         print(f"[ElectionStats] Scraping {state_key} {year}...", flush=True)
-        s_df, c_df = scrape_one_year(
-            state_key=state_key,
-            state_name=state_key,
-            base_url=config["base_url"],
-            search_path=config["search_path"],
-            year=year,
-            parallel=parallel,
-            scraping_method=config["scraping_method"],
-            url_style=config.get("url_style", "path_params"),
-        )
+        try:
+            s_df, c_df = scrape_one_year(
+                state_key=state_key,
+                state_name=state_key,
+                base_url=config["base_url"],
+                search_path=config["search_path"],
+                year=year,
+                parallel=parallel,
+                scraping_method=config["scraping_method"],
+                url_style=config.get("url_style", "path_params"),
+            )
+        except Exception as exc:
+            print(f"[ElectionStats] ERROR {state_key} {year}: {exc} — skipping year", flush=True)
+            failed_years.append(year)
+            continue
         print(
             f"[ElectionStats] {year}: "
             f"{len(s_df):,} election rows, {len(c_df):,} county rows"
@@ -151,6 +157,9 @@ def _scrape_election_stats(
             state_frames.append(s_df)
         if not c_df.empty:
             county_frames.append(c_df)
+
+    if failed_years:
+        print(f"[ElectionStats] WARNING: {len(failed_years)} year(s) failed for {state_key}: {failed_years}")
 
     state_all = _concat_or_empty(state_frames)
     county_all = _concat_or_empty(county_frames)

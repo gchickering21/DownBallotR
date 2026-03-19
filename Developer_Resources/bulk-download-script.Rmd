@@ -1,0 +1,340 @@
+---
+title: "Bulk Data Download Script (download_all_data.py)"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+## Overview
+
+`inst/python/download_all_data.py` is a standalone Python script that bulk-downloads
+all available election data from every supported source and saves the results as CSV
+files under `data/`.  It is the fastest way to populate a local copy of the full
+dataset without writing any R or Python code yourself.
+
+All commands below assume you are in `inst/python/` with the virtual environment
+activated:
+
+```bash
+cd inst/python
+source ../../downBallotPython/bin/activate
+```
+
+---
+
+## Quick Reference
+
+| Goal | Command |
+|---|---|
+| Download everything | `python download_all_data.py` |
+| One section only | `python download_all_data.py --section <name>` |
+| One state (ElectionStats) | `python download_all_data.py --section election_stats --state new_york` |
+| Fast/lightweight mode | `python download_all_data.py --section municipal --fast` |
+| Parallel workers | `python download_all_data.py --section state_elections --workers 4` |
+| Preview without downloading | `python download_all_data.py --dry-run` |
+
+---
+
+## Command-line Options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--section` | `all` | Which section to run. See [Sections](#sections) below. |
+| `--state` | all states | Restrict `election_stats` to one state (e.g. `new_york`). |
+| `--fast` | off | Use lightweight scrape modes (no vote counts). |
+| `--workers N` | `1` | Number of parallel download threads. See [Parallelism](#parallelism). |
+| `--output-dir PATH` | `<repo>/data/` | Root folder for output CSV files. |
+| `--dry-run` | off | Print tasks without downloading anything. |
+
+---
+
+## Sections {#sections}
+
+Pass one of the following names to `--section`, or omit to run all.
+
+### `election_stats`
+
+Scrapes ElectionStats / Civera sites for seven states.
+
+```bash
+python download_all_data.py --section election_stats
+```
+
+| State | Years | Granularity |
+|---|---|---|
+| Virginia | 1789–2025 | State, County |
+| Massachusetts | 1970–2026 | State, County |
+| Colorado | 1902–2024 | State, County |
+| New Hampshire | 1970–2024 | State, County |
+| South Carolina | 2008–2025 | State, County |
+| New Mexico | 2000–2024 | State, County |
+| New York | 1994–2024 | State, County |
+
+**Output:**
+```
+data/election_stats/{state}/{state}_{year_from}_{year_to}_state.csv
+data/election_stats/{state}/{state}_{year_from}_{year_to}_county.csv
+```
+
+**Single state:**
+```bash
+python download_all_data.py --section election_stats --state colorado
+python download_all_data.py --section election_stats --state new_york
+python download_all_data.py --section election_stats --state virginia
+python download_all_data.py --section election_stats --state massachusetts
+python download_all_data.py --section election_stats --state new_hampshire
+python download_all_data.py --section election_stats --state south_carolina
+python download_all_data.py --section election_stats --state new_mexico
+```
+
+> **Note:** South Carolina, New Mexico, and New York use a Playwright headless
+> browser backend. Keep `--workers 1` when scraping those states.
+
+---
+
+### `nc`
+
+Scrapes the NC State Board of Elections ZIP pipeline for precinct-level results.
+
+```bash
+python download_all_data.py --section nc
+```
+
+| Years | Granularity |
+|---|---|
+| 2000–2025 | Precinct, County, State |
+
+**Output:**
+```
+data/nc_results/nc_2000_2025_precinct.csv
+data/nc_results/nc_2000_2025_county.csv
+data/nc_results/nc_2000_2025_state.csv
+```
+
+> North Carolina is unaffected by `--fast` — it always downloads all three
+> granularity levels.
+
+---
+
+### `school_board`
+
+Scrapes Ballotpedia school board elections for all 50 states + DC.
+
+```bash
+# Full mode — districts + candidate results (slow; thousands of requests/year)
+python download_all_data.py --section school_board
+
+# Fast mode — district metadata only (~1 request/year)
+python download_all_data.py --section school_board --fast
+```
+
+| Years | Granularity |
+|---|---|
+| 2013–present | District, Candidate |
+
+**Output:**
+```
+data/Ballotpedia/school_board/school_board_{year}.csv          # full
+data/Ballotpedia/school_board/school_board_{year}_districts.csv # --fast
+```
+
+> **Note:** Full mode (`joined`) triggers Playwright for WAF-protected pages.
+> Use `--workers 1` (the default) for reliability.
+
+---
+
+### `state_elections`
+
+Scrapes Ballotpedia state election pages for all 50 states + DC.
+
+```bash
+# Full mode — vote counts per contest (many requests per state/year)
+python download_all_data.py --section state_elections
+
+# Fast mode — candidate listings only (~1 request per state/year)
+python download_all_data.py --section state_elections --fast
+
+# Parallel — safe for HTTP-only mode
+python download_all_data.py --section state_elections --fast --workers 6
+```
+
+| Years | Election levels | Granularity |
+|---|---|---|
+| 2024–present | Federal, State, Local | Candidate, Office, Party, Votes |
+
+**Output:**
+```
+data/Ballotpedia/state_elections/{state_slug}_{year}.csv
+# e.g. data/Ballotpedia/state_elections/new_york_2024.csv
+```
+
+---
+
+### `municipal`
+
+Scrapes Ballotpedia municipal and mayoral election pages.
+
+```bash
+# Full mode — candidate + vote data (one extra request per location)
+python download_all_data.py --section municipal
+
+# Fast mode — location index + sub-URLs only (no vote data)
+python download_all_data.py --section municipal --fast
+
+# Parallel fast mode (recommended starting point)
+python download_all_data.py --section municipal --fast --workers 4
+```
+
+Downloads run **most recent year first** (e.g. 2026 → 2014).
+
+| Race type | Years | Coverage |
+|---|---|---|
+| All municipal | 2014–present | City, county, and mayoral races |
+| Mayoral only | 2020–present | Mayoral races only |
+
+**Output:**
+```
+data/Ballotpedia/municipal/municipal_all_{year}.csv
+data/Ballotpedia/municipal/municipal_mayoral_{year}.csv
+```
+
+---
+
+## Fast Mode {#fast-mode}
+
+`--fast` switches every section to a lightweight scrape that skips vote counts
+and detail pages.  Use it for a quick structural survey before committing to a
+full download.
+
+| Section | Default (full) | `--fast` |
+|---|---|---|
+| `school_board` | `mode=joined` — districts + candidate results | `mode=districts` — district metadata only |
+| `state_elections` | `mode=results` — follows each contest URL for vote counts | `mode=listings` — candidate names, offices, parties, status |
+| `municipal` | `mode=results` — full candidate + vote data per location | `mode=links` — location index + sub-URLs only |
+| `election_stats` | always full | always full |
+| `nc` | always full | always full |
+
+---
+
+## Parallelism {#parallelism}
+
+`--workers N` runs up to N tasks simultaneously using Python threads.
+
+```bash
+# State elections — safe to parallelise (pure HTTP)
+python download_all_data.py --section state_elections --workers 4
+
+# Municipal fast mode — safe to parallelise
+python download_all_data.py --section municipal --fast --workers 6
+
+# Municipal full mode — moderate parallelism
+python download_all_data.py --section municipal --workers 3
+
+# ElectionStats classic states only — safe to parallelise
+python download_all_data.py --section election_stats --state virginia --workers 1
+```
+
+**Recommended worker counts:**
+
+| Section | Recommended workers |
+|---|---|
+| `state_elections` | 4–8 |
+| `municipal --fast` | 4–8 |
+| `municipal` (full) | 2–3 |
+| `election_stats` (VA / MA / CO / NH) | 4 |
+| `election_stats` (includes SC / NM / NY) | 1 |
+| `school_board` full | 1 |
+| `nc` | 1 |
+
+> **Why the limit?** South Carolina, New Mexico, New York (ElectionStats), and
+> `school_board` full mode all use a Playwright headless Chromium browser.
+> Playwright's synchronous API is not thread-safe, so running multiple Playwright
+> tasks in parallel can cause crashes.  HTTP-only sections (classic ElectionStats
+> states, `state_elections`, `municipal --fast`) are safe to parallelise.
+
+---
+
+## Output Directory Layout
+
+```
+data/
+  election_stats/
+    virginia/
+      virginia_1789_2025_state.csv
+      virginia_1789_2025_county.csv
+    massachusetts/
+      ...
+    colorado/  new_hampshire/  south_carolina/  new_mexico/  new_york/
+
+  nc_results/
+    nc_2000_2025_precinct.csv
+    nc_2000_2025_county.csv
+    nc_2000_2025_state.csv
+
+  Ballotpedia/
+    school_board/
+      school_board_2013.csv
+      school_board_2014.csv
+      ...
+    state_elections/
+      alabama_2024.csv
+      alaska_2024.csv
+      ...
+    municipal/
+      municipal_all_2026.csv
+      municipal_all_2025.csv
+      ...
+      municipal_mayoral_2026.csv
+      ...
+```
+
+---
+
+## Re-running After Failures
+
+The script **skips files that already exist**.  If a run is interrupted or a
+year fails, simply re-run the same command — completed years will be skipped
+and only missing files will be downloaded.
+
+```bash
+# Resume a partial municipal download
+python download_all_data.py --section municipal
+```
+
+To force a re-download, delete the relevant CSV file first.
+
+---
+
+## Dry Run
+
+Preview all tasks without downloading anything:
+
+```bash
+python download_all_data.py --dry-run
+python download_all_data.py --section municipal --dry-run
+```
+
+---
+
+## Data Coverage Summary
+
+| Source | States/Scope | Years | Granularity | Contents |
+|---|---|---|---|---|
+| ElectionStats | Virginia | 1789–2025 | State, County | Candidate results + county vote counts |
+| ElectionStats | Massachusetts | 1970–2026 | State, County | Candidate results + county vote counts |
+| ElectionStats | Colorado | 1902–2024 | State, County | Candidate results + county vote counts |
+| ElectionStats | New Hampshire | 1970–2024 | State, County | Candidate results + county vote counts |
+| ElectionStats | South Carolina | 2008–2025 | State, County | Candidate results + county vote counts |
+| ElectionStats | New Mexico | 2000–2024 | State, County | Candidate results + county vote counts |
+| ElectionStats | New York | 1994–2024 | State, County | Candidate results + county vote counts |
+| NC State Board | North Carolina | 2000–2025 | Precinct, County, State | Raw precinct results aggregated up |
+| Ballotpedia | All 50 states + DC | 2013–present | District | School board districts + candidates + votes |
+| Ballotpedia | All 50 states + DC | 2024–present | Federal/State/Local | State election candidates + vote counts |
+| Ballotpedia | All 50 states + DC | 2014–present | Municipality | Municipal candidate + vote data |
+| Ballotpedia | All 50 states + DC | 2020–present | Municipality | Mayoral candidate + vote data |

@@ -65,3 +65,6 @@ output_*/
 
 .claude
 .claude/
+
+# Downloaded data
+data/

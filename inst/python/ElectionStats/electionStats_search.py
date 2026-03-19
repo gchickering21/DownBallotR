@@ -5,6 +5,7 @@ from dataclasses import asdict
 from typing import Iterable, List, Optional, Tuple
 
 import pandas as pd
+import requests
 from lxml import html
 
 from .electionStats_client import StateHttpClient
@@ -557,13 +558,25 @@ def iter_search_results(
     page = start_page
 
     for _ in range(max_pages):
-        rows = fetch_search_results(
-            client,
-            year_from=year_from,
-            year_to=year_to,
-            page=page,
-            state_name=state_name,   # ✅ pass through
-        )
+        try:
+            rows = fetch_search_results(
+                client,
+                year_from=year_from,
+                year_to=year_to,
+                page=page,
+                state_name=state_name,
+            )
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            if page > 1:
+                print(f"  [INFO] Pagination stopped at page {page} (network error — treating as end of results): {e}")
+                break
+            raise
+        except requests.exceptions.HTTPError as e:
+            resp = getattr(e, "response", None)
+            if page > 1 and resp is not None and resp.status_code in (429, 500, 502, 503, 504):
+                print(f"  [INFO] Pagination stopped at page {page} (HTTP {resp.status_code} — treating as end of results)")
+                break
+            raise
 
         if not rows:
             break

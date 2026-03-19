@@ -666,6 +666,66 @@ class MunicipalElectionsScraper(BallotpediaBaseScraper):
                     if row is not None:
                         results.append(row)
 
+        # --------------------------------------------------------------
+        # Format C: mw-collapsible tables (2014-era pages)
+        # Structure: <caption> = race title; columns = Party | Party |
+        #            Candidate | Vote% | Votes; winner has <a href="/Won">
+        # --------------------------------------------------------------
+        if not results:
+            for tbl in doc.xpath("//table[contains(@class,'mw-collapsible')]"):
+                caption_els = tbl.xpath(".//caption")
+                if not caption_els:
+                    continue
+                office = self._clean(caption_els[0])
+                # Strip trailing year like ", 2014" from caption
+                office = re.sub(r",\s*\d{4}\s*$", "", office).strip()
+                election_type = self._infer_election_type(office)
+
+                for tr in tbl.xpath(".//tr"):
+                    # Skip header rows
+                    if tr.xpath("./th"):
+                        continue
+                    tds = tr.xpath("./td")
+                    # Expect at least 5 cells: color | party | candidate | pct | votes
+                    if len(tds) < 5:
+                        continue
+                    # Skip total/source rows (colspan on last td)
+                    if tds[-1].get("colspan") or tds[0].get("colspan"):
+                        continue
+
+                    party = self._clean(tds[1])
+                    cand_td = tds[2]
+                    pct = self._clean(tds[3]).replace("%", "").strip()
+                    votes = self._clean(tds[4]).replace(",", "").strip()
+
+                    # Winner: <a href="/Won"> present before candidate link
+                    is_winner = bool(cand_td.xpath(".//a[@href='/Won' or @title='Won']"))
+                    # Candidate link (skip the /Won link)
+                    cand_links = [
+                        a for a in cand_td.xpath(".//a")
+                        if (a.get("href") or "").rstrip("/") not in ("/Won", "/won")
+                        and not (a.get("href") or "").startswith("/File:")
+                    ]
+                    if cand_links:
+                        candidate = self._clean(cand_links[0])
+                        href = cand_links[0].get("href", "")
+                        candidate_url = (
+                            href if href.startswith("http")
+                            else f"{_BASE_URL}{href}" if href else ""
+                        )
+                    else:
+                        candidate = self._clean(cand_td)
+                        candidate_url = ""
+
+                    if not candidate or candidate.lower() in ("write-in", "write in"):
+                        candidate_url = ""
+
+                    if candidate:
+                        results.append(_make_row(
+                            office, election_type, candidate, candidate_url,
+                            party, is_winner, False, pct, votes,
+                        ))
+
         return results
 
     # ------------------------------------------------------------------

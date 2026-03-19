@@ -80,8 +80,30 @@ class BallotpediaBaseScraper:
             or (resp.status_code == 202 and len(resp.text) < 10_000)
         )
 
+    def _sync_cookies_from_playwright(self, pw_context) -> None:
+        """Copy cookies and User-Agent from a Playwright context into the requests session.
+
+        cf_clearance is tied to the UA that solved the challenge, so we also
+        update the session's User-Agent header to match Playwright's Chromium UA.
+        """
+        import urllib.parse
+        for cookie in pw_context.cookies():
+            self.session.cookies.set(
+                cookie["name"],
+                cookie["value"],
+                domain=cookie.get("domain", "").lstrip("."),
+            )
+        # Keep UA in sync so Cloudflare accepts the clearance cookie
+        ua = pw_context.pages[0].evaluate("() => navigator.userAgent") if pw_context.pages else None
+        if ua:
+            self.session.headers["User-Agent"] = ua
+
     def _get_html_playwright(self, url: str) -> Optional[str]:
-        """Fetch *url* using a headless Chromium browser (handles WAF challenges)."""
+        """Fetch *url* using a headless Chromium browser (handles WAF challenges).
+
+        After a successful fetch the Cloudflare clearance cookies are synced back
+        into the requests session so subsequent requests skip the challenge.
+        """
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
@@ -92,7 +114,8 @@ class BallotpediaBaseScraper:
         try:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(headless=True)
-                page = browser.new_page()
+                context = browser.new_context()
+                page = context.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=60_000)
                 try:
                     page.wait_for_selector(
@@ -105,31 +128,50 @@ class BallotpediaBaseScraper:
                 if self.sleep_s:
                     time.sleep(self.sleep_s)
                 content = page.content()
+                # Sync clearance cookies back so requests can reuse them
+                self._sync_cookies_from_playwright(context)
                 browser.close()
             return content
         except Exception as exc:
             print(f"  WARNING: playwright failed for {url}: {exc}")
             return None
 
-    def _get_html(self, url: str) -> Optional[str]:
+    def _get_html(self, url: str, _retries: int = 3) -> Optional[str]:
         """Fetch *url* and return the response body, or ``None`` on 404/5xx.
 
         If Ballotpedia's AWS WAF returns a bot-challenge (202 + JS puzzle),
         automatically retries the same URL via a headless Playwright browser.
+        Retries up to *_retries* times on read timeouts with exponential backoff.
         """
-        resp = self.session.get(url, timeout=self.timeout_s)
-        if resp.status_code == 404:
-            return None
-        if resp.status_code >= 500:
-            print(f"  WARNING: {resp.status_code} on {url} — skipping")
-            return None
-        if self._is_waf_challenge(resp):
-            print(f"  WAF challenge on {url} — retrying with Playwright")
-            return self._get_html_playwright(url)
-        resp.raise_for_status()
-        if self.sleep_s:
-            time.sleep(self.sleep_s)
-        return resp.text
+        for attempt in range(1, _retries + 1):
+            try:
+                resp = self.session.get(url, timeout=self.timeout_s)
+            except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError) as e:
+                if attempt < _retries:
+                    wait = 2 ** attempt
+                    print(f"  WARNING: timeout on {url} (attempt {attempt}/{_retries}) — retrying in {wait}s")
+                    time.sleep(wait)
+                    continue
+                print(f"  WARNING: timeout on {url} after {_retries} attempts — skipping")
+                return None
+            if resp.status_code == 404:
+                return None
+            if resp.status_code >= 500:
+                if attempt < _retries:
+                    wait = 2 ** attempt
+                    print(f"  WARNING: {resp.status_code} on {url} (attempt {attempt}/{_retries}) — retrying in {wait}s")
+                    time.sleep(wait)
+                    continue
+                print(f"  WARNING: {resp.status_code} on {url} after {_retries} attempts — skipping")
+                return None
+            if self._is_waf_challenge(resp):
+                print(f"  WAF challenge on {url} — retrying with Playwright")
+                return self._get_html_playwright(url)
+            resp.raise_for_status()
+            if self.sleep_s:
+                time.sleep(self.sleep_s)
+            return resp.text
+        return None
 
     # ------------------------------------------------------------------
     # Shared static helpers

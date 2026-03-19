@@ -42,6 +42,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "classic",
         "scraping_method": "requests",
         "url_style": "query_params",
+        "timeout_s": 120,
     },
     "new_hampshire": {
         "base_url": "https://nh.electionstats.com/elections",

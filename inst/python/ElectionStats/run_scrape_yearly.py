@@ -22,6 +22,7 @@ from ElectionStats.electionStats_county_search import (
 )
 from ElectionStats.state_config import get_state_config
 from ElectionStats.playwright_client import PlaywrightClient
+from df_utils import concat_or_empty as _concat_or_empty
 
 
 # ---------------------------
@@ -233,8 +234,6 @@ def scrape_one_year(
 
     return state_df, county_df
 
-def _concat_or_empty(frames: list[pd.DataFrame]) -> pd.DataFrame:
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def _join_county_with_state(county_all: pd.DataFrame, state_all: pd.DataFrame) -> pd.DataFrame:

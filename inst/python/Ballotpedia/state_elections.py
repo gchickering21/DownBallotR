@@ -57,6 +57,7 @@ from .helpers import (
     _BASE_URL,
     _current_year,
 )
+from text_utils import strip_trailing_parens, extract_party_from_parens, ensure_percent_suffix
 
 # ---------------------------------------------------------------------------
 # NOTE: The widget-table-container layout used by this scraper was introduced
@@ -679,13 +680,12 @@ class StateElectionsScraper(BallotpediaBaseScraper):
                         candidate = self._clean(text_cells[0])
                         candidate_url = ""
 
-                    candidate = re.sub(r"\s*\([^)]+\)\s*$", "", candidate).strip()
+                    candidate = strip_trailing_parens(candidate)
                     if not candidate:
                         continue
 
                     full_text = self._clean(text_cells[0])
-                    party_m = re.search(r"\(([^)]+)\)\s*$", full_text)
-                    party = party_m.group(1).strip() if party_m else ""
+                    party = extract_party_from_parens(full_text)
                     is_incumbent = "(i)" in full_text
 
                     pct_nodes = tr.xpath(
@@ -693,8 +693,7 @@ class StateElectionsScraper(BallotpediaBaseScraper):
                         ".//span[contains(@class,'percentage_number')]"
                     )
                     pct = pct_nodes[0].text_content().strip() if pct_nodes else ""
-                    if pct and "%" not in pct:
-                        pct = pct + "%"
+                    pct = ensure_percent_suffix(pct)
 
                     num_cells = tr.xpath(
                         ".//td[contains(@class,'votebox-results-cell--number')]"

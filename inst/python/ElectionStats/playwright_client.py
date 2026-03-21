@@ -7,22 +7,21 @@ requiring browser automation instead of simple HTTP requests.
 NY additionally sits behind Cloudflare bot protection, so a realistic browser
 context (user-agent, no-automation flags, webdriver patch) is used for all
 v2 states to ensure compatibility.
+
+Inherits browser lifecycle from BasePlaywrightClient (playwright_base.py).
 """
 
 from __future__ import annotations
+
 import time
 from typing import Optional
 
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError, Page, Browser, BrowserContext, Playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-_STEALTH_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
+from playwright_base import BasePlaywrightClient
 
 
-class PlaywrightClient:
+class PlaywrightClient(BasePlaywrightClient):
     """Browser automation client for v2 states (SC, NM, NY) that use React/JS.
 
     Launches a headless browser to render JavaScript and extract election data
@@ -54,45 +53,9 @@ class PlaywrightClient:
         headless: bool = True,
         sleep_s: float = 2.0,
     ):
+        super().__init__(headless=headless, sleep_s=sleep_s)
         self.state_key = state_key
         self.base_url = base_url.rstrip("/")
-        self.headless = headless
-        self.sleep_s = sleep_s
-        self.playwright: Optional[Playwright] = None
-        self.browser: Optional[Browser] = None
-        self.context: Optional[BrowserContext] = None
-        self.page: Optional[Page] = None
-
-    def __enter__(self):
-        """Context manager entry - launch browser with stealth settings."""
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(
-            headless=self.headless,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-        )
-        self.context = self.browser.new_context(
-            user_agent=_STEALTH_UA,
-            viewport={"width": 1280, "height": 800},
-            locale="en-US",
-            timezone_id="America/New_York",
-        )
-        # Prevent Cloudflare and other bot-detection from flagging headless mode
-        self.context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
-        self.page = self.context.new_page()
-        return self
-
-    def __exit__(self, *args):
-        """Context manager exit - close browser and clean up resources."""
-        if self.page:
-            self.page.close()
-        if self.context:
-            self.context.close()
-        if self.browser:
-            self.browser.close()
-        if self.playwright:
-            self.playwright.stop()
 
     def get_search_page(
         self, year_from: Optional[int] = None, year_to: Optional[int] = None
@@ -133,11 +96,9 @@ class PlaywrightClient:
             params.append(f"dt={year_to}")
 
         url = f"{self.base_url}/search?{'&'.join(params)}"
-        self.page.goto(url, wait_until="domcontentloaded")
+        self._navigate(url)
 
         # Wait for either a results table or a "No Results Found" message.
-        # This prevents a 45-second timeout on years with no elections.
-        # Wait for either a results table or a "No Results Found" MUI message.
         # This prevents a 45-second timeout on years with no elections.
         try:
             self.page.wait_for_selector(
@@ -186,25 +147,10 @@ class PlaywrightClient:
             raise RuntimeError("Browser not initialized. Use context manager (with statement).")
 
         url = f"{self.base_url}/contest/{election_id}"
-        for attempt in range(1, 4):
-            try:
-                self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                break
-            except PlaywrightTimeoutError:
-                if attempt == 3:
-                    raise
-                print(f"  [WARN] goto timeout for election_id={election_id}, retry {attempt}/3")
-                time.sleep(5 * attempt)
+        self._navigate(url)
 
-        try:
-            self.page.wait_for_selector(
-                "#content table, table#contestCollectionTable, table.MuiTable-root",
-                timeout=45000,
-            )
-        except PlaywrightTimeoutError:
-            pass
-
-        if self.sleep_s:
-            time.sleep(self.sleep_s)
+        self._wait_and_sleep(
+            "#content table, table#contestCollectionTable, table.MuiTable-root"
+        )
 
         return self.page.content()

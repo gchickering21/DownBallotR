@@ -11,6 +11,7 @@ from lxml import html
 from .electionStats_client import StateHttpClient
 from .electionStats_models import ElectionSearchRow
 from .state_config import get_scraper_type
+from text_utils import clean_text as _clean_ws, parse_int as _parse_int, parse_percentage as _parse_percentage
 
 # Accept both VA/MA: election-id-#### and CO: contest-id-####
 _ROW_ID_RE = re.compile(r"^(?:election|contest)-id-(\d+)$")
@@ -19,20 +20,11 @@ _ROW_ID_RE = re.compile(r"^(?:election|contest)-id-(\d+)$")
 # =============================
 # Text + parsing helpers
 # =============================
-def _clean_ws(s: str) -> str:
-    return re.sub(r"\s+", " ", s or "").strip()
-
-
 def _safe_text(node) -> str:
     try:
         return _clean_ws(node.text_content())
     except Exception:
         return ""
-
-
-def _parse_int(s: str) -> Optional[int]:
-    s = (s or "").strip().replace(",", "")
-    return int(s) if s.isdigit() else None
 
 
 # =============================
@@ -164,14 +156,6 @@ def _extract_contest_outcome(tr) -> str:
     cls = (tr.get("class") or "")
     return "Winner" if "is_winner" in cls else "Loser"
 
-def _parse_percentage(p):
-    if not p:
-        return None
-    try:
-        return float(str(p).replace("%", "").strip())
-    except ValueError:
-        return None
-    
 def _extract_candidate_record(tr) -> Optional[Tuple[str, Optional[str], int, Optional[str], str]]:
     """
     Return:

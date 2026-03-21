@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date
 from typing import Iterable
 
 import pandas as pd
@@ -11,6 +11,8 @@ from .selection import select_elections
 from .io_utils import download_zip_bytes, read_results_pct_from_zip
 from .normalize import normalize_nc_results_cols, get_config
 from .aggregate import aggregate_to_county_level, aggregate_county_to_state
+from df_utils import concat_or_empty
+from date_utils import year_to_date_range
 
 
 def _get_attr(obj, name: str):
@@ -99,8 +101,8 @@ class NcElectionPipeline:
             return precinct_empty, county_empty, state_empty
 
         precinct_final = pd.concat(precinct_frames, ignore_index=True)
-        county_final = pd.concat(county_frames, ignore_index=True) if county_frames else pd.DataFrame()
-        state_final = pd.concat(state_frames, ignore_index=True) if state_frames else pd.DataFrame()
+        county_final = concat_or_empty(county_frames)
+        state_final  = concat_or_empty(state_frames)
 
         return precinct_final, county_final, state_final
 
@@ -143,8 +145,7 @@ def get_nc_election_results(
         Pipeline upper-bound guard.  Elections after this date are skipped.
         ``None`` (default) attempts all elections in the requested range.
     """
-    start = date(int(year_from), 1, 1) if year_from is not None else None
-    end   = date(int(year_to),   12, 31) if year_to   is not None else None
+    start, end = year_to_date_range(year_from, year_to)
 
     pipeline = NcElectionPipeline()
     precinct_df, _county_df, _state_df = pipeline.run(

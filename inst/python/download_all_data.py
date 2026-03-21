@@ -13,31 +13,51 @@ Sections:
     school_board        Ballotpedia school board elections (2013-present)
     state_elections     Ballotpedia state elections (2024-present, per state)
     municipal           Ballotpedia municipal/mayoral elections (2014-present)
+    georgia             Georgia Secretary of State election results (2012-present)
     all                 All of the above (default)
 
 Options:
-    --output-dir PATH   Root output directory (default: <repo>/data/)
-    --section NAME      Run only one section (default: all)
-    --fast              Use fast/lightweight modes (districts/listings/links)
-                        instead of the default detailed modes (joined/results).
-                        Much quicker but omits vote counts and candidate detail.
-    --dry-run           Print tasks without scraping
+    --output-dir PATH       Root output directory (default: <repo>/data/)
+    --section NAME          Run only one section (default: all)
+    --fast                  Use fast/lightweight modes (districts/listings/links)
+                            instead of the default detailed modes (joined/results).
+                            Much quicker but omits vote counts and candidate detail.
+                            (Has no effect on the georgia section.)
+    --dry-run               Print tasks without scraping
+
+Georgia-specific options:
+    --ga-year-from INT      First year to download (default: 2012)
+    --ga-year-to   INT      Last year to download (default: current year)
+    --ga-level     LEVEL    State-only, county-only, or both (default: all)
+                            Choices: all, state, county
+    --vote-methods          Also capture per-contest vote-method breakdowns
+                            (Advanced Voting / Election Day / Absentee / Provisional).
+                            Adds extra Playwright clicks per page; significantly
+                            slower but produces richer data.
+    --county-workers INT    Parallel Chromium browsers for county scraping (default: 4)
 
 Output layout:
     data/
       election_stats/
-        {state}_{year_from}_{year_to}_state.csv
-        {state}_{year_from}_{year_to}_county.csv
+        {state}/{state}_{year_from}_{year_to}_state.csv
+        {state}/{state}_{year_from}_{year_to}_county.csv
       nc_results/
-        nc_{year_from}_{year_to}.csv
+        nc_{year_from}_{year_to}_precinct.csv
+        nc_{year_from}_{year_to}_county.csv
+        nc_{year_from}_{year_to}_state.csv
       school_board/
         school_board_{year}.csv           (fast: district metadata)
-        school_board_{year}_joined.csv    (--full: districts + candidates)
+        school_board_{year}_joined.csv    (full: districts + candidates)
       state_elections/
         {state_slug}_{year}.csv
       municipal/
         municipal_all_{year}.csv
         municipal_mayoral_{year}.csv
+      georgia/
+        ga_{year}_state.csv               (statewide candidate totals)
+        ga_{year}_county.csv              (per-county candidate totals)
+        ga_{year}_vote_method_state.csv   (--vote-methods: per-method statewide)
+        ga_{year}_vote_method_county.csv  (--vote-methods: per-method by county)
 """
 
 from __future__ import annotations
@@ -78,6 +98,7 @@ SCHOOL_BOARD_YEAR_RANGE    = (2013, CURRENT_YEAR)
 STATE_ELECTIONS_YEAR_RANGE = (2024, CURRENT_YEAR)
 MUNICIPAL_YEAR_RANGE       = (2014, CURRENT_YEAR)
 MAYORAL_YEAR_RANGE         = (2020, CURRENT_YEAR)
+GA_YEAR_RANGE              = (2012, CURRENT_YEAR)
 
 # All 50 US states + DC (title-case full names expected by Ballotpedia scrapers)
 ALL_STATES: list[str] = [
@@ -409,6 +430,116 @@ def download_municipal(
     return _run_tasks(tasks, dry_run=dry_run, workers=workers)
 
 
+def download_georgia(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    ga_year_from: int = GA_YEAR_RANGE[0],
+    ga_year_to: int = GA_YEAR_RANGE[1],
+    ga_level: str = "all",
+    vote_methods: bool = False,
+    county_workers: int = 4,
+    **_,
+) -> list[bool]:
+    """
+    Georgia Secretary of State election results, one set of files per year.
+
+    For each year in [ga_year_from, ga_year_to], all elections in that year are
+    scraped in a single pipeline call (the GA SOS site groups elections by year).
+    County-level pages are scraped in parallel (--county-workers controls
+    concurrency; each worker spawns its own Chromium process).
+
+    Output files per year (level='all'):
+      data/georgia/ga_{year}_state.csv           — statewide candidate totals
+      data/georgia/ga_{year}_county.csv          — per-county candidate totals
+
+    With --vote-methods, additionally:
+      data/georgia/ga_{year}_vote_method_state.csv   — per-method statewide
+      data/georgia/ga_{year}_vote_method_county.csv  — per-method by county
+
+    Note: county scraping is Playwright-based (one Chromium process per worker).
+    The outer loop over years runs sequentially; parallelism within each year is
+    controlled by --county-workers.
+    """
+    base = output_dir / "georgia"
+    results: list[bool] = []
+
+    for year in range(ga_year_from, ga_year_to + 1):
+        vm_suffix = " +vote-methods" if vote_methods else ""
+        label = f"Georgia SOS  {year}  level={ga_level}{vm_suffix}"
+        print(f"\n[{label}]")
+
+        # Build expected output paths based on level and vote_methods flag
+        paths: dict[str, Path] = {}
+        if ga_level in ("all", "state"):
+            paths["state"] = base / f"ga_{year}_state.csv"
+        if ga_level in ("all", "county"):
+            paths["county"] = base / f"ga_{year}_county.csv"
+        if vote_methods:
+            if ga_level in ("all", "state"):
+                paths["vote_method_state"]  = base / f"ga_{year}_vote_method_state.csv"
+            if ga_level in ("all", "county"):
+                paths["vote_method_county"] = base / f"ga_{year}_vote_method_county.csv"
+
+        # Skip if all expected outputs already exist
+        if all(p.exists() for p in paths.values()):
+            print("  ↷ all output files exist, skipping")
+            results.append(True)
+            continue
+
+        if dry_run:
+            for key, p in paths.items():
+                status = "exists" if p.exists() else "would write"
+                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
+            results.append(True)
+            continue
+
+        try:
+            result = registry.scrape(
+                "georgia_results",
+                year_from=year,
+                year_to=year,
+                level=ga_level,
+                include_vote_methods=vote_methods,
+                max_county_workers=county_workers,
+            )
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            results.append(False)
+            continue
+
+        ok = True
+        try:
+            if isinstance(result, dict):
+                for key, df in result.items():
+                    if key not in paths:
+                        continue  # unexpected key (e.g. level mismatch)
+                    if df.empty:
+                        print(f"  ⚠ empty result for '{key}' — skipping write")
+                    else:
+                        _save(df, paths[key])
+            elif isinstance(result, pd.DataFrame):
+                # level='state' or level='county' without vote_methods
+                key = ga_level
+                if key in paths:
+                    if result.empty:
+                        print("  ⚠ empty result — skipping write")
+                    else:
+                        _save(result, paths[key])
+            else:
+                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
+                ok = False
+        except Exception:
+            print("  ✗ ERROR while saving result:")
+            traceback.print_exc()
+            ok = False
+
+        results.append(ok)
+
+    return results
+
+
 # ── Dispatch table ─────────────────────────────────────────────────────────────
 
 SECTIONS: dict[str, Callable] = {
@@ -417,6 +548,7 @@ SECTIONS: dict[str, Callable] = {
     "school_board":     download_school_board,
     "state_elections":  download_state_elections,
     "municipal":        download_municipal,
+    "georgia":          download_georgia,
 }
 
 
@@ -452,7 +584,7 @@ def main() -> None:
         help=(
             "Use fast/lightweight scrape modes: school_board→districts, "
             "state_elections→listings, municipal→links. "
-            "Much faster but omits vote counts."
+            "Much faster but omits vote counts. Has no effect on georgia."
         ),
     )
     parser.add_argument(
@@ -480,6 +612,49 @@ def main() -> None:
         action="store_true",
         help="Print what would be downloaded without actually scraping.",
     )
+
+    # Georgia-specific options
+    ga_group = parser.add_argument_group("georgia options")
+    ga_group.add_argument(
+        "--ga-year-from",
+        type=int,
+        default=GA_YEAR_RANGE[0],
+        metavar="YEAR",
+        help=f"First year to download for Georgia (default: {GA_YEAR_RANGE[0]}).",
+    )
+    ga_group.add_argument(
+        "--ga-year-to",
+        type=int,
+        default=GA_YEAR_RANGE[1],
+        metavar="YEAR",
+        help=f"Last year to download for Georgia (default: current year).",
+    )
+    ga_group.add_argument(
+        "--ga-level",
+        choices=["all", "state", "county"],
+        default="all",
+        help="What to scrape for Georgia: state totals, county totals, or both (default: all).",
+    )
+    ga_group.add_argument(
+        "--vote-methods",
+        action="store_true",
+        help=(
+            "Capture per-contest vote-method breakdowns for Georgia "
+            "(Advanced Voting / Election Day / Absentee / Provisional). "
+            "Requires extra Playwright clicks per page; significantly slower."
+        ),
+    )
+    ga_group.add_argument(
+        "--county-workers",
+        type=int,
+        default=4,
+        metavar="N",
+        help=(
+            "Parallel Chromium browsers for Georgia county scraping (default: 4). "
+            "Each worker is a separate process — keep ≤ 6 to avoid exhausting memory."
+        ),
+    )
+
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir).expanduser().resolve()
@@ -494,6 +669,11 @@ def main() -> None:
     print(f"Fast mode        : {args.fast}")
     print(f"Workers          : {args.workers}")
     print(f"Dry run          : {args.dry_run}")
+    if args.section in ("georgia", "all"):
+        print(f"GA year range    : {args.ga_year_from}–{args.ga_year_to}")
+        print(f"GA level         : {args.ga_level}")
+        print(f"GA vote methods  : {args.vote_methods}")
+        print(f"GA county workers: {args.county_workers}")
     print("=" * 70)
 
     to_run = SECTIONS if args.section == "all" else {args.section: SECTIONS[args.section]}
@@ -503,7 +683,19 @@ def main() -> None:
         print(f"\n{'─'*70}")
         print(f"  SECTION: {name.upper()}")
         print(f"{'─'*70}")
-        section_results = fn(output_dir, dry_run=args.dry_run, full=not args.fast, state=args.state, workers=args.workers)
+        section_results = fn(
+            output_dir,
+            dry_run=args.dry_run,
+            full=not args.fast,
+            state=args.state,
+            workers=args.workers,
+            # Georgia-specific
+            ga_year_from=args.ga_year_from,
+            ga_year_to=args.ga_year_to,
+            ga_level=args.ga_level,
+            vote_methods=args.vote_methods,
+            county_workers=args.county_workers,
+        )
         all_results.extend(section_results)
 
     n_total   = len(all_results)

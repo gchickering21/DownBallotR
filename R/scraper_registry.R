@@ -120,8 +120,31 @@
 }
 
 
+#' Call the Georgia SOS election results scraper
+#' @keywords internal
+.scrape_ga <- function(
+    year_from            = NULL,
+    year_to              = NULL,
+    level                = "all",
+    max_county_workers   = 4L,
+    include_vote_methods = FALSE) {
+  level <- match.arg(level, c("all", "state", "county"))
+  .db_registry()$scrape(
+    "georgia_results",
+    year_from            = year_from,
+    year_to              = year_to,
+    level                = level,
+    max_county_workers   = as.integer(max_county_workers),
+    include_vote_methods = isTRUE(include_vote_methods)
+  )
+}
+
+
 # NC state identifiers (case-insensitive) recognised for auto-routing
 .nc_state_keys <- c("nc", "north carolina", "north_carolina")
+
+# GA state identifiers (case-insensitive) recognised for auto-routing
+.ga_state_keys <- c("ga", "georgia")
 
 
 # All 50 states + DC: 2-letter abbreviation → canonical title-case full name
@@ -325,23 +348,26 @@
 #'
 #' @export
 scrape_elections <- function(
-    state           = NULL,
-    office          = c("general", "school_district", "state_elections",
-                        "municipal_elections"),
+    state               = NULL,
+    office              = c("general", "school_district", "state_elections",
+                            "municipal_elections"),
     # General-election (ElectionStats / NC) args
-    year_from       = NULL,
-    year_to         = NULL,
-    level           = c("all", "state", "county", "joined"),
-    parallel        = TRUE,
+    year_from           = NULL,
+    year_to             = NULL,
+    level               = c("all", "state", "county", "joined"),
+    parallel            = TRUE,
     # School-district / state-elections (Ballotpedia) args
-    year            = NULL,
-    mode            = c("districts", "results", "joined", "listings", "links"),
-    start_year      = NULL,
-    end_year        = NULL,
+    year                = NULL,
+    mode                = c("districts", "results", "joined", "listings", "links"),
+    start_year          = NULL,
+    end_year            = NULL,
     # State-elections (Ballotpedia) args
-    election_level  = c("all", "federal", "state", "local"),
+    election_level      = c("all", "federal", "state", "local"),
     # Municipal-elections args
-    race_type       = c("all", "mayoral")) {
+    race_type           = c("all", "mayoral"),
+    # Georgia SOS args
+    max_county_workers    = 4L,
+    include_vote_methods  = FALSE) {
 
   office          <- match.arg(office)
   level           <- match.arg(level)
@@ -385,6 +411,9 @@ scrape_elections <- function(
   } else if (!is.null(state) &&
              tolower(trimws(state)) %in% .nc_state_keys) {
     "nc_results"
+  } else if (!is.null(state) &&
+             tolower(trimws(state)) %in% .ga_state_keys) {
+    "georgia_results"
   } else {
     "election_stats"
   }
@@ -403,6 +432,7 @@ scrape_elections <- function(
         "municipal/mayoral elections (Ballotpedia, race_type='", race_type, "')"
       ),
       "nc_results"             = "North Carolina (NC State Board of Elections)",
+      "georgia_results"        = "Georgia (GA Secretary of State)",
       "election_stats"         = paste0(state, " (ElectionStats)")
     )
     message("Available years for ", label, ": ",
@@ -444,6 +474,13 @@ scrape_elections <- function(
     "nc_results" = .scrape_nc(
       year_from = year_from,
       year_to   = year_to
+    ),
+    "georgia_results" = .scrape_ga(
+      year_from            = year_from,
+      year_to              = year_to,
+      level                = match.arg(level, c("all", "state", "county")),
+      max_county_workers   = as.integer(max_county_workers),
+      include_vote_methods = isTRUE(include_vote_methods)
     )
   )
 
@@ -572,7 +609,16 @@ db_available_years <- function(state = NULL,
     stringsAsFactors = FALSE
   )
 
-  result <- rbind(es_df, nc_row)
+  ga_avail <- reg$get_available_years("georgia_results")
+  ga_row <- data.frame(
+    source     = "georgia_results",
+    state      = "GA",
+    start_year = ga_avail$start_year,
+    end_year   = ga_avail$end_year,
+    stringsAsFactors = FALSE
+  )
+
+  result <- rbind(es_df, nc_row, ga_row)
 
   if (!is.null(state)) {
     # Normalise both sides to lowercase-underscore for robust matching

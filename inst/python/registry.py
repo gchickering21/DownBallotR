@@ -11,6 +11,9 @@ from typing import List
 
 import pandas as pd
 
+from date_utils import validate_year_range, year_to_date_range
+from df_utils import concat_or_empty as _concat_or_empty
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Shared helpers
@@ -29,6 +32,54 @@ def _to_year(v) -> "int | None":
 # ──────────────────────────────────────────────────────────────────────────────
 # Internal scraper functions
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _scrape_ga(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    level: str = "all",
+    max_county_workers: int = 4,
+    include_vote_methods: bool = False,
+    **_,
+):
+    """Scrape Georgia Secretary of State election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive.
+    year_to : int | None
+        End year, inclusive.
+    level : str
+        ``'all'`` (default) — dict with ``'state'`` and ``'county'`` DataFrames;
+        ``'state'`` — statewide totals only (no county scraping, much faster);
+        ``'county'`` — county-level DataFrame only.
+    max_county_workers : int
+        Parallel Chromium browsers for county scraping (default 4).
+    include_vote_methods : bool
+        When True, expands each contest's vote-method breakdown table and adds
+        ``'vote_method_state'`` / ``'vote_method_county'`` to the result dict
+        (default False).
+    """
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+
+    label = (
+        f"{year_from}–{year_to}" if year_from and year_to
+        else f"{year_from}–" if year_from
+        else f"–{year_to}" if year_to
+        else "all years"
+    )
+    print(f"[GA] Starting scrape | {label} | level={level!r} | vote_methods={include_vote_methods}")
+
+    from Georgia.pipeline import get_ga_election_results
+    return get_ga_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        max_county_workers=max_county_workers,
+        include_vote_methods=include_vote_methods,
+    )
+
 
 def _scrape_nc(
     year_from: "int | None" = None,
@@ -55,10 +106,7 @@ def _scrape_nc(
     )
     print(f"[NC] Starting scrape | {label}")
 
-    # Mirror year_from/year_to as pipeline date guards so only elections
-    # within the requested range are attempted.
-    min_date = datetime.date(year_from, 1,  1)  if year_from is not None else None
-    max_date = datetime.date(year_to,   12, 31) if year_to   is not None else None
+    min_date, max_date = year_to_date_range(year_from, year_to)
 
     from NorthCarolina.pipeline import get_nc_election_results
     return get_nc_election_results(
@@ -104,7 +152,6 @@ def _scrape_election_stats(
     from ElectionStats.run_scrape_yearly import (
         scrape_one_year,
         _normalize_state,
-        _concat_or_empty,
         _join_county_with_state,
     )
 
@@ -224,34 +271,15 @@ def _scrape_ballotpedia_elections(
 
     # ── Year validation ──────────────────────────────────────────────────────
     _SUPPORTED_FROM = 2024
-    _available_msg = (
-        f"Available years for the Ballotpedia state elections scraper: "
-        f"{_SUPPORTED_FROM}–present (not all states have pages for every year)."
-    )
-    # Determine the effective year range being requested
     _effective_years = (
         [year] if year is not None
         else list(range(start_year, (end_year or datetime.date.today().year) + 1))
     )
-    _unsupported = [y for y in _effective_years if y < _SUPPORTED_FROM]
-    if _unsupported:
-        if all(y < _SUPPORTED_FROM for y in _effective_years):
-            # Every requested year is unsupported — bail early
-            print(
-                f"[Ballotpedia state elections] No data for year(s) "
-                f"{sorted(_unsupported)} — the widget-table layout used by "
-                f"this scraper was introduced in {_SUPPORTED_FROM}.\n"
-                f"{_available_msg}"
-            )
-            return pd.DataFrame()
-        else:
-            # Partial overlap — warn but proceed
-            print(
-                f"[Ballotpedia state elections] WARNING: year(s) "
-                f"{sorted(_unsupported)} are not supported (layout introduced "
-                f"in {_SUPPORTED_FROM}). Those years will return no data.\n"
-                f"{_available_msg}"
-            )
+    _unsupported = validate_year_range(
+        _effective_years, _SUPPORTED_FROM, "Ballotpedia state elections"
+    )
+    if _unsupported and all(y < _SUPPORTED_FROM for y in _effective_years):
+        return pd.DataFrame()
 
     from Ballotpedia.state_elections import StateElectionsScraper
 
@@ -311,31 +339,15 @@ def _scrape_ballotpedia_municipal(
     end_year   = int(end_year)   if end_year   is not None else None
 
     _min_year = 2020 if race_type == "mayoral" else 2014
-    _available_msg = (
-        f"Available years for the Ballotpedia municipal elections scraper "
-        f"(race_type='{race_type}'): {_min_year}–present."
-    )
-
     _effective_years = (
         [year] if year is not None
         else list(range(start_year, (end_year or datetime.date.today().year) + 1))
     )
-    _unsupported = [y for y in _effective_years if y < _min_year]
-    if _unsupported:
-        if all(y < _min_year for y in _effective_years):
-            print(
-                f"[Ballotpedia municipal] No data for year(s) "
-                f"{sorted(_unsupported)} with race_type='{race_type}'.\n"
-                f"{_available_msg}"
-            )
-            return pd.DataFrame()
-        else:
-            print(
-                f"[Ballotpedia municipal] WARNING: year(s) "
-                f"{sorted(_unsupported)} are before {_min_year} for "
-                f"race_type='{race_type}'. Those years will return no data.\n"
-                f"{_available_msg}"
-            )
+    _unsupported = validate_year_range(
+        _effective_years, _min_year, f"Ballotpedia municipal (race_type='{race_type}')"
+    )
+    if _unsupported and all(y < _min_year for y in _effective_years):
+        return pd.DataFrame()
 
     from Ballotpedia.municipal_elections import MunicipalElectionsScraper
 
@@ -444,6 +456,9 @@ _YEAR_RANGES: dict = {
     "nc_results": {
         "NC": (2000, 2025),
     },
+    "georgia_results": {
+        "GA": (2000, None),
+    },
     "ballotpedia": {
         # Ballotpedia covers all US states from 2013 onward (open-ended).
         "_all": (2013, None),
@@ -471,6 +486,11 @@ def _list_election_stats_states() -> List[str]:
 
 
 _SOURCES: dict = {
+    "georgia_results": {
+        "description": "Georgia Secretary of State election results (results.sos.ga.gov)",
+        "scrape_fn": _scrape_ga,
+        "states": ["GA"],
+    },
     "nc_results": {
         "description": "North Carolina local election results (NC State Board of Elections)",
         "scrape_fn": _scrape_nc,
@@ -564,6 +584,10 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
 
     if source == "nc_results":
         start, end = ranges["NC"]
+        return {"start_year": start, "end_year": end or current_year}
+
+    if source == "georgia_results":
+        start, end = ranges["GA"]
         return {"start_year": start, "end_year": end or current_year}
 
     # election_stats

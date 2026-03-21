@@ -17,6 +17,8 @@ from typing import List, Optional
 
 import requests
 
+from text_utils import clean_node as _clean_node
+
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -101,36 +103,30 @@ class BallotpediaBaseScraper:
     def _get_html_playwright(self, url: str) -> Optional[str]:
         """Fetch *url* using a headless Chromium browser (handles WAF challenges).
 
-        After a successful fetch the Cloudflare clearance cookies are synced back
-        into the requests session so subsequent requests skip the challenge.
+        Uses BasePlaywrightClient for stealth browser setup and automatic
+        Cloudflare challenge handling.  After a successful fetch, Cloudflare
+        clearance cookies are synced back into the requests session so
+        subsequent plain HTTP requests skip the challenge.
         """
         try:
-            from playwright.sync_api import sync_playwright
+            from playwright_base import BasePlaywrightClient
         except ImportError:
             print("  WARNING: playwright not installed — cannot bypass WAF challenge")
             return None
 
         print(f"  [playwright] fetching {url}")
         try:
-            with sync_playwright() as pw:
-                browser = pw.chromium.launch(headless=True)
-                context = browser.new_context()
-                page = context.new_page()
-                page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-                try:
-                    page.wait_for_selector(
-                        "div.votebox, table.sortable, table.wikitable, "
-                        "div.widget-table-container",
-                        timeout=15_000,
-                    )
-                except Exception:
-                    pass  # proceed even if selector times out
-                if self.sleep_s:
-                    time.sleep(self.sleep_s)
-                content = page.content()
+            with BasePlaywrightClient(headless=True, sleep_s=self.sleep_s) as client:
+                # _navigate includes automatic Cloudflare challenge detection
+                client._navigate(url)
+                client._wait_and_sleep(
+                    "div.votebox, table.sortable, table.wikitable, "
+                    "div.widget-table-container",
+                    timeout_ms=15_000,
+                )
+                content = client.page.content()
                 # Sync clearance cookies back so requests can reuse them
-                self._sync_cookies_from_playwright(context)
-                browser.close()
+                self._sync_cookies_from_playwright(client.context)
             return content
         except Exception as exc:
             print(f"  WARNING: playwright failed for {url}: {exc}")
@@ -180,10 +176,7 @@ class BallotpediaBaseScraper:
     @staticmethod
     def _clean(node) -> str:
         """Whitespace-normalised text content of an lxml element."""
-        try:
-            return re.sub(r"\s+", " ", node.text_content() or "").strip()
-        except Exception:
-            return ""
+        return _clean_node(node)
 
     @staticmethod
     def _infer_election_type(heading: str) -> str:

@@ -16,35 +16,8 @@ from .state_config import get_scraper_type  # Check if state is classic or v2
 
 import requests  # for requests.exceptions
 
-
-# -----------------------------------------------------------------------------
-# Retry helper
-# -----------------------------------------------------------------------------
-
-_RETRY_STATUSES = {429, 500, 502, 503, 504}
-_RETRY_ATTEMPTS = 3
-_RETRY_BACKOFF_S = 5.0  # seconds between retries (doubles each attempt)
-
-
-def _fetch_with_retry(client, url: str) -> str:
-    """Fetch URL with exponential-backoff retries on transient HTTP/timeout errors."""
-    delay = _RETRY_BACKOFF_S
-    last_exc: Exception = RuntimeError("no attempts made")
-    for attempt in range(1, _RETRY_ATTEMPTS + 1):
-        try:
-            return client.get_html(url)
-        except requests.exceptions.Timeout as e:
-            last_exc = e
-        except requests.exceptions.HTTPError as e:
-            resp = getattr(e, "response", None)
-            if resp is not None and resp.status_code not in _RETRY_STATUSES:
-                raise
-            last_exc = e
-        if attempt < _RETRY_ATTEMPTS:
-            print(f"  [WARN] Transient error on attempt {attempt}/{_RETRY_ATTEMPTS} — retrying in {delay:.0f}s ({url})")
-            time.sleep(delay)
-            delay *= 2
-    raise last_exc
+from http_utils import fetch_with_retry
+from text_utils import parse_int as _parse_int
 
 
 # -----------------------------------------------------------------------------
@@ -177,26 +150,6 @@ def _count_trailing_ignored_columns_from_thead(table) -> int:
     return n
 
 
-def _parse_int(s: str) -> Optional[int]:
-    """
-    Parse a vote string into an int.
-
-    - Strips whitespace
-    - Removes commas (e.g., "12,345")
-    - Returns None if not purely digits after cleaning
-
-    Parameters
-    ----------
-    s : str
-        Input vote string.
-
-    Returns
-    -------
-    Optional[int]
-        Parsed integer or None if parsing fails.
-    """
-    s = (s or "").strip().replace(",", "")
-    return int(s) if s.isdigit() else None
 
 
 def _extract_vote_text_from_td(td) -> str:
@@ -801,7 +754,7 @@ def build_county_dataframe(state_df: pd.DataFrame, client) -> pd.DataFrame:
     for st, election_id, url in jobs:
         try:
             # Fetch the detail page HTML.
-            detail_html = _fetch_with_retry(client, url)
+            detail_html = fetch_with_retry(client.get_html, url)
 
             # Parse into long-form county votes dataframe.
             df_one = parse_county_votes_from_detail_html(
@@ -848,7 +801,7 @@ def _fetch_and_parse_one_parallel(
         client = client_factory()
 
         # Fetch HTML and parse.
-        detail_html = _fetch_with_retry(client, url)
+        detail_html = fetch_with_retry(client.get_html, url)
         return parse_county_votes_from_detail_html(
             detail_html,
             election_id=election_id,

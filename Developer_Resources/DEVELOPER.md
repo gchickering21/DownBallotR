@@ -51,10 +51,19 @@ DownBallotR/
 │   │   ├── constants.py
 │   │   └── io_utils.py             # ZIP download helpers
 │   │
-│   └── Ballotpedia/                # School board elections scraper
-│       ├── school_board_elections.py  # SchoolBoardScraper
-│       ├── ballotpedia_client.py
-│       └── scrape_school_boards.py
+│   ├── Ballotpedia/                # School board elections scraper
+│   │   ├── school_board_elections.py  # SchoolBoardScraper
+│   │   ├── ballotpedia_client.py
+│   │   └── scrape_school_boards.py
+│   │
+│   └── Georgia/                    # GA Secretary of State scraper
+│       ├── pipeline.py             # GaElectionPipeline + get_ga_election_results()
+│       ├── client.py               # GaElectionClient — Playwright browser automation
+│       ├── parser.py               # parse_state_results() / parse_county_results()
+│       ├── models.py               # GA data models / column lists
+│       ├── inspect_vote_method.py  # Dev tool: inspect vote-method HTML after click
+│       └── tests/
+│           └── test_ga_smoke.py    # Smoke test (single year, state level)
 │
 ├── tests/testthat/                 # R-level tests (testthat)
 │   └── test-python-smoke.R
@@ -78,7 +87,7 @@ DownBallotR/
 All routing logic lives in `R/scraper_registry.R`; all scraping logic lives in Python.
 `reticulate::py_to_r()` converts the returned pandas DataFrames to R data frames.
 
-### Three scraper backends
+### Five scraper backends
 
 | Backend | States | Transport | Entry point |
 |---|---|---|---|
@@ -86,6 +95,7 @@ All routing logic lives in `R/scraper_registry.R`; all scraping logic lives in P
 | **V2** (ElectionStats v2 / React) | SC, NM, NY | Playwright (headless Chromium) | `PlaywrightClient` |
 | **NC** (NCSBE ZIP pipeline) | NC | HTTP ZIP download | `NcElectionPipeline` |
 | **Ballotpedia** | All US states | `requests` | `SchoolBoardScraper` |
+| **Georgia SOS** | GA | Playwright (headless Chromium) | `GaElectionPipeline` |
 
 ### ElectionStats URL formats
 
@@ -108,6 +118,23 @@ which format `StateHttpClient.build_search_url()` generates.
 `results.elections.ny.gov` sits behind Cloudflare bot protection. `PlaywrightClient`
 uses a stealth browser context (realistic Chrome user-agent, viewport, locale,
 `navigator.webdriver` patch) that allows it to pass the Cloudflare challenge.
+
+### Georgia SOS — Angular virtual scroll
+
+`results.sos.ga.gov` is a JavaScript-rendered Angular SPA. Two non-obvious
+implementation details:
+
+1. **Virtual scrolling**: The page renders only the panels visible in the viewport.
+   `GaElectionClient._scroll_to_load_all()` scrolls to the bottom in a loop until
+   the panel count stabilises (up to 30 rounds, 1.5 s settle between each). Without
+   this, a 125-contest page silently returns only ~50 contests.
+
+2. **Vote-method toggle**: Per-contest vote totals split by Advanced Voting /
+   Election Day / Absentee by Mail / Provisional are only present in the HTML
+   *after* clicking each panel's `button[role="checkbox"]` toggle. The client's
+   `_click_all_vote_method_buttons()` clicks every toggle and waits for re-render;
+   then `parser.py` parses the resulting `<table class="contest-table">`.
+   Pass `include_vote_methods=True` to opt in (significantly slower).
 
 ---
 
@@ -152,6 +179,21 @@ python -m ElectionStats.tests.integration.test_all_states_smoke --nc-only
 ```
 
 Exit code is 0 on success, 1 if any state fails.
+
+### Georgia smoke test
+
+```bash
+cd inst/python
+
+# Single year, state level (fast — skips county scraping)
+python -m Georgia.tests.test_ga_smoke
+
+# With vote-method breakdown
+python -m Georgia.tests.test_ga_smoke --vote-methods
+
+# Specific year
+python -m Georgia.tests.test_ga_smoke --year 2022
+```
 
 ### Other integration tests
 
@@ -225,6 +267,35 @@ nrow(df)  # should be > 0
 
 ---
 
+## Key data flow (Georgia SOS)
+
+```
+scrape_elections(state = "georgia", year_from = 2024, year_to = 2024)   [R]
+  └─ .scrape_ga(year_from=2024, year_to=2024, level="all",
+                include_vote_methods=FALSE)                               [R]
+       └─ registry.scrape("georgia_results", ...)                        [Python]
+            └─ _scrape_ga()                                              [Python]
+                 └─ get_ga_election_results(year_from, year_to, ...)
+                      └─ GaElectionPipeline.run()
+                           ├─ _discover_elections(year)
+                           │    → list of election slugs/URLs
+                           ├─ _scrape_state(url)
+                           │    ├─ GaElectionClient.get_election_page[_with_vote_methods]()
+                           │    │    ├─ Playwright: navigate + _scroll_to_load_all()
+                           │    │    └─ [optional] _click_all_vote_method_buttons()
+                           │    └─ parser.parse_state_results(html)
+                           │         → (state_df, vote_method_df, county_urls)
+                           └─ _scrape_county(url)  [parallel, --county-workers]
+                                ├─ GaElectionClient.get_county_page[_with_vote_methods]()
+                                └─ parser.parse_county_results(html)
+                                     → (county_df, vote_method_df)
+```
+
+Result dict keys: `"state"`, `"county"`, `"vote_method_state"`, `"vote_method_county"`
+(last two only when `include_vote_methods=True`).
+
+---
+
 ## Key data flow (ElectionStats classic)
 
 ```
@@ -265,6 +336,44 @@ County rows left-joined with state-level candidate metadata on
 
 ### `level = "all"` (default)
 Returns a named R list with `$state` and `$county` data frames.
+
+---
+
+## Georgia output schema
+
+### `state_df` / `county_df`
+
+One row per candidate per election (state) or per candidate per county per election (county).
+
+| Column | Description |
+|---|---|
+| `election_date` | Date of the election (from page header) |
+| `election_name` | Human-readable election name (e.g. "2024 Nov General") |
+| `election_slug` | URL slug (e.g. `2024NovGen`) |
+| `result_status` | Reporting status (e.g. "100% Reporting") |
+| `office` | Office name |
+| `district` | District / jurisdiction |
+| `vote_for` | Number of seats contested ("Vote for N") |
+| `localities_reporting` | "X/Y" localities reporting string |
+| `candidate` | Candidate name (cleaned — `(I)` and party suffix stripped) |
+| `party` | Party abbreviation |
+| `is_incumbent` | `True` if `(I)` appears in raw name; `False` otherwise |
+| `is_winner` | Always `None` — winner marker absent from GA SOS HTML |
+| `votes` | Vote total for the candidate |
+| `pct` | Percentage of votes |
+| `county` | County name (`county_df` only) |
+
+### `vote_method_state_df` / `vote_method_county_df`
+
+Same rows as above, with `votes` split by method:
+
+| Column | Description |
+|---|---|
+| `votes_advanced` | Advanced Voting ballots |
+| `votes_election_day` | Election Day ballots |
+| `votes_absentee` | Absentee by Mail ballots |
+| `votes_provisional` | Provisional ballots |
+| `votes_total` | Sum of all methods |
 
 ---
 

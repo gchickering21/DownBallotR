@@ -38,6 +38,9 @@ source ../../downBallotPython/bin/activate
 | Fast/lightweight mode | `python download_all_data.py --section municipal --fast` |
 | Parallel workers | `python download_all_data.py --section state_elections --workers 4` |
 | Preview without downloading | `python download_all_data.py --dry-run` |
+| Georgia — all years, state + county | `python download_all_data.py --section georgia` |
+| Georgia — 2024 only, state totals only | `python download_all_data.py --section georgia --ga-year-from 2024 --ga-year-to 2024 --ga-level state` |
+| Georgia — with vote-method breakdown | `python download_all_data.py --section georgia --vote-methods` |
 
 ---
 
@@ -47,10 +50,20 @@ source ../../downBallotPython/bin/activate
 |---|---|---|
 | `--section` | `all` | Which section to run. See [Sections](#sections) below. |
 | `--state` | all states | Restrict `election_stats` to one state (e.g. `new_york`). |
-| `--fast` | off | Use lightweight scrape modes (no vote counts). |
+| `--fast` | off | Use lightweight scrape modes (no vote counts). Has no effect on `georgia`. |
 | `--workers N` | `1` | Number of parallel download threads. See [Parallelism](#parallelism). |
 | `--output-dir PATH` | `<repo>/data/` | Root folder for output CSV files. |
 | `--dry-run` | off | Print tasks without downloading anything. |
+
+### Georgia-specific options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--ga-year-from YEAR` | `2012` | First year to download for Georgia. |
+| `--ga-year-to YEAR` | current year | Last year to download for Georgia. |
+| `--ga-level` | `all` | `all` — state + county; `state` — statewide totals only (much faster); `county` — county-level only. |
+| `--vote-methods` | off | Also capture per-contest vote-method breakdowns (Advanced Voting / Election Day / Absentee by Mail / Provisional). Adds extra Playwright clicks per page; significantly slower. |
+| `--county-workers N` | `4` | Parallel Chromium browsers for county scraping. Each is a separate process — keep ≤ 6 to avoid exhausting memory. |
 
 ---
 
@@ -206,6 +219,73 @@ data/Ballotpedia/municipal/municipal_mayoral_{year}.csv
 
 ---
 
+### `georgia`
+
+Scrapes the Georgia Secretary of State election results site for all elections
+from 2012 to the present.  The site is a JavaScript-rendered Angular SPA
+(results.sos.ga.gov); all scraping uses a headless Chromium browser via Playwright.
+
+Each year's download collects every election held in that year (primaries, runoffs,
+generals) and optionally scrapes all 159 counties in parallel.
+
+```bash
+# All years (2012–present), state + county totals
+python download_all_data.py --section georgia
+
+# Recent years only
+python download_all_data.py --section georgia --ga-year-from 2020
+
+# Single year
+python download_all_data.py --section georgia --ga-year-from 2024 --ga-year-to 2024
+
+# Statewide totals only — skips all 159-county scrape (much faster)
+python download_all_data.py --section georgia --ga-level state
+
+# Include vote-method breakdown (Advanced Voting / Election Day / Absentee / Provisional)
+python download_all_data.py --section georgia --vote-methods
+
+# All options combined
+python download_all_data.py --section georgia \
+    --ga-year-from 2020 --ga-year-to 2024 \
+    --ga-level all \
+    --vote-methods \
+    --county-workers 4
+```
+
+| Years | Granularity | Contents |
+|---|---|---|
+| 2012–present | State, County | Candidate results, party, incumbency, vote totals, pct, election date, result status, vote-for-N, localities reporting |
+
+**Output:**
+```
+data/georgia/ga_{year}_state.csv          # statewide candidate totals
+data/georgia/ga_{year}_county.csv         # per-county candidate totals
+```
+
+With `--vote-methods`, additionally:
+```
+data/georgia/ga_{year}_vote_method_state.csv   # per-method statewide
+data/georgia/ga_{year}_vote_method_county.csv  # per-method by county
+```
+
+**Vote-method columns** (in `vote_method_state` / `vote_method_county`):
+`votes_advanced`, `votes_election_day`, `votes_absentee`, `votes_provisional`, `votes_total`
+
+> **Performance notes:**
+>
+> - County scraping spawns up to `--county-workers` (default 4) Chromium processes
+>   in parallel per election.  A single year with several elections can take 20–60
+>   minutes depending on network speed.  Use `--ga-level state` to skip county scraping
+>   when only statewide totals are needed.
+>
+> - `--vote-methods` adds a Playwright click-and-re-render step for every contest
+>   panel (50–125+ per page).  Budget an extra 5–15 minutes per election page.
+>
+> - The outer loop over years runs sequentially; parallelism within each year is
+>   controlled by `--county-workers`.
+
+---
+
 ## Fast Mode {#fast-mode}
 
 `--fast` switches every section to a lightweight scrape that skips vote counts
@@ -219,6 +299,7 @@ full download.
 | `municipal` | `mode=results` — full candidate + vote data per location | `mode=links` — location index + sub-URLs only |
 | `election_stats` | always full | always full |
 | `nc` | always full | always full |
+| `georgia` | always full | always full (use `--ga-level state` to reduce scope) |
 
 ---
 
@@ -238,25 +319,34 @@ python download_all_data.py --section municipal --workers 3
 
 # ElectionStats classic states only — safe to parallelise
 python download_all_data.py --section election_stats --state virginia --workers 1
+
+# Georgia — county-level parallelism is controlled per-election by --county-workers
+# The year loop itself is always sequential (--workers has no effect on georgia)
+python download_all_data.py --section georgia --county-workers 4
 ```
 
 **Recommended worker counts:**
 
-| Section | Recommended workers |
-|---|---|
-| `state_elections` | 4–8 |
-| `municipal --fast` | 4–8 |
-| `municipal` (full) | 2–3 |
-| `election_stats` (VA / MA / CO / NH) | 4 |
-| `election_stats` (includes SC / NM / NY) | 1 |
-| `school_board` full | 1 |
-| `nc` | 1 |
+| Section | Recommended `--workers` | Notes |
+|---|---|---|
+| `state_elections` | 4–8 | HTTP only — safe |
+| `municipal --fast` | 4–8 | HTTP only — safe |
+| `municipal` (full) | 2–3 | Moderate HTTP load |
+| `election_stats` (VA / MA / CO / NH) | 4 | HTTP only — safe |
+| `election_stats` (includes SC / NM / NY) | 1 | Playwright — not thread-safe |
+| `school_board` full | 1 | Playwright fallback — not thread-safe |
+| `nc` | 1 | Single large ZIP pipeline |
+| `georgia` | 1 (use `--county-workers` instead) | County parallelism is internal |
 
 > **Why the limit?** South Carolina, New Mexico, New York (ElectionStats), and
 > `school_board` full mode all use a Playwright headless Chromium browser.
 > Playwright's synchronous API is not thread-safe, so running multiple Playwright
 > tasks in parallel can cause crashes.  HTTP-only sections (classic ElectionStats
 > states, `state_elections`, `municipal --fast`) are safe to parallelise.
+>
+> Georgia uses Playwright internally but manages its own parallelism via
+> `--county-workers` (separate Chromium processes per county).  The year-level
+> outer loop always runs sequentially regardless of `--workers`.
 
 ---
 
@@ -292,6 +382,17 @@ data/
       ...
       municipal_mayoral_2026.csv
       ...
+
+  georgia/
+    ga_2012_state.csv
+    ga_2012_county.csv
+    ga_2013_state.csv
+    ga_2013_county.csv
+    ...
+    ga_2024_state.csv
+    ga_2024_county.csv
+    ga_2024_vote_method_state.csv    # only with --vote-methods
+    ga_2024_vote_method_county.csv   # only with --vote-methods
 ```
 
 ---
@@ -305,6 +406,9 @@ and only missing files will be downloaded.
 ```bash
 # Resume a partial municipal download
 python download_all_data.py --section municipal
+
+# Resume a partial Georgia download
+python download_all_data.py --section georgia --ga-year-from 2012
 ```
 
 To force a re-download, delete the relevant CSV file first.
@@ -318,6 +422,7 @@ Preview all tasks without downloading anything:
 ```bash
 python download_all_data.py --dry-run
 python download_all_data.py --section municipal --dry-run
+python download_all_data.py --section georgia --ga-year-from 2022 --vote-methods --dry-run
 ```
 
 ---
@@ -338,3 +443,5 @@ python download_all_data.py --section municipal --dry-run
 | Ballotpedia | All 50 states + DC | 2024–present | Federal/State/Local | State election candidates + vote counts |
 | Ballotpedia | All 50 states + DC | 2014–present | Municipality | Municipal candidate + vote data |
 | Ballotpedia | All 50 states + DC | 2020–present | Municipality | Mayoral candidate + vote data |
+| GA SOS | Georgia | 2012–present | State, County | Candidate results, incumbency, vote totals, pct, election metadata |
+| GA SOS (vote methods) | Georgia | 2012–present | State, County | Per-method vote counts (Advanced / Election Day / Absentee / Provisional) |

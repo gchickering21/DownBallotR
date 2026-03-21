@@ -39,6 +39,7 @@ from .helpers import (
     _BASE_URL,
     _current_year,
 )
+from text_utils import strip_trailing_parens, extract_party_from_parens
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -474,14 +475,13 @@ class SchoolBoardScraper(BallotpediaBaseScraper):
                         candidate_url = ""
 
                     # Strip trailing party "(Party)" to isolate name
-                    candidate = re.sub(r"\s*\([^)]+\)\s*$", "", candidate).strip()
+                    candidate = strip_trailing_parens(candidate)
                     if not candidate:
                         continue
 
                     # Party: extract "(Party)" from full cell text
                     full_text = self._clean(text_cells[0])
-                    party_m = re.search(r"\(([^)]+)\)\s*$", full_text)
-                    party = party_m.group(1).strip() if party_m else ""
+                    party = extract_party_from_parens(full_text)
 
                     # Incumbent: "(i)" anywhere in the cell text
                     is_incumbent = "(i)" in full_text

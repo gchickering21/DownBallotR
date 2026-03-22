@@ -289,6 +289,13 @@
 #' @param end_year (\code{school_district} / \code{state_elections} /
 #'   \code{municipal_elections}) Latest year for a multi-year scrape when
 #'   \code{year} is \code{NULL} (default: current calendar year).
+#' @param max_county_workers (\code{general} / Georgia) Maximum number of
+#'   parallel workers used when fetching county-level results for Georgia
+#'   (default \code{4L}). Ignored for all other states.
+#' @param include_vote_methods (\code{general} / Georgia) If \code{TRUE},
+#'   also return a vote-method breakdown table (Advance in Person, Election
+#'   Day, Absentee by Mail, Provisional) for Georgia results (default
+#'   \code{FALSE}). Ignored for all other states.
 #'
 #' @return A \code{data.frame}, or a named list with elements \code{$state}
 #'   and \code{$county} when \code{level = "all"} and \code{office =

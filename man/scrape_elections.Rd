@@ -16,7 +16,9 @@ scrape_elections(
   start_year = NULL,
   end_year = NULL,
   election_level = c("all", "federal", "state", "local"),
-  race_type = c("all", "mayoral")
+  race_type = c("all", "mayoral"),
+  max_county_workers = 4L,
+  include_vote_methods = FALSE
 )
 }
 \arguments{
@@ -90,6 +92,15 @@ returns state-level races only; \code{"local"} returns local races only.}
 page (2014–present), covering city, county, and mayoral races.
 \code{"mayoral"} uses the United_States_mayoral_elections page
 (2020–present), covering only mayoral races.}
+
+\item{max_county_workers}{(\code{general} / Georgia) Maximum number of
+parallel workers used when fetching county-level results for Georgia
+(default \code{4L}). Ignored for all other states.}
+
+\item{include_vote_methods}{(\code{general} / Georgia) If \code{TRUE},
+also return a vote-method breakdown table (Advance in Person, Election
+Day, Absentee by Mail, Provisional) for Georgia results (default
+\code{FALSE}). Ignored for all other states.}
 }
 \value{
 A \code{data.frame}, or a named list with elements \code{$state}

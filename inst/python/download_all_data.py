@@ -31,10 +31,10 @@ Georgia-specific options:
     --ga-level     LEVEL    State-only, county-only, or both (default: all)
                             Choices: all, state, county
     --vote-methods          Also capture per-contest vote-method breakdowns
-                            (Advanced Voting / Election Day / Absentee / Provisional).
+                            (Advance in Person / Election Day / Absentee / Provisional).
                             Adds extra Playwright clicks per page; significantly
                             slower but produces richer data.
-    --county-workers INT    Parallel Chromium browsers for county scraping (default: 4)
+    --county-workers INT    Parallel Chromium browsers for county scraping (default: 2)
 
 Output layout:
     data/
@@ -438,7 +438,7 @@ def download_georgia(
     ga_year_to: int = GA_YEAR_RANGE[1],
     ga_level: str = "all",
     vote_methods: bool = False,
-    county_workers: int = 4,
+    county_workers: int = 2,
     **_,
 ) -> list[bool]:
     """
@@ -640,17 +640,17 @@ def main() -> None:
         action="store_true",
         help=(
             "Capture per-contest vote-method breakdowns for Georgia "
-            "(Advanced Voting / Election Day / Absentee / Provisional). "
+            "(Advance in Person / Election Day / Absentee / Provisional). "
             "Requires extra Playwright clicks per page; significantly slower."
         ),
     )
     ga_group.add_argument(
         "--county-workers",
         type=int,
-        default=4,
+        default=2,
         metavar="N",
         help=(
-            "Parallel Chromium browsers for Georgia county scraping (default: 4). "
+            "Parallel Chromium browsers for Georgia county scraping (default: 2). "
             "Each worker is a separate process — keep ≤ 6 to avoid exhausting memory."
         ),
     )

@@ -14,7 +14,7 @@ Vote-method breakdown
 When ``include_vote_methods=True`` the client clicks every contest's "Vote
 Method" toggle before capturing the HTML.  Angular replaces the bar-chart view
 with a ``<table class="contest-table">`` showing votes split by method
-(Advanced Voting / Election Day / Absentee by Mail / Provisional).  A
+(Advance in Person / Election Day / Absentee by Mail / Provisional).  A
 ``vote_method_df`` is returned alongside the normal DataFrames.
 
 Public entry points
@@ -50,7 +50,7 @@ class GaElectionPipeline:
     level : str
         What to scrape: ``'all'`` (default), ``'state'``, or ``'county'``.
     max_county_workers : int
-        Parallel Chromium browsers for county scraping (default 4).
+        Parallel Chromium browsers for county scraping (default 2).
     include_vote_methods : bool
         When True, clicks each contest's "Vote Method" toggle before capturing
         the HTML, returning per-vote-method vote counts alongside the normal
@@ -64,7 +64,7 @@ class GaElectionPipeline:
         headless: bool = True,
         sleep_s: float = 3.0,
         level: str = "all",
-        max_county_workers: int = 4,
+        max_county_workers: int = 2,
         include_vote_methods: bool = False,
     ):
         if level not in ("all", "state", "county"):
@@ -249,7 +249,7 @@ def get_ga_election_results(
     year_from: "int | None" = None,
     year_to: "int | None" = None,
     level: str = "all",
-    max_county_workers: int = 4,
+    max_county_workers: int = 2,
     include_vote_methods: bool = False,
 ):
     """Return Georgia election results.
@@ -269,10 +269,10 @@ def get_ga_election_results(
           - ``'state'``  statewide totals only (skips county scraping).
           - ``'county'`` county-level only.
     max_county_workers : int
-        Parallel Chromium browsers for county scraping (default 4).
+        Parallel Chromium browsers for county scraping (default 2).
     include_vote_methods : bool
         When True, expands each contest's vote-method breakdown table and
-        returns per-method vote counts (Advanced Voting, Election Day,
+        returns per-method vote counts (Advance in Person, Election Day,
         Absentee by Mail, Provisional) in addition to the normal totals.
         Adds ``vote_method_state`` / ``vote_method_county`` to the result dict.
         Note: vote-method expansion requires clicking a toggle per contest and

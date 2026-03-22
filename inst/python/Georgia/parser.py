@@ -61,7 +61,7 @@ Per-contest panel (vote-method expanded view)::
       <thead>
         <tr>
           <th>Candidate</th>
-          <th>Advanced Voting</th>
+          <th>Advance in Person</th>
           <th>Election Day</th>
           <th>Absentee by Mail</th>
           <th>Provisional</th>
@@ -71,7 +71,7 @@ Per-contest panel (vote-method expanded view)::
       <tbody>
         <tr>
           <td><div class="candidate">Donald J. Trump (Rep)</div>…</td>
-          <td><span> 1,916,442 </span></td>   ← Advanced Voting
+          <td><span> 1,916,442 </span></td>   ← Advance in Person
           <td><span>   647,080 </span></td>   ← Election Day
           <td><span>    98,151 </span></td>   ← Absentee by Mail
           <td><span>     1,444 </span></td>   ← Provisional
@@ -144,7 +144,7 @@ _VM_STATE_COLS = [
     "candidate",
     "party",
     "is_incumbent",
-    "votes_advanced",
+    "votes_advance_in_person",
     "votes_election_day",
     "votes_absentee",
     "votes_provisional",
@@ -165,7 +165,7 @@ _VM_COUNTY_COLS = [
     "candidate",
     "party",
     "is_incumbent",
-    "votes_advanced",
+    "votes_advance_in_person",
     "votes_election_day",
     "votes_absentee",
     "votes_provisional",
@@ -174,6 +174,8 @@ _VM_COUNTY_COLS = [
 
 # Regex to strip trailing " (Party)" suffix from candidate name strings
 _PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
+# Regex to capture trailing " - Party" suffix (e.g. "Star Black - Rep")
+_DASH_PARTY_RE = re.compile(r"\s+-\s+(\S+)\s*$")
 # Regex to parse "X/Y" localities-reporting string
 _REPORTING_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
 
@@ -262,16 +264,33 @@ def _panel_localities_reporting(panel) -> str | None:
     return None
 
 
-def _parse_candidate_name(raw_name: str) -> tuple[str, bool]:
-    """Return (clean_candidate_name, is_incumbent) from a raw name string.
+def _parse_candidate_name(raw_name: str) -> tuple[str, str, bool]:
+    """Return (clean_candidate_name, inline_party, is_incumbent) from a raw name string.
 
     Georgia marks incumbents with "(I)" inline, e.g. "Earl Carter (I) (Rep)".
-    The cleaned name has the party suffix and any trailing "(I)" stripped.
+    Party may appear as a parenthesised suffix "(Rep)" or a dash suffix "- Rep".
+    The cleaned name has both the party suffix and any trailing "(I)" stripped.
+    ``inline_party`` is the party extracted from the name string, or ``""`` if
+    none was found (use the dedicated HTML party element in that case).
     """
     is_incumbent = "(I)" in raw_name
-    candidate = _PARTY_SUFFIX_RE.sub("", raw_name).strip()
+    inline_party = ""
+
+    # Try "(Party)" suffix first
+    m_paren = _PARTY_SUFFIX_RE.search(raw_name)
+    if m_paren:
+        candidate = _PARTY_SUFFIX_RE.sub("", raw_name).strip()
+    else:
+        # Try " - Party" suffix (e.g. "Star Black - Rep")
+        m_dash = _DASH_PARTY_RE.search(raw_name)
+        if m_dash:
+            inline_party = m_dash.group(1)
+            candidate = raw_name[: m_dash.start()].strip()
+        else:
+            candidate = raw_name
+
     candidate = re.sub(r"\s*\(I\)\s*$", "", candidate).strip()
-    return candidate, is_incumbent
+    return candidate, inline_party, is_incumbent
 
 
 def _parse_ballot_options(panel) -> list[dict]:
@@ -286,7 +305,7 @@ def _parse_ballot_options(panel) -> list[dict]:
             ".//*[contains(@class,'me-2') and not(contains(@class,'party-marker'))]"
         )
         raw_name = _clean(name_divs[0].text_content()) if name_divs else ""
-        candidate, is_incumbent = _parse_candidate_name(raw_name)
+        candidate, inline_party, is_incumbent = _parse_candidate_name(raw_name)
         if not candidate:
             continue
 
@@ -294,6 +313,8 @@ def _parse_ballot_options(panel) -> list[dict]:
             ".//*[contains(@class,'text-muted') and contains(@class,'small')]"
         )
         party = _clean(party_divs[0].text_content()) if party_divs else ""
+        if not party:
+            party = inline_party
 
         pct_spans = opt.xpath(
             ".//*[contains(@class,'percentage')]"
@@ -321,7 +342,7 @@ def _parse_ballot_options(panel) -> list[dict]:
 def _parse_contest_table(panel) -> list[dict]:
     """Return candidate dicts from the vote-method expanded table view.
 
-    Expected columns (in order): Candidate, Advanced Voting, Election Day,
+    Expected columns (in order): Candidate, Advance in Person, Election Day,
     Absentee by Mail, Provisional, [optional extra], Total Votes.
 
     The ``<tfoot>`` Totals row is skipped.
@@ -332,13 +353,12 @@ def _parse_contest_table(panel) -> list[dict]:
 
     table = tables[0]
 
-    # Parse column order from <thead>
+    # Parse column order from <thead> — keyed lowercase for case-insensitive lookup
     headers = [_clean(th.text_content()) for th in table.xpath(".//thead//th")]
-    # Map column name → index (0-based)
-    col_map = {h: i for i, h in enumerate(headers)}
+    col_map = {h.lower(): i for i, h in enumerate(headers)}
 
     def _get_col(cells, name: str) -> int | None:
-        idx = col_map.get(name)
+        idx = col_map.get(name.lower())
         if idx is None or idx >= len(cells):
             return None
         return _parse_votes(_clean(cells[idx].text_content()))
@@ -359,7 +379,7 @@ def _parse_contest_table(panel) -> list[dict]:
             ".//*[contains(concat(' ',normalize-space(@class),' '),' candidate ')]"
         )
         raw_name = _clean(name_div[0].text_content()) if name_div else first_cell_text
-        candidate, is_incumbent = _parse_candidate_name(raw_name)
+        candidate, inline_party, is_incumbent = _parse_candidate_name(raw_name)
         if not candidate:
             continue
 
@@ -367,12 +387,14 @@ def _parse_contest_table(panel) -> list[dict]:
             ".//*[contains(@class,'text-muted') and contains(@class,'small')]"
         )
         party = _clean(party_div[0].text_content()) if party_div else ""
+        if not party:
+            party = inline_party
 
         results.append({
             "candidate":        candidate,
             "party":            party,
             "is_incumbent":     is_incumbent,
-            "votes_advanced":   _get_col(cells, "Advanced Voting"),
+            "votes_advance_in_person":   _get_col(cells, "Advance in Person"),
             "votes_election_day": _get_col(cells, "Election Day"),
             "votes_absentee":   _get_col(cells, "Absentee by Mail"),
             "votes_provisional": _get_col(cells, "Provisional"),
@@ -417,7 +439,7 @@ def parse_state_results(
         ``election_name``, ``election_year``, ``election_slug``,
         ``election_date``, ``result_status``, ``office``, ``vote_for``,
         ``localities_reporting``, ``candidate``, ``party``, ``is_incumbent``,
-        ``votes_advanced``, ``votes_election_day``, ``votes_absentee``,
+        ``votes_advance_in_person``, ``votes_election_day``, ``votes_absentee``,
         ``votes_provisional``, ``votes_total``.
         Empty when the page was fetched without vote-method expansion.
     county_urls : list[str]

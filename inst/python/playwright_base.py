@@ -164,12 +164,15 @@ class BasePlaywrightClient:
             )
 
     def _wait_and_sleep(
-        self, selector: str, timeout_ms: int = _SELECTOR_TIMEOUT_MS
+        self,
+        selector: str,
+        timeout_ms: int = _SELECTOR_TIMEOUT_MS,
+        warn_on_timeout: bool = True,
     ) -> None:
         """Wait for *selector* to appear, then sleep to let JS settle.
 
-        On selector timeout the warning is logged and execution continues so
-        the caller can inspect whatever HTML loaded.
+        On selector timeout execution continues so the caller can inspect
+        whatever HTML loaded.
 
         Parameters
         ----------
@@ -177,11 +180,17 @@ class BasePlaywrightClient:
             CSS or XPath selector to wait for.
         timeout_ms : int
             Milliseconds before giving up on the selector (default 45 000).
+        warn_on_timeout : bool
+            When True (default) print a ``[WARN]`` line on timeout.  Pass
+            False for callers where an empty page is an expected outcome (e.g.
+            county pages with no contests) so that routine empty-county loads
+            don't flood the log.
         """
         assert self.page is not None
         try:
             self.page.wait_for_selector(selector, timeout=timeout_ms)
         except PlaywrightTimeoutError:
-            print(f"  [WARN] Timed out waiting for selector: {selector!r}")
+            if warn_on_timeout:
+                print(f"  [WARN] Timed out waiting for selector: {selector!r}")
         if self.sleep_s:
             time.sleep(self.sleep_s)

@@ -16,7 +16,7 @@ Vote-method breakdown
 ---------------------
 Each contest panel has a "Vote Method" toggle button.  When clicked, Angular
 replaces the bar-chart view with a table showing votes split by method
-(Advanced Voting / Election Day / Absentee by Mail / Provisional).
+(Advance in Person / Election Day / Absentee by Mail / Provisional).
 ``get_election_page_with_vote_methods`` and
 ``get_county_page_with_vote_methods`` perform this interaction before returning
 the HTML.
@@ -104,7 +104,7 @@ class GaPlaywrightClient(BasePlaywrightClient):
 
         Loads the page, scrolls to render all panels, then clicks every panel's
         "Vote Method" toggle so Angular replaces bar-chart views with per-method
-        vote tables (Advanced Voting / Election Day / Absentee by Mail /
+        vote tables (Advance in Person / Election Day / Absentee by Mail /
         Provisional).
 
         Parameters
@@ -131,6 +131,10 @@ class GaPlaywrightClient(BasePlaywrightClient):
         but are filtered to a single county.  Virtual scrolling may still apply
         for counties with many local contests.
 
+        A timeout waiting for ballot-item panels is silenced here because some
+        counties legitimately have no contests for a given election; the pipeline
+        will simply produce an empty DataFrame for those counties.
+
         Parameters
         ----------
         url : str
@@ -143,13 +147,16 @@ class GaPlaywrightClient(BasePlaywrightClient):
             Fully rendered HTML after JavaScript execution.
         """
         self._navigate(url)
-        self._wait_and_sleep(_PANEL_SEL)
+        self._wait_and_sleep(_PANEL_SEL, warn_on_timeout=False)
         self._scroll_to_load_all()
         assert self.page is not None
         return self.page.content()
 
     def get_county_page_with_vote_methods(self, url: str) -> str:
         """Render a per-county election page with all vote-method breakdowns.
+
+        A timeout waiting for ballot-item panels is silenced here because some
+        counties legitimately have no contests for a given election.
 
         Parameters
         ----------
@@ -162,7 +169,7 @@ class GaPlaywrightClient(BasePlaywrightClient):
             Fully rendered HTML with vote-method tables for every contest.
         """
         self._navigate(url)
-        self._wait_and_sleep(_PANEL_SEL)
+        self._wait_and_sleep(_PANEL_SEL, warn_on_timeout=False)
         self._scroll_to_load_all()
         self._click_all_vote_method_buttons()
         assert self.page is not None
@@ -220,8 +227,14 @@ class GaPlaywrightClient(BasePlaywrightClient):
             (default 3.0).
         """
         assert self.page is not None
+        # If no panels loaded (page timed out or county has no contests), skip
+        # silently — the timeout warning from _wait_and_sleep is sufficient.
+        panels = self.page.query_selector_all(_PANEL_SEL)
+        if not panels:
+            return
         btns = self.page.query_selector_all(_VOTE_METHOD_BTN_SEL)
         if not btns:
+            # Panels loaded but no vote-method toggles — structure may have changed.
             print("[GA] WARNING: No vote-method buttons found; HTML unchanged.")
             return
         print(f"[GA]   Expanding vote-method breakdowns for {len(btns)} contest(s)...")

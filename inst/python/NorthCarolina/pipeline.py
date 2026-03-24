@@ -6,10 +6,10 @@ from typing import Iterable
 
 import pandas as pd
 
-from .discovery import discover_nc_results_zips
+from .discovery import discover_northcarolina_results_zips
 from .selection import select_elections
 from .io_utils import download_zip_bytes, read_results_pct_from_zip
-from .normalize import normalize_nc_results_cols, get_config
+from .normalize import normalize_northcarolina_results_cols, get_config
 from .aggregate import aggregate_to_county_level, aggregate_county_to_state
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
@@ -27,7 +27,7 @@ class NcElectionPipeline:
 
     def discover(self):
         # returns list[NcElectionZip] (or similar)
-        return discover_nc_results_zips()
+        return discover_northcarolina_results_zips()
 
     def _filter_elections(self, elections, start_date: date | None, end_date: date | None):
         # your selection.py should handle None bounds
@@ -113,7 +113,7 @@ class NcElectionPipeline:
         zip_bytes = download_zip_bytes(zip_url)
         _member, raw = read_results_pct_from_zip(zip_bytes)
 
-        norm = normalize_nc_results_cols(raw, fallback_election_date=election_date)
+        norm = normalize_northcarolina_results_cols(raw, fallback_election_date=election_date)
 
         county_df = aggregate_to_county_level(norm)
         state_df = aggregate_county_to_state(county_df)

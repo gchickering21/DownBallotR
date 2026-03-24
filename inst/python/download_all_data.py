@@ -14,6 +14,7 @@ Sections:
     state_elections     Ballotpedia state elections (2024-present, per state)
     municipal           Ballotpedia municipal/mayoral elections (2014-present)
     georgia             Georgia Secretary of State election results (2012-present)
+    connecticut         Connecticut CTEMS election results (2016-present)
     all                 All of the above (default)
 
 Options:
@@ -36,12 +37,18 @@ Georgia-specific options:
                             slower but produces richer data.
     --county-workers INT    Parallel Chromium browsers for county scraping (default: 2)
 
+Connecticut-specific options:
+    --ct-year-from INT      First year to download (default: 2000)
+    --ct-year-to   INT      Last year to download (default: current year)
+    --ct-level     LEVEL    What to download: all, state, or town (default: all)
+    --ct-town-workers INT   Parallel Chromium browsers for town scraping (default: 2)
+
 Output layout:
     data/
       election_stats/
         {state}/{state}_{year_from}_{year_to}_state.csv
         {state}/{state}_{year_from}_{year_to}_county.csv
-      nc_results/
+      northcarolina/
         nc_{year_from}_{year_to}_precinct.csv
         nc_{year_from}_{year_to}_county.csv
         nc_{year_from}_{year_to}_state.csv
@@ -58,6 +65,9 @@ Output layout:
         ga_{year}_county.csv              (per-county candidate totals)
         ga_{year}_vote_method_state.csv   (--vote-methods: per-method statewide)
         ga_{year}_vote_method_county.csv  (--vote-methods: per-method by county)
+      connecticut/
+        ct_{year}_state.csv               (statewide totals: federal + aggregated state/local)
+        ct_{year}_town.csv                (per-town candidate totals with election_level)
 """
 
 from __future__ import annotations
@@ -99,6 +109,7 @@ STATE_ELECTIONS_YEAR_RANGE = (2024, CURRENT_YEAR)
 MUNICIPAL_YEAR_RANGE       = (2014, CURRENT_YEAR)
 MAYORAL_YEAR_RANGE         = (2020, CURRENT_YEAR)
 GA_YEAR_RANGE              = (2012, CURRENT_YEAR)
+CT_YEAR_RANGE              = (2016, CURRENT_YEAR)
 
 # All 50 US states + DC (title-case full names expected by Ballotpedia scrapers)
 ALL_STATES: list[str] = [
@@ -281,7 +292,7 @@ def download_nc(output_dir: Path, *, dry_run: bool, **_) -> list[bool]:
     import datetime as _dt
 
     year_from, year_to = NC_YEAR_RANGE
-    base  = output_dir / "nc_results"
+    base  = output_dir / "northcarolina_results"
     stem  = f"nc_{year_from}_{year_to}"
     label = f"NC State Board of Elections  {year_from}–{year_to}  (precinct + county + state)"
 
@@ -540,6 +551,106 @@ def download_georgia(
     return results
 
 
+def download_connecticut(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    ct_year_from: int = CT_YEAR_RANGE[0],
+    ct_year_to: int = CT_YEAR_RANGE[1],
+    ct_level: str = "all",
+    ct_town_workers: int = 2,
+    **_,
+) -> list[bool]:
+    """
+    Connecticut CTEMS election results, one set of files per year.
+
+    For each year in [ct_year_from, ct_year_to], all elections held in that
+    year are scraped in a single pipeline call (the CTEMS site groups results
+    by election, discoverable from the dropdown on the landing page).
+
+    Town-level pages are scraped in parallel, one Chromium process per county
+    (--ct-town-workers controls concurrency).
+
+    Output files per year (ct_level='all'):
+      data/connecticut/ct_{year}_state.csv  — statewide totals (federal from
+                                              Summary page + state/local
+                                              aggregated from towns)
+      data/connecticut/ct_{year}_town.csv   — per-town candidate totals with
+                                              election_level classification
+
+    ct_level='state' omits town scraping (much faster; statewide only).
+    ct_level='town'  omits state aggregation (town-level DataFrame only).
+    """
+    base = output_dir / "connecticut"
+    results: list[bool] = []
+
+    for year in range(ct_year_from, ct_year_to + 1):
+        label = f"Connecticut CTEMS  {year}  level={ct_level}"
+        print(f"\n[{label}]")
+
+        # Build expected output paths based on ct_level
+        paths: dict[str, Path] = {}
+        if ct_level in ("all", "state"):
+            paths["state"] = base / f"ct_{year}_state.csv"
+        if ct_level in ("all", "town"):
+            paths["town"] = base / f"ct_{year}_town.csv"
+
+        if all(p.exists() for p in paths.values()):
+            print("  ↷ all output files exist, skipping")
+            results.append(True)
+            continue
+
+        if dry_run:
+            for key, p in paths.items():
+                status = "exists" if p.exists() else "would write"
+                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
+            results.append(True)
+            continue
+
+        try:
+            result = registry.scrape(
+                "connecticut_results",
+                year_from=year,
+                year_to=year,
+                level=ct_level,
+                max_town_workers=ct_town_workers,
+            )
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            results.append(False)
+            continue
+
+        ok = True
+        try:
+            if isinstance(result, dict):
+                for key, df in result.items():
+                    if key not in paths:
+                        continue
+                    if df.empty:
+                        print(f"  ⚠ empty result for '{key}' — skipping write")
+                    else:
+                        _save(df, paths[key])
+            elif isinstance(result, pd.DataFrame):
+                key = ct_level
+                if key in paths:
+                    if result.empty:
+                        print("  ⚠ empty result — skipping write")
+                    else:
+                        _save(result, paths[key])
+            else:
+                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
+                ok = False
+        except Exception:
+            print("  ✗ ERROR while saving result:")
+            traceback.print_exc()
+            ok = False
+
+        results.append(ok)
+
+    return results
+
+
 # ── Dispatch table ─────────────────────────────────────────────────────────────
 
 SECTIONS: dict[str, Callable] = {
@@ -549,6 +660,7 @@ SECTIONS: dict[str, Callable] = {
     "state_elections":  download_state_elections,
     "municipal":        download_municipal,
     "georgia":          download_georgia,
+    "connecticut":      download_connecticut,
 }
 
 
@@ -655,6 +767,42 @@ def main() -> None:
         ),
     )
 
+    # Connecticut-specific options
+    ct_group = parser.add_argument_group("connecticut options")
+    ct_group.add_argument(
+        "--ct-year-from",
+        type=int,
+        default=CT_YEAR_RANGE[0],
+        metavar="YEAR",
+        help=f"First year to download for Connecticut (default: {CT_YEAR_RANGE[0]}).",
+    )
+    ct_group.add_argument(
+        "--ct-year-to",
+        type=int,
+        default=CT_YEAR_RANGE[1],
+        metavar="YEAR",
+        help="Last year to download for Connecticut (default: current year).",
+    )
+    ct_group.add_argument(
+        "--ct-level",
+        choices=["all", "state", "town"],
+        default="all",
+        help=(
+            "What to scrape for Connecticut: statewide totals only (state), "
+            "town-level only (town), or both (all, default)."
+        ),
+    )
+    ct_group.add_argument(
+        "--ct-town-workers",
+        type=int,
+        default=2,
+        metavar="N",
+        help=(
+            "Parallel Chromium browsers for Connecticut town scraping (default: 2). "
+            "One browser per county — keep ≤ 4 to avoid memory exhaustion."
+        ),
+    )
+
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir).expanduser().resolve()
@@ -674,6 +822,10 @@ def main() -> None:
         print(f"GA level         : {args.ga_level}")
         print(f"GA vote methods  : {args.vote_methods}")
         print(f"GA county workers: {args.county_workers}")
+    if args.section in ("connecticut", "all"):
+        print(f"CT year range    : {args.ct_year_from}–{args.ct_year_to}")
+        print(f"CT level         : {args.ct_level}")
+        print(f"CT town workers  : {args.ct_town_workers}")
     print("=" * 70)
 
     to_run = SECTIONS if args.section == "all" else {args.section: SECTIONS[args.section]}
@@ -695,6 +847,11 @@ def main() -> None:
             ga_level=args.ga_level,
             vote_methods=args.vote_methods,
             county_workers=args.county_workers,
+            # Connecticut-specific
+            ct_year_from=args.ct_year_from,
+            ct_year_to=args.ct_year_to,
+            ct_level=args.ct_level,
+            ct_town_workers=args.ct_town_workers,
         )
         all_results.extend(section_results)
 

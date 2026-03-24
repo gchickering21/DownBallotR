@@ -45,7 +45,7 @@ def _parse_iso_date(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
 
 
-def load_nc_results_config(config_path: str | Path) -> NcResultsConfig:
+def load_northcarolina_results_config(config_path: str | Path) -> NcResultsConfig:
     """
     Load NC results_pct normalization config from JSON.
     Keeps the main code small and makes updates easy/safe.
@@ -298,13 +298,13 @@ def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) 
 # Public API
 # =========================================================
 def get_config() -> NcResultsConfig:
-    _DEFAULT_CONFIG_PATH = Path(__file__).with_name("nc_results_pct_config.json")
-    _CONFIG: NcResultsConfig = load_nc_results_config(_DEFAULT_CONFIG_PATH)
+    _DEFAULT_CONFIG_PATH = Path(__file__).with_name("northcarolina_results_pct_config.json")
+    _CONFIG: NcResultsConfig = load_northcarolina_results_config(_DEFAULT_CONFIG_PATH)
 
     return _CONFIG
 
 
-def normalize_nc_results_cols(
+def normalize_northcarolina_results_cols(
     df: pd.DataFrame,
     fallback_election_date: Optional[date] = None,
 ) -> pd.DataFrame:

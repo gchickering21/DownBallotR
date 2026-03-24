@@ -81,6 +81,48 @@ def _scrape_ga(
     )
 
 
+def _scrape_ct(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    level: str = "all",
+    max_town_workers: int = 2,
+    **_,
+):
+    """Scrape Connecticut CTEMS election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive.
+    year_to : int | None
+        End year, inclusive.
+    level : str
+        ``'all'`` (default) — dict with ``'state'`` and ``'town'`` DataFrames;
+        ``'state'`` — statewide totals only (no town scraping, much faster);
+        ``'town'`` — town-level DataFrame only.
+    max_town_workers : int
+        Parallel Chromium browsers for town scraping (default 2).
+    """
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+
+    label = (
+        f"{year_from}–{year_to}" if year_from and year_to
+        else f"{year_from}–" if year_from
+        else f"–{year_to}" if year_to
+        else "all years"
+    )
+    print(f"[CT] Starting scrape | {label} | level={level!r}")
+
+    from Connecticut.pipeline import get_ct_election_results
+    return get_ct_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        max_town_workers=max_town_workers,
+    )
+
+
 def _scrape_nc(
     year_from: "int | None" = None,
     year_to: "int | None" = None,
@@ -453,8 +495,11 @@ _YEAR_RANGES: dict = {
         "new_mexico":     (2000, 2024),
         "south_carolina": (2008, 2025),
     },
-    "nc_results": {
+    "northcarolina_results": {
         "NC": (2000, 2025),
+    },
+    "connecticut_results": {
+        "CT": (2016, None),  # open-ended; discovery determines actual availability
     },
     "georgia_results": {
         "GA": (2000, None),
@@ -491,7 +536,12 @@ _SOURCES: dict = {
         "scrape_fn": _scrape_ga,
         "states": ["GA"],
     },
-    "nc_results": {
+    "connecticut_results": {
+        "description": "Connecticut CTEMS election results (ctemspublic.tgstg.net)",
+        "scrape_fn": _scrape_ct,
+        "states": ["CT"],
+    },
+    "northcarolina_results": {
         "description": "North Carolina local election results (NC State Board of Elections)",
         "scrape_fn": _scrape_nc,
         "states": ["NC"],
@@ -560,12 +610,12 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
     Parameters
     ----------
     source : str
-        One of 'nc_results', 'election_stats', 'ballotpedia',
+        One of 'northcarolina_results', 'election_stats', 'ballotpedia',
         'ballotpedia_elections'.
     state : str | None
         State key for 'election_stats' (e.g. 'virginia').
         Pass None to get the earliest year across all ElectionStats states.
-        Ignored for 'nc_results', 'ballotpedia', and 'ballotpedia_elections'.
+        Ignored for 'northcarolina_results', 'ballotpedia', and 'ballotpedia_elections'.
 
     Returns
     -------
@@ -582,7 +632,7 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
         start, end = ranges["_all"]
         return {"start_year": start, "end_year": end or current_year}
 
-    if source == "nc_results":
+    if source == "northcarolina_results":
         start, end = ranges["NC"]
         return {"start_year": start, "end_year": end or current_year}
 
@@ -613,7 +663,7 @@ def scrape(source: str, **kwargs) -> "pd.DataFrame | dict":
     Parameters
     ----------
     source : str
-        One of 'nc_results', 'election_stats', 'ballotpedia',
+        One of 'northcarolina_results', 'election_stats', 'ballotpedia',
         'ballotpedia_elections'. Call list_sources() to see all options.
     **kwargs
         Passed through to the source's scrape function.

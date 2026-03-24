@@ -103,7 +103,6 @@ _STATE_COLS = [
     "election_date",
     "result_status",
     "office",
-    "vote_for",
     "localities_reporting",
     "candidate",
     "party",
@@ -111,6 +110,7 @@ _STATE_COLS = [
     "is_incumbent",
     "votes",
     "pct",
+    "url",
 ]
 
 _COUNTY_COLS = [
@@ -121,7 +121,6 @@ _COUNTY_COLS = [
     "result_status",
     "county",
     "office",
-    "vote_for",
     "localities_reporting",
     "candidate",
     "party",
@@ -129,6 +128,7 @@ _COUNTY_COLS = [
     "is_incumbent",
     "votes",
     "pct",
+    "url",
 ]
 
 # Vote-method breakdown DataFrame columns (state-level)
@@ -139,7 +139,6 @@ _VM_STATE_COLS = [
     "election_date",
     "result_status",
     "office",
-    "vote_for",
     "localities_reporting",
     "candidate",
     "party",
@@ -149,6 +148,7 @@ _VM_STATE_COLS = [
     "votes_absentee",
     "votes_provisional",
     "votes_total",
+    "url",
 ]
 
 # Vote-method breakdown DataFrame columns (county-level)
@@ -160,7 +160,6 @@ _VM_COUNTY_COLS = [
     "result_status",
     "county",
     "office",
-    "vote_for",
     "localities_reporting",
     "candidate",
     "party",
@@ -170,6 +169,7 @@ _VM_COUNTY_COLS = [
     "votes_absentee",
     "votes_provisional",
     "votes_total",
+    "url",
 ]
 
 # Regex to strip trailing " (Party)" suffix from candidate name strings
@@ -178,6 +178,9 @@ _PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
 _DASH_PARTY_RE = re.compile(r"\s+-\s+(\S+)\s*$")
 # Regex to parse "X/Y" localities-reporting string
 _REPORTING_RE = re.compile(r"(\d+)\s*/\s*(\d+)")
+# Regex to detect date-like strings (M/D/YY or M/D/YYYY) — these should not
+# be treated as localities-reporting fractions
+_DATE_RE = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
 
 
 # ---------------------------------------------------------------------------
@@ -233,23 +236,6 @@ def _panel_office(panel) -> str:
     return _clean(h1s[0].text_content()) if h1s else ""
 
 
-def _panel_vote_for(panel) -> int | None:
-    """Extract the number of seats to fill from 'Vote for N' in the panel header."""
-    spans = panel.xpath(
-        ".//*[contains(@class,'contest-header')]"
-        "//*[contains(@class,'h6')]"
-        "/span[contains(text(),'Vote for')]"
-    )
-    if not spans:
-        spans = panel.xpath(
-            ".//*[contains(@class,'h6')]/span[contains(text(),'Vote for')]"
-        )
-    if spans:
-        m = re.search(r"Vote for\s+(\d+)", spans[0].text_content(), re.I)
-        if m:
-            return int(m.group(1))
-    return None
-
 
 def _panel_localities_reporting(panel) -> str | None:
     """Extract 'X/Y' localities-reporting string from the panel footer."""
@@ -259,6 +245,8 @@ def _panel_localities_reporting(panel) -> str | None:
     )
     for span in bold_spans:
         txt = _clean(span.text_content())
+        if _DATE_RE.search(txt):
+            continue
         if _REPORTING_RE.search(txt):
             return txt
     return None
@@ -466,7 +454,6 @@ def parse_state_results(
         office = _panel_office(panel)
         if not office:
             continue
-        vote_for = _panel_vote_for(panel)
         localities_reporting = _panel_localities_reporting(panel)
         base = {
             "election_name":        election_info.name,
@@ -475,8 +462,8 @@ def parse_state_results(
             "election_date":        page_meta["election_date"],
             "result_status":        page_meta["result_status"],
             "office":               office,
-            "vote_for":             vote_for,
             "localities_reporting": localities_reporting,
+            "url":                  election_info.url,
         }
 
         # Vote-method table takes priority when present
@@ -520,6 +507,7 @@ def parse_county_results(
     html_str: str,
     county_name: str,
     election_info: GaElectionInfo,
+    url: str = "",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Parse one county's election results page.
 
@@ -549,7 +537,6 @@ def parse_county_results(
         office = _panel_office(panel)
         if not office:
             continue
-        vote_for = _panel_vote_for(panel)
         localities_reporting = _panel_localities_reporting(panel)
         base = {
             "election_name":        election_info.name,
@@ -559,8 +546,8 @@ def parse_county_results(
             "result_status":        page_meta["result_status"],
             "county":               county_name,
             "office":               office,
-            "vote_for":             vote_for,
             "localities_reporting": localities_reporting,
+            "url":                  url,
         }
 
         vm_cands = _parse_contest_table(panel)

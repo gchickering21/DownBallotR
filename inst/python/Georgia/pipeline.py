@@ -126,7 +126,7 @@ class GaElectionPipeline:
                 html = client.get_county_page_with_vote_methods(url)
             else:
                 html = client.get_county_page(url)
-        return parse_county_results(html, county, election)
+        return parse_county_results(html, county, election, url=url)
 
     # ── Orchestrator ───────────────────────────────────────────────────────────
 

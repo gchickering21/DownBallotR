@@ -41,7 +41,7 @@ DownBallotR/
 │   │
 │   ├── NorthCarolina/              # NC State Board of Elections scraper
 │   │   ├── pipeline.py             # NcElectionPipeline + get_nc_election_results()
-│   │   ├── discovery.py            # discover_nc_results_zips() — NCSBE index
+│   │   ├── discovery.py            # discover_northcarolina_results_zips() — NCSBE index
 │   │   ├── aggregate.py            # precinct → county/state rollups
 │   │   ├── normalize.py            # column name normalization
 │   │   ├── models.py               # NC data models

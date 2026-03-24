@@ -68,11 +68,11 @@ def smoke_v2_state(state_key: str, year: int = TEST_YEAR) -> List:
 
 def smoke_nc() -> None:
     """Discover NC elections from NCSBE and scrape the most recent one."""
-    from NorthCarolina.discovery import discover_nc_results_zips
+    from NorthCarolina.discovery import discover_northcarolina_results_zips
     from NorthCarolina.pipeline import NcElectionPipeline
 
     # Step 1: verify the NCSBE discovery endpoint is reachable
-    elections = discover_nc_results_zips()
+    elections = discover_northcarolina_results_zips()
     assert len(elections) > 0, "No NC elections discovered from NCSBE index"
     print(f"  Discovered {len(elections)} NC elections")
 

@@ -23,7 +23,7 @@
 #' @keywords internal
 .scrape_nc <- function(year_from = NULL, year_to = NULL) {
   .db_registry()$scrape(
-    "nc_results",
+    "northcarolina_results",
     year_from = year_from,
     year_to   = year_to
   )
@@ -140,11 +140,32 @@
 }
 
 
+#' Call the Connecticut CTEMS election results scraper
+#' @keywords internal
+.scrape_ct <- function(
+    year_from        = NULL,
+    year_to          = NULL,
+    level            = "all",
+    max_town_workers = 2L) {
+  level <- match.arg(level, c("all", "state", "town"))
+  .db_registry()$scrape(
+    "connecticut_results",
+    year_from        = year_from,
+    year_to          = year_to,
+    level            = level,
+    max_town_workers = as.integer(max_town_workers)
+  )
+}
+
+
 # NC state identifiers (case-insensitive) recognised for auto-routing
 .nc_state_keys <- c("nc", "north carolina", "north_carolina")
 
 # GA state identifiers (case-insensitive) recognised for auto-routing
 .ga_state_keys <- c("ga", "georgia")
+
+# CT state identifiers (case-insensitive) recognised for auto-routing
+.ct_state_keys <- c("ct", "connecticut")
 
 
 # All 50 states + DC: 2-letter abbreviation → canonical title-case full name
@@ -227,6 +248,10 @@
 #'         mayoral elections scraper (all US states, 2014–present).
 #'   \item \code{state} matches North Carolina (e.g. \code{"NC"},
 #'         \code{"north_carolina"}) → NC State Board of Elections scraper.
+#'   \item \code{state} matches Connecticut (e.g. \code{"CT"},
+#'         \code{"connecticut"}) → Connecticut CTEMS scraper (2000–present).
+#'   \item \code{state} matches Georgia (e.g. \code{"GA"},
+#'         \code{"georgia"}) → Georgia Secretary of State scraper (2012–present).
 #'   \item All other states → ElectionStats multi-state scraper.
 #' }
 #'
@@ -249,11 +274,15 @@
 #' @param year_to (\code{general} / NC) End year, inclusive (default
 #'   \code{NULL}). When \code{NULL}, ElectionStats uses the current calendar
 #'   year; the NC scraper applies no upper bound.
-#' @param level (\code{general} / ElectionStats) What to return.
-#'   \code{"all"} (default) returns a named list with \code{$state} and
-#'   \code{$county} data frames; \code{"state"} returns candidate-level
-#'   results; \code{"county"} returns county vote breakdowns; \code{"joined"}
-#'   returns county rows merged with candidate metadata.
+#' @param level (\code{general} / ElectionStats / Connecticut / Georgia) What
+#'   to return. \code{"all"} (default) returns a named list with \code{$state}
+#'   and \code{$county} data frames (ElectionStats / Georgia), or
+#'   \code{$state} and \code{$town} data frames (Connecticut);
+#'   \code{"state"} returns statewide candidate-level results only;
+#'   \code{"county"} returns county vote breakdowns (ElectionStats / Georgia);
+#'   \code{"town"} returns town-level results only (Connecticut);
+#'   \code{"joined"} returns county rows merged with candidate metadata
+#'   (ElectionStats only).
 #' @param election_level (\code{state_elections}) Which candidate tier to
 #'   return. \code{"all"} (default) returns all tiers; \code{"federal"}
 #'   returns U.S. House / Senate / Presidential Electors only; \code{"state"}
@@ -289,18 +318,19 @@
 #' @param end_year (\code{school_district} / \code{state_elections} /
 #'   \code{municipal_elections}) Latest year for a multi-year scrape when
 #'   \code{year} is \code{NULL} (default: current calendar year).
-#' @param max_county_workers (\code{general} / Georgia) Maximum number of
-#'   parallel workers used when fetching county-level results for Georgia
-#'   (default \code{4L}). Ignored for all other states.
+#' @param max_county_workers (\code{general} / Georgia / Connecticut) Maximum
+#'   number of parallel Chromium browsers. For Georgia, controls county-level
+#'   parallelism (default \code{4L}); for Connecticut, controls town-level
+#'   parallelism (default \code{2L}). Ignored for all other states.
 #' @param include_vote_methods (\code{general} / Georgia) If \code{TRUE},
 #'   also return a vote-method breakdown table (Advance in Person, Election
 #'   Day, Absentee by Mail, Provisional) for Georgia results (default
 #'   \code{FALSE}). Ignored for all other states.
 #'
-#' @return A \code{data.frame}, or a named list with elements \code{$state}
-#'   and \code{$county} when \code{level = "all"} and \code{office =
-#'   "general"} for a non-NC state.  State-elections always return a
-#'   \code{data.frame} (one row per candidate).
+#' @return A \code{data.frame}, or a named list when \code{level = "all"}:
+#'   \code{$state} + \code{$county} for ElectionStats / Georgia;
+#'   \code{$state} + \code{$town} for Connecticut.
+#'   NC and state-elections always return a single \code{data.frame}.
 #'
 #' @examples
 #' \dontrun{
@@ -351,6 +381,23 @@
 #' df <- scrape_elections(office = "municipal_elections",
 #'                        start_year = 2020, end_year = 2022,
 #'                        race_type = "all")
+#'
+#' # Connecticut — statewide + town results for 2024
+#' res <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024)
+#' res$state  # statewide totals (Federal from Summary + State/Local aggregated from towns)
+#' res$town   # town-level results for every town
+#'
+#' # Connecticut — statewide only (faster; no town scraping)
+#' df <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024,
+#'                        level = "state")
+#'
+#' # Connecticut — town-level results only
+#' df <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024,
+#'                        level = "town")
+#'
+#' # Connecticut — specific election year with extra parallel workers
+#' res <- scrape_elections(state = "connecticut", year_from = 2022, year_to = 2022,
+#'                         max_county_workers = 4L)
 #' }
 #'
 #' @export
@@ -358,10 +405,10 @@ scrape_elections <- function(
     state               = NULL,
     office              = c("general", "school_district", "state_elections",
                             "municipal_elections"),
-    # General-election (ElectionStats / NC) args
+    # General-election (ElectionStats / NC / CT / GA) args
     year_from           = NULL,
     year_to             = NULL,
-    level               = c("all", "state", "county", "joined"),
+    level               = c("all", "state", "county", "joined", "town"),
     parallel            = TRUE,
     # School-district / state-elections (Ballotpedia) args
     year                = NULL,
@@ -384,7 +431,7 @@ scrape_elections <- function(
 
   # Guard against old source= positional usage (e.g. scrape_elections("ballotpedia", ...))
   if (!is.null(state) &&
-      tolower(trimws(state)) %in% c("ballotpedia", "election_stats", "nc_results")) {
+      tolower(trimws(state)) %in% c("ballotpedia", "election_stats", "northcarolina_results")) {
     stop(
       "The 'source' argument has been removed. Route by state instead:\n",
       "  - For school board elections:  office = \"school_district\"\n",
@@ -404,7 +451,7 @@ scrape_elections <- function(
       "school_district"     = 2013L,
       "state_elections"     = 2024L,
       "municipal_elections" = 2014L,
-      NULL  # general / nc_results don't use start_year
+      NULL  # general / northcarolina_results don't use start_year
     )
   }
 
@@ -417,7 +464,10 @@ scrape_elections <- function(
     "ballotpedia_municipal"
   } else if (!is.null(state) &&
              tolower(trimws(state)) %in% .nc_state_keys) {
-    "nc_results"
+    "northcarolina_results"
+  } else if (!is.null(state) &&
+             tolower(trimws(state)) %in% .ct_state_keys) {
+    "connecticut_results"
   } else if (!is.null(state) &&
              tolower(trimws(state)) %in% .ga_state_keys) {
     "georgia_results"
@@ -438,7 +488,8 @@ scrape_elections <- function(
       "ballotpedia_municipal"  = paste0(
         "municipal/mayoral elections (Ballotpedia, race_type='", race_type, "')"
       ),
-      "nc_results"             = "North Carolina (NC State Board of Elections)",
+      "northcarolina_results"             = "North Carolina (NC State Board of Elections)",
+      "connecticut_results"             = "Connecticut (CTEMS)",
       "georgia_results"        = "Georgia (GA Secretary of State)",
       "election_stats"         = paste0(state, " (ElectionStats)")
     )
@@ -478,9 +529,15 @@ scrape_elections <- function(
       start_year = start_year,
       end_year   = end_year
     ),
-    "nc_results" = .scrape_nc(
+    "northcarolina_results" = .scrape_nc(
       year_from = year_from,
       year_to   = year_to
+    ),
+    "connecticut_results" = .scrape_ct(
+      year_from        = year_from,
+      year_to          = year_to,
+      level            = match.arg(level, c("all", "state", "town")),
+      max_town_workers = as.integer(max_county_workers)
     ),
     "georgia_results" = .scrape_ga(
       year_from            = year_from,
@@ -607,12 +664,21 @@ db_available_years <- function(state = NULL,
   })
   es_df <- do.call(rbind, es_rows)
 
-  nc_avail <- reg$get_available_years("nc_results")
+  nc_avail <- reg$get_available_years("northcarolina_results")
   nc_row <- data.frame(
-    source     = "nc_results",
+    source     = "northcarolina_results",
     state      = "NC",
     start_year = nc_avail$start_year,
     end_year   = nc_avail$end_year,
+    stringsAsFactors = FALSE
+  )
+
+  ct_avail <- reg$get_available_years("connecticut_results")
+  ct_row <- data.frame(
+    source     = "connecticut_results",
+    state      = "CT",
+    start_year = ct_avail$start_year,
+    end_year   = ct_avail$end_year,
     stringsAsFactors = FALSE
   )
 
@@ -625,7 +691,7 @@ db_available_years <- function(state = NULL,
     stringsAsFactors = FALSE
   )
 
-  result <- rbind(es_df, nc_row, ga_row)
+  result <- rbind(es_df, nc_row, ct_row, ga_row)
 
   if (!is.null(state)) {
     # Normalise both sides to lowercase-underscore for robust matching

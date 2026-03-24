@@ -9,7 +9,7 @@ scrape_elections(
   office = c("general", "school_district", "state_elections", "municipal_elections"),
   year_from = NULL,
   year_to = NULL,
-  level = c("all", "state", "county", "joined"),
+  level = c("all", "state", "county", "joined", "town"),
   parallel = TRUE,
   year = NULL,
   mode = c("districts", "results", "joined", "listings", "links"),
@@ -45,11 +45,15 @@ the NC scraper applies no lower bound.}
 \code{NULL}). When \code{NULL}, ElectionStats uses the current calendar
 year; the NC scraper applies no upper bound.}
 
-\item{level}{(\code{general} / ElectionStats) What to return.
-\code{"all"} (default) returns a named list with \code{$state} and
-\code{$county} data frames; \code{"state"} returns candidate-level
-results; \code{"county"} returns county vote breakdowns; \code{"joined"}
-returns county rows merged with candidate metadata.}
+\item{level}{(\code{general} / ElectionStats / Connecticut / Georgia) What
+to return. \code{"all"} (default) returns a named list with \code{$state}
+and \code{$county} data frames (ElectionStats / Georgia), or
+\code{$state} and \code{$town} data frames (Connecticut);
+\code{"state"} returns statewide candidate-level results only;
+\code{"county"} returns county vote breakdowns (ElectionStats / Georgia);
+\code{"town"} returns town-level results only (Connecticut);
+\code{"joined"} returns county rows merged with candidate metadata
+(ElectionStats only).}
 
 \item{parallel}{(\code{general} / ElectionStats) Use parallel county
 scraping for classic (requests-based) states (default \code{TRUE}).
@@ -93,9 +97,10 @@ page (2014–present), covering city, county, and mayoral races.
 \code{"mayoral"} uses the United_States_mayoral_elections page
 (2020–present), covering only mayoral races.}
 
-\item{max_county_workers}{(\code{general} / Georgia) Maximum number of
-parallel workers used when fetching county-level results for Georgia
-(default \code{4L}). Ignored for all other states.}
+\item{max_county_workers}{(\code{general} / Georgia / Connecticut) Maximum
+number of parallel Chromium browsers. For Georgia, controls county-level
+parallelism (default \code{4L}); for Connecticut, controls town-level
+parallelism (default \code{2L}). Ignored for all other states.}
 
 \item{include_vote_methods}{(\code{general} / Georgia) If \code{TRUE},
 also return a vote-method breakdown table (Advance in Person, Election
@@ -103,10 +108,10 @@ Day, Absentee by Mail, Provisional) for Georgia results (default
 \code{FALSE}). Ignored for all other states.}
 }
 \value{
-A \code{data.frame}, or a named list with elements \code{$state}
-and \code{$county} when \code{level = "all"} and \code{office =
-  "general"} for a non-NC state.  State-elections always return a
-\code{data.frame} (one row per candidate).
+A \code{data.frame}, or a named list when \code{level = "all"}:
+\code{$state} + \code{$county} for ElectionStats / Georgia;
+\code{$state} + \code{$town} for Connecticut.
+NC and state-elections always return a single \code{data.frame}.
 }
 \description{
 A single entry point that automatically routes to the appropriate scraper
@@ -124,6 +129,10 @@ scraper (federal, state, and local candidates; 2024–present).
 mayoral elections scraper (all US states, 2014–present).
 \item \code{state} matches North Carolina (e.g. \code{"NC"},
 \code{"north_carolina"}) → NC State Board of Elections scraper.
+\item \code{state} matches Connecticut (e.g. \code{"CT"},
+\code{"connecticut"}) → Connecticut CTEMS scraper (2000–present).
+\item \code{state} matches Georgia (e.g. \code{"GA"},
+\code{"georgia"}) → Georgia Secretary of State scraper (2012–present).
 \item All other states → ElectionStats multi-state scraper.
 }
 }
@@ -176,6 +185,23 @@ df <- scrape_elections(office = "municipal_elections", year = 2022,
 df <- scrape_elections(office = "municipal_elections",
                        start_year = 2020, end_year = 2022,
                        race_type = "all")
+
+# Connecticut — statewide + town results for 2024
+res <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024)
+res$state  # statewide totals (Federal from Summary + State/Local aggregated from towns)
+res$town   # town-level results for every town
+
+# Connecticut — statewide only (faster; no town scraping)
+df <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024,
+                       level = "state")
+
+# Connecticut — town-level results only
+df <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024,
+                       level = "town")
+
+# Connecticut — specific election year with extra parallel workers
+res <- scrape_elections(state = "connecticut", year_from = 2022, year_to = 2022,
+                        max_county_workers = 4L)
 }
 
 }

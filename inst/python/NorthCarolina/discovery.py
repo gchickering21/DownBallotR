@@ -11,7 +11,7 @@ INDEX_URL = "https://www.ncsbe.gov/results-data/election-results/historical-elec
 ZIP_RE = re.compile(r"results_pct_(\d{8})\.zip$")
 
 
-def discover_nc_results_zips() -> list[NcElectionZip]:
+def discover_northcarolina_results_zips() -> list[NcElectionZip]:
     r = requests.get(INDEX_URL, timeout=30)
     r.raise_for_status()
     doc = html.fromstring(r.text)

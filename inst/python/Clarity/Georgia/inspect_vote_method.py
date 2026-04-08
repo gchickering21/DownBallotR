@@ -6,8 +6,8 @@ waits for Angular to re-render, then saves the resulting HTML to a file.
 
 Run from inst/python/ with::
 
-    python -m Georgia.inspect_vote_method
-    python -m Georgia.inspect_vote_method --slug 2024NovGen --out /tmp/ga_vm.html
+    python -m Clarity.Georgia.inspect_vote_method
+    python -m Clarity.Georgia.inspect_vote_method --slug 2024NovGen --out /tmp/ga_vm.html
 """
 
 from __future__ import annotations

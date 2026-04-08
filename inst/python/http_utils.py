@@ -5,7 +5,7 @@ HTTP retry helpers shared across DownBallotR scrapers.
 from __future__ import annotations
 
 import time
-
+import requests
 
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 
@@ -39,7 +39,6 @@ def fetch_with_retry(
     Exception
         Re-raises the last exception if all retries are exhausted.
     """
-    import requests
 
     delay = backoff_s
     last_exc: Exception = RuntimeError("no attempts made")

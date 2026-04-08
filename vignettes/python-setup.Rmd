@@ -44,22 +44,47 @@ library(DownBallotR)
 After installing the R package, you must set up the Python environment used by
 `DownBallotR`.
 
-### Step 1: Install Python dependencies
+### Step 1: Install Python via reticulate
 
-Run the following **once**:
+`DownBallotR` manages its own isolated Python environment through `reticulate`.
+The most reliable approach — regardless of what Python versions you have installed
+on your machine — is to let reticulate install Python for you:
 
 ```{r}
-downballot_install_python()
+reticulate::install_python()
 ```
+
+This downloads and installs a standalone Python (latest stable) that reticulate
+manages independently of any system Python. You can pin a specific version if
+needed (e.g. `reticulate::install_python(version = "3.12")`); any version
+3.10 or later works.
+
+### Step 2: Install Python dependencies
+
+Once Python is available, run the following **once**:
+
+```{r}
+downballot_install_python(python = reticulate::virtualenv_starter())
+```
+
+`reticulate::virtualenv_starter()` automatically selects the best available
+Python for creating a virtual environment — matching whatever version you just
+installed. If you installed a specific version in Step 1, pass the same version
+here (e.g. `reticulate::virtualenv_starter("3.12")`).
 
 This command:
 
 - Creates a dedicated Python virtual environment for `DownBallotR`
 - Installs required Python packages
-- Installs Playwright and its Chromium browser  
+- Installs Playwright and its Chromium browser
   (this may download ~100–200MB the first time)
 
 This step may take a few minutes.
+
+> **Note:** If you already have Python 3.10 or later installed and working on
+> your machine, you can try `downballot_install_python()` without arguments.
+> If that fails (e.g. with a virtualenv creation error), use the
+> `reticulate::install_python()` approach above.
 
 ---
 
@@ -187,7 +212,7 @@ Then continue using the package.
 If the environment becomes corrupted or inconsistent:
 
 ```{r}
-downballot_install_python(reinstall = TRUE)
+downballot_install_python(python = reticulate::virtualenv_starter(), reinstall = TRUE)
 downballot_use_python()
 downballot_python_status()
 ```
@@ -199,7 +224,8 @@ downballot_python_status()
 ### First-time setup:
 
 ```{r}
-downballot_install_python()
+reticulate::install_python()
+downballot_install_python(python = reticulate::virtualenv_starter())
 downballot_use_python()
 ```
 

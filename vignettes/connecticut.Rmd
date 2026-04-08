@@ -1,0 +1,177 @@
+---
+title: "Connecticut elections"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Connecticut elections}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+```{r setup}
+library(DownBallotR)
+library(dplyr)
+
+downballot_use_python()
+```
+
+## What it covers
+
+The Connecticut scraper returns election results from the CT Election Management
+System (CTEMS) at `ctemspublic.tgstg.net`. It covers all elections available in
+the CTEMS dropdown — general elections, primaries, runoffs, and special elections
+— from 2016 to the present.
+
+Results include an `election_level` column classifying each race as `"Federal"`,
+`"State"`, or `"Local"`, and a `contest_outcome` column (`"Won"` / `"Lost"`) on
+the statewide totals.
+
+> **Note:** The CTEMS site is a JavaScript-rendered AngularJS SPA. All scraping
+> uses a headless Chromium browser via Playwright. Scraping all 169 towns across
+> all elections in a year typically takes 30–60 minutes per election year. Use
+> `level = "state"` for a much faster statewide-only result.
+
+---
+
+## Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | — | `"CT"`, `"connecticut"`, or `"Connecticut"` |
+| `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
+| `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
+| `level` | `"all"` | `"all"` — statewide + town; `"state"` — statewide only; `"town"` — town-level only |
+| `max_workers` | `2L` | Parallel Chromium browsers for town scraping (one per county) |
+
+---
+
+## Examples
+
+### Statewide + town results for a single year
+
+```{r}
+res <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024)
+
+# Statewide totals — one row per candidate per office
+res$state %>%
+  filter(election_level == "Federal") %>%
+  select(election_name, office, candidate, party, votes, vote_pct, contest_outcome)
+
+# Town-level results
+res$town %>%
+  filter(office == "President of the United States") %>%
+  select(town, county, candidate, party, votes)
+```
+
+### Statewide totals only (faster — skips town scraping)
+
+```{r}
+state_df <- scrape_elections(
+  state     = "CT",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "state"
+)
+
+state_df %>%
+  filter(contest_outcome == "Won") %>%
+  select(election_name, election_level, office, candidate, party, votes, vote_pct)
+```
+
+### Town-level only
+
+```{r}
+town_df <- scrape_elections(
+  state     = "CT",
+  year_from = 2022,
+  year_to   = 2022,
+  level     = "town"
+)
+
+# Summarise votes by county for a specific race
+town_df %>%
+  filter(office == "United States Senator") %>%
+  group_by(county, candidate, party) %>%
+  summarise(votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+  arrange(county, desc(votes))
+```
+
+### Multi-year scrape with more parallel workers
+
+```{r}
+res <- scrape_elections(
+  state             = "CT",
+  year_from         = 2020,
+  year_to           = 2024,
+  level             = "all",
+  max_workers = 4L
+)
+```
+
+### Filter by election level
+
+```{r}
+res <- scrape_elections(state = "CT", year_from = 2023, year_to = 2023)
+
+# Local races only (municipal elections)
+res$state %>%
+  filter(election_level == "Local") %>%
+  select(election_name, office, candidate, party, votes, contest_outcome)
+```
+
+---
+
+## Output columns
+
+### `$state` (when `level = "all"` or `"state"`)
+
+| Column | Description |
+|---|---|
+| `election_name` | Human-readable election name (e.g. `"11/05/2024 -- November General Election"`) |
+| `election_year` | Calendar year |
+| `election_date` | ISO date string when parseable; `NA` otherwise |
+| `election_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name (includes district when present) |
+| `candidate` | Candidate name |
+| `party` | Party name (e.g. `"Democratic"`, `"Republican"`) |
+| `votes` | Total votes (integer) |
+| `vote_pct` | Percentage of votes in contest (recomputed from town totals for State/Local) |
+| `contest_outcome` | `"Won"` or `"Lost"`; `NA` if vote data missing |
+
+### `$town` (when `level = "all"` or `"town"`)
+
+| Column | Description |
+|---|---|
+| `election_name` | Human-readable election name |
+| `election_year` | Calendar year |
+| `election_date` | ISO date string when parseable; `NA` otherwise |
+| `county` | County name |
+| `town` | Town name |
+| `election_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `candidate` | Candidate name |
+| `party` | Party name |
+| `votes` | Votes in this town (integer) |
+| `vote_pct` | Percentage as reported by CTEMS for this town |
+
+---
+
+## Performance notes
+
+- **`level = "state"` is much faster.** Town scraping opens one Chromium browser
+  per county and iterates all 169 towns. A single election year with full town
+  scraping takes roughly 30–60 minutes. Use `level = "state"` when you only need
+  statewide totals.
+- **Multiple elections per year.** CTEMS often has several elections in a single
+  year (primary, general, special elections). All are scraped and combined in the
+  output.
+- **`max_workers`.** CT has 8 counties. The default of 2 parallel browsers
+  means 4 batches. Increasing to 4 roughly halves town-scraping time. Keep at or
+  below 4 to avoid memory pressure.

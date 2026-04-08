@@ -54,7 +54,10 @@ you never need to specify a backend by name:
 | 2 | `office = "state_elections"` | Ballotpedia state elections (2024–present) |
 | 3 | `office = "municipal_elections"` | Ballotpedia municipal + mayoral elections (2014–present) |
 | 4 | `state` is North Carolina | NC State Board of Elections scraper |
-| 5 | All other states | ElectionStats multi-state scraper |
+| 5 | `state` is Connecticut | Connecticut CTEMS scraper (2016–present) |
+| 6 | `state` is Georgia | Georgia Secretary of State scraper (2000–present) |
+| 7 | `state` is Utah | Utah election results scraper (2023–2025) |
+| 8 | All other states | ElectionStats multi-state scraper |
 
 ---
 
@@ -86,6 +89,9 @@ db_available_years(state = "virginia")
 | ElectionStats | New Mexico | 2000 | 2024 |
 | ElectionStats | South Carolina | 2008 | 2025 |
 | NC State Board | North Carolina | 2025 | 2025 |
+| CT CTEMS | Connecticut | 2016 | present |
+| GA Secretary of State | Georgia | 2000 | present |
+| Utah elections site | Utah | 2023 | 2025 |
 | Ballotpedia (school boards) | All US states | 2013 | present |
 | Ballotpedia (state elections) | All US states\* | 2024 | present |
 | Ballotpedia (municipal elections) | All US states | 2014 (`"all"`) / 2020 (`"mayoral"`) | present |
@@ -107,6 +113,12 @@ db_list_states("election_stats")
 | Candidate + vote totals for VA, MA, CO, NH, VT | `scrape_elections(state = "virginia", ...)` |
 | Candidate + vote totals for SC, NM, NY (Playwright) | `scrape_elections(state = "south_carolina", ...)` |
 | NC precinct-level local results | `scrape_elections(state = "NC", year_from = 2025, year_to = 2025)` |
+| CT statewide + town results | `scrape_elections(state = "CT", year_from = 2024, year_to = 2024)` |
+| CT statewide totals only (faster) | `scrape_elections(state = "CT", year_from = 2024, year_to = 2024, level = "state")` |
+| GA statewide + county results | `scrape_elections(state = "GA", year_from = 2024, year_to = 2024)` |
+| GA with vote-method breakdown | `scrape_elections(state = "GA", year_from = 2024, year_to = 2024, include_vote_methods = TRUE)` |
+| UT statewide + county results | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024)` |
+| UT statewide only (faster) | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024, level = "state")` |
 | School board district schedules, any state | `scrape_elections(office = "school_district", mode = "districts", ...)` |
 | School board candidates + results | `scrape_elections(office = "school_district", mode = "results", ...)` |
 | All candidates for a state (federal + state + local), 2024+ | `scrape_elections(state = "Maine", office = "state_elections", year = 2024)` |
@@ -126,6 +138,12 @@ worked examples, and column descriptions:
   VA, MA, CO, NH, SC, NM, NY, VT; candidate + county results
 - [North Carolina](north-carolina.html) —
   NC State Board of Elections; precinct-level results
+- [Connecticut](connecticut.html) —
+  CT CTEMS; statewide + town results, 2016–present
+- [Georgia](georgia.html) —
+  GA Secretary of State; statewide + county results, 2000–present
+- [Utah](utah.html) —
+  Utah elections site; statewide + county results, 2023–2025
 - [School district elections](school-district-elections.html) —
   Ballotpedia school board elections, all US states, 2013–present
 - [State elections](state-elections.html) —

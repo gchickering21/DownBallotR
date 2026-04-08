@@ -33,6 +33,54 @@ def _to_year(v) -> "int | None":
 # Internal scraper functions
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _scrape_ut(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    level: str = "all",
+    max_county_workers: int = 4,
+    include_vote_methods: bool = False,
+    **_,
+):
+    """Scrape Utah election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive.
+    year_to : int | None
+        End year, inclusive.
+    level : str
+        ``'all'`` (default) — dict with ``'state'`` and ``'county'`` DataFrames;
+        ``'state'`` — statewide totals only (no county scraping, much faster);
+        ``'county'`` — county-level DataFrame only.
+    max_county_workers : int
+        Parallel Chromium browsers for county scraping (default 4).
+    include_vote_methods : bool
+        When True, expands each contest's vote-method breakdown table and adds
+        ``'vote_method_state'`` / ``'vote_method_county'`` to the result dict
+        (default False).
+    """
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+
+    label = (
+        f"{year_from}–{year_to}" if year_from and year_to
+        else f"{year_from}–" if year_from
+        else f"–{year_to}" if year_to
+        else "all years"
+    )
+    print(f"[UT] Starting scrape | {label} | level={level!r} | vote_methods={include_vote_methods}")
+
+    from Clarity.Utah.pipeline import get_ut_election_results
+    return get_ut_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        max_county_workers=max_county_workers,
+        include_vote_methods=include_vote_methods,
+    )
+
+
 def _scrape_ga(
     year_from: "int | None" = None,
     year_to: "int | None" = None,
@@ -71,7 +119,7 @@ def _scrape_ga(
     )
     print(f"[GA] Starting scrape | {label} | level={level!r} | vote_methods={include_vote_methods}")
 
-    from Georgia.pipeline import get_ga_election_results
+    from Clarity.Georgia.pipeline import get_ga_election_results
     return get_ga_election_results(
         year_from=year_from,
         year_to=year_to,
@@ -504,6 +552,9 @@ _YEAR_RANGES: dict = {
     "georgia_results": {
         "GA": (2000, None),
     },
+    "utah_results": {
+        "UT": (2023, 2025),
+    },
     "ballotpedia": {
         # Ballotpedia covers all US states from 2013 onward (open-ended).
         "_all": (2013, None),
@@ -535,6 +586,11 @@ _SOURCES: dict = {
         "description": "Georgia Secretary of State election results (results.sos.ga.gov)",
         "scrape_fn": _scrape_ga,
         "states": ["GA"],
+    },
+    "utah_results": {
+        "description": "Utah election results (electionresults.utah.gov)",
+        "scrape_fn": _scrape_ut,
+        "states": ["UT"],
     },
     "connecticut_results": {
         "description": "Connecticut CTEMS election results (ctemspublic.tgstg.net)",
@@ -638,6 +694,10 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
 
     if source == "georgia_results":
         start, end = ranges["GA"]
+        return {"start_year": start, "end_year": end or current_year}
+
+    if source == "utah_results":
+        start, end = ranges["UT"]
         return {"start_year": start, "end_year": end or current_year}
 
     # election_stats

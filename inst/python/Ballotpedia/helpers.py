@@ -25,7 +25,7 @@ from text_utils import clean_node as _clean_node
 # ---------------------------------------------------------------------------
 
 _BASE_URL = "https://ballotpedia.org"
-_DEFAULT_USER_AGENT = "DownBallotR (+https://github.com/gchickering21/DownBallotR)"
+_DEFAULT_USER_AGENT = "DownBallotR/1.0"
 
 
 def _current_year() -> int:

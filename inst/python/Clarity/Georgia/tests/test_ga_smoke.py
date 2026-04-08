@@ -11,6 +11,7 @@ Run from ``inst/python/`` with::
     python -m Georgia.tests.test_ga_smoke --year 2024
     python -m Georgia.tests.test_ga_smoke --discovery-only
     python -m Georgia.tests.test_ga_smoke --state-only   # skip county scraping
+    python -m Georgia.tests.test_ga_smoke --vote-methods # include vote-method breakdown
 """
 
 from __future__ import annotations
@@ -40,8 +41,8 @@ def _warn(msg: str) -> None:
 def test_discovery() -> bool:
     """Render the landing page and check that at least one election is found."""
     print("\n[test_discovery] Rendering Georgia SOS landing page...")
-    from Georgia.client import GaPlaywrightClient
-    from Georgia.discovery import parse_election_links
+    from Clarity.Georgia.client import GaPlaywrightClient
+    from Clarity.Georgia.discovery import parse_election_links
 
     with GaPlaywrightClient() as client:
         html = client.get_landing_page()
@@ -63,12 +64,12 @@ def test_discovery() -> bool:
     return True
 
 
-def test_single_election(year: int, scrape_counties: bool = True) -> bool:
+def test_single_election(year: int, level: str = "all") -> bool:
     """Discover elections, pick the first one matching *year*, and scrape it."""
-    print(f"\n[test_single_election] year={year}, scrape_counties={scrape_counties}")
-    from Georgia.client import GaPlaywrightClient
-    from Georgia.discovery import parse_election_links
-    from Georgia.parser import parse_state_results, parse_county_results, county_name_from_url
+    print(f"\n[test_single_election] year={year}, level={level!r}")
+    from Clarity.Georgia.client import GaPlaywrightClient
+    from Clarity.Georgia.discovery import parse_election_links
+    from Clarity.Georgia.parser import parse_state_results, parse_county_results, county_name_from_url
 
     # Phase 1: discovery
     with GaPlaywrightClient() as client:
@@ -99,7 +100,7 @@ def test_single_election(year: int, scrape_counties: bool = True) -> bool:
     _pass(f"State: {len(state_df)} candidate row(s), {len(county_urls)} county URLs.")
     print(state_df.head(8).to_string(index=False))
 
-    if not scrape_counties or not county_urls:
+    if level == "state" or not county_urls:
         return True
 
     # Phase 2b: one county scrape (first county only for smoke test)
@@ -121,18 +122,32 @@ def test_single_election(year: int, scrape_counties: bool = True) -> bool:
 
 
 def test_pipeline_year_range(
-    year_from: int, year_to: int, scrape_counties: bool = True
+    year_from: int,
+    year_to: int,
+    level: str = "all",
+    include_vote_methods: bool = False,
 ) -> bool:
     """Run the full pipeline for a year range and check the output shape."""
     print(f"\n[test_pipeline_year_range] {year_from}–{year_to}, "
-          f"scrape_counties={scrape_counties}")
-    from Georgia.pipeline import get_ga_election_results
+          f"level={level!r}, vote_methods={include_vote_methods}")
+    from Clarity.Georgia.pipeline import get_ga_election_results
 
-    state_df, county_df = get_ga_election_results(
-        year_from=year_from, year_to=year_to, scrape_counties=scrape_counties
+    result = get_ga_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        include_vote_methods=include_vote_methods,
     )
 
     ok = True
+
+    # Pipeline returns a dict for level="all", a DataFrame otherwise.
+    if isinstance(result, dict):
+        state_df  = result.get("state",  pd.DataFrame())
+        county_df = result.get("county", pd.DataFrame())
+    else:
+        state_df  = result if level == "state" else pd.DataFrame()
+        county_df = result if level == "county" else pd.DataFrame()
 
     if not isinstance(state_df, pd.DataFrame):
         _fail(f"Expected state_df to be a DataFrame, got {type(state_df)}")
@@ -142,13 +157,22 @@ def test_pipeline_year_range(
         if not state_df.empty:
             print(state_df.head(5).to_string(index=False))
 
-    if not isinstance(county_df, pd.DataFrame):
-        _fail(f"Expected county_df to be a DataFrame, got {type(county_df)}")
-        ok = False
-    elif scrape_counties:
-        _pass(f"county_df: {len(county_df)} rows × {len(county_df.columns)} cols.")
-        if not county_df.empty:
-            print(county_df.head(5).to_string(index=False))
+    if level in ("all", "county"):
+        if not isinstance(county_df, pd.DataFrame):
+            _fail(f"Expected county_df to be a DataFrame, got {type(county_df)}")
+            ok = False
+        else:
+            _pass(f"county_df: {len(county_df)} rows × {len(county_df.columns)} cols.")
+            if not county_df.empty:
+                print(county_df.head(5).to_string(index=False))
+
+    if include_vote_methods and isinstance(result, dict):
+        for key in ("vote_method_state", "vote_method_county"):
+            df = result.get(key, pd.DataFrame())
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                _pass(f"{key}: {len(df)} rows × {len(df.columns)} cols.")
+            else:
+                _warn(f"{key}: empty or missing.")
 
     return ok
 
@@ -171,23 +195,28 @@ def main() -> None:
         "--state-only", action="store_true",
         help="Skip county scraping (faster, state totals only).",
     )
+    parser.add_argument(
+        "--vote-methods", action="store_true",
+        help="Include vote-method breakdown (Advanced / Election Day / Absentee / Provisional).",
+    )
     args = parser.parse_args()
 
-    scrape_counties = not args.state_only
+    level = "state" if args.state_only else "all"
     results: list[bool] = []
 
     results.append(test_discovery())
 
     if not args.discovery_only:
         if args.year is not None:
-            results.append(test_single_election(args.year, scrape_counties=scrape_counties))
+            results.append(test_single_election(args.year, level=level))
         else:
             import datetime
             current_year = datetime.date.today().year
             results.append(
                 test_pipeline_year_range(
                     current_year - 1, current_year,
-                    scrape_counties=scrape_counties,
+                    level=level,
+                    include_vote_methods=args.vote_methods,
                 )
             )
 

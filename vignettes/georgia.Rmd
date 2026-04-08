@@ -1,0 +1,195 @@
+---
+title: "Georgia elections"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Georgia elections}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+```{r setup}
+library(DownBallotR)
+library(dplyr)
+
+downballot_use_python()
+```
+
+## What it covers
+
+The Georgia scraper returns election results from the Georgia Secretary of State
+at `results.sos.ga.gov`. It covers all elections available on the site —
+primaries, runoffs, generals, and special elections — from 2000 to the present.
+
+Optionally, it can also return a vote-method breakdown (Advance in Person,
+Election Day, Absentee by Mail, Provisional) for each contest.
+
+> **Note:** The Georgia SOS site is a JavaScript-rendered Angular SPA. All
+> scraping uses a headless Chromium browser via Playwright. County scraping is
+> parallelised across up to `max_workers` browsers (default 4). Georgia
+> has 159 counties; a full state + county scrape for one year typically takes
+> 20–60 minutes.
+
+---
+
+## Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | — | `"GA"`, `"georgia"`, or `"Georgia"` |
+| `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
+| `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
+| `level` | `"all"` | `"all"` — statewide + county; `"state"` — statewide only (much faster); `"county"` — county-level only |
+| `max_workers` | `4L` | Parallel Chromium browsers for county scraping |
+| `include_vote_methods` | `FALSE` | If `TRUE`, also return vote-method breakdown tables |
+
+---
+
+## Examples
+
+### Statewide + county results for a single year
+
+```{r}
+res <- scrape_elections(state = "GA", year_from = 2024, year_to = 2024)
+
+# Statewide candidate totals
+res$state %>%
+  filter(office == "President of the United States") %>%
+  select(election_name, candidate, party, votes, pct, is_incumbent)
+
+# County-level breakdown
+res$county %>%
+  filter(office == "President of the United States") %>%
+  select(county, candidate, party, votes, pct) %>%
+  arrange(county, desc(votes))
+```
+
+### Statewide totals only (faster — skips county scraping)
+
+```{r}
+state_df <- scrape_elections(
+  state     = "GA",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "state"
+)
+
+state_df %>%
+  select(election_name, office, candidate, party, votes, pct, is_incumbent)
+```
+
+### With vote-method breakdown
+
+```{r}
+res <- scrape_elections(
+  state                = "GA",
+  year_from            = 2024,
+  year_to              = 2024,
+  include_vote_methods = TRUE
+)
+
+# Statewide vote-method totals
+res$vote_method_state %>%
+  filter(office == "United States Senator") %>%
+  select(candidate, party, votes_advance_in_person, votes_election_day,
+         votes_absentee, votes_provisional, votes_total)
+
+# County vote-method breakdown
+res$vote_method_county %>%
+  filter(office == "United States Senator", county == "Fulton") %>%
+  select(candidate, votes_advance_in_person, votes_election_day,
+         votes_absentee, votes_provisional, votes_total)
+```
+
+### Multi-year scrape
+
+```{r}
+res <- scrape_elections(
+  state       = "GA",
+  year_from   = 2020,
+  year_to     = 2024,
+  level       = "all",
+  max_workers = 4L
+)
+```
+
+### Filter to a specific county
+
+```{r}
+res <- scrape_elections(state = "GA", year_from = 2022, year_to = 2022)
+
+res$county %>%
+  filter(county == "Fulton") %>%
+  select(election_name, office, candidate, party, votes, pct) %>%
+  arrange(office, desc(votes))
+```
+
+---
+
+## Output columns
+
+### `$state` (when `level = "all"` or `"state"`)
+
+| Column | Description |
+|---|---|
+| `election_name` | Human-readable election name (e.g. `"November General Election"`) |
+| `election_year` | Calendar year of the election |
+| `election_slug` | URL slug (e.g. `"2024NovGen"`) |
+| `election_date` | Date string from the page header |
+| `result_status` | Reporting status (e.g. `"OFFICIAL RESULTS"`) |
+| `office` | Office name |
+| `localities_reporting` | `"X/Y"` localities reporting string |
+| `candidate` | Candidate name (cleaned — `(I)` and party suffix stripped) |
+| `party` | Party abbreviation |
+| `is_incumbent` | `TRUE` if `(I)` appears in raw candidate name |
+| `is_winner` | Always `NA` — winner marker absent from GA SOS HTML |
+| `votes` | Vote total |
+| `pct` | Percentage of votes |
+| `url` | URL of the election page |
+
+### `$county` (when `level = "all"` or `"county"`)
+
+Same columns as `$state`, plus:
+
+| Column | Description |
+|---|---|
+| `county` | County name |
+
+### `$vote_method_state` / `$vote_method_county` (when `include_vote_methods = TRUE`)
+
+Same identifying columns as above, with votes split by method instead of a
+single `votes` + `pct`:
+
+| Column | Description |
+|---|---|
+| `votes_advance_in_person` | Advance in Person ballots |
+| `votes_election_day` | Election Day ballots |
+| `votes_absentee` | Absentee by Mail ballots |
+| `votes_provisional` | Provisional ballots |
+| `votes_total` | Sum of all methods |
+
+---
+
+## Performance notes
+
+- **`level = "state"` is much faster.** County scraping opens up to
+  `max_workers` parallel Chromium browsers across Georgia's 159 counties.
+  A full state + county scrape for one year takes 20–60 minutes. Use
+  `level = "state"` when county breakdowns are not needed.
+- **`include_vote_methods` is significantly slower.** Each contest panel requires
+  an extra Playwright click-and-re-render step. Budget an extra 5–15 minutes per
+  election page.
+- **Virtual scroll.** The GA SOS site uses Angular virtual scrolling, rendering
+  only panels visible in the viewport. The scraper automatically scrolls to load
+  all panels before parsing — without this, pages with 100+ contests would
+  silently return incomplete data.
+- **Multiple elections per year.** The GA SOS site lists all elections for a year
+  (primaries, runoffs, generals, specials). All are scraped and combined in the
+  output.

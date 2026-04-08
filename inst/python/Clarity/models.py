@@ -1,4 +1,4 @@
-"""Data models for the Georgia SOS election results scraper."""
+"""Shared data model for Angular/PrimeNG SOS election results scrapers."""
 
 from __future__ import annotations
 
@@ -6,8 +6,11 @@ from dataclasses import dataclass
 
 
 @dataclass
-class GaElectionInfo:
-    """Metadata for a single Georgia election discovered from the landing page.
+class ClarityElectionInfo:
+    """Metadata for a single election discovered from a SOS landing page.
+
+    Used by all state scrapers built on the shared Clarity backend
+    (currently Georgia and Utah).
 
     Attributes
     ----------

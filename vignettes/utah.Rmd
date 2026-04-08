@@ -1,0 +1,184 @@
+---
+title: "Utah elections"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Utah elections}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+```{r setup}
+library(DownBallotR)
+library(dplyr)
+
+downballot_use_python()
+```
+
+## What it covers
+
+The Utah scraper returns election results from `electionresults.utah.gov`. It
+covers all elections available on the site — generals, primaries, and special
+elections — currently from 2023 to 2025.
+
+Optionally, it can also return a vote-method breakdown (Advance in Person,
+Election Day, Absentee by Mail, Provisional) for each contest.
+
+> **Note:** The Utah elections site uses the same Angular/PrimeNG framework as
+> the Georgia SOS site. All scraping uses a headless Chromium browser via
+> Playwright. County scraping is parallelised across up to `max_workers`
+> browsers (default 4). Utah has 29 counties.
+
+---
+
+## Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | — | `"UT"`, `"utah"`, or `"Utah"` |
+| `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
+| `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
+| `level` | `"all"` | `"all"` — statewide + county; `"state"` — statewide only (much faster); `"county"` — county-level only |
+| `max_workers` | `4L` | Parallel Chromium browsers for county scraping |
+| `include_vote_methods` | `FALSE` | If `TRUE`, also return vote-method breakdown tables |
+
+---
+
+## Examples
+
+### Statewide + county results for a single year
+
+```{r}
+res <- scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
+
+# Statewide candidate totals
+res$state %>%
+  select(election_name, office, candidate, party, votes, pct)
+
+# County-level breakdown
+res$county %>%
+  select(county, office, candidate, party, votes, pct) %>%
+  arrange(county, office, desc(votes))
+```
+
+### Statewide totals only (faster — skips county scraping)
+
+```{r}
+state_df <- scrape_elections(
+  state     = "UT",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "state"
+)
+
+state_df %>%
+  select(election_name, office, candidate, party, votes, pct)
+```
+
+### With vote-method breakdown
+
+```{r}
+res <- scrape_elections(
+  state                = "UT",
+  year_from            = 2024,
+  year_to              = 2024,
+  include_vote_methods = TRUE
+)
+
+# Statewide vote-method totals
+res$vote_method_state %>%
+  select(office, candidate, party, votes_advance_in_person, votes_election_day,
+         votes_absentee, votes_provisional, votes_total)
+
+# County vote-method breakdown
+res$vote_method_county %>%
+  filter(county == "Salt Lake") %>%
+  select(office, candidate, votes_advance_in_person, votes_election_day,
+         votes_absentee, votes_provisional, votes_total)
+```
+
+### All available years
+
+```{r}
+res <- scrape_elections(
+  state       = "UT",
+  year_from   = 2023,
+  year_to     = 2025,
+  level       = "state"
+)
+```
+
+### Filter to a specific county
+
+```{r}
+res <- scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
+
+res$county %>%
+  filter(county == "Salt Lake") %>%
+  select(election_name, office, candidate, party, votes, pct) %>%
+  arrange(office, desc(votes))
+```
+
+---
+
+## Output columns
+
+### `$state` (when `level = "all"` or `"state"`)
+
+| Column | Description |
+|---|---|
+| `election_name` | Human-readable election name |
+| `election_year` | Calendar year of the election |
+| `election_slug` | URL slug identifying the election |
+| `election_date` | Date string from the page header |
+| `result_status` | Reporting status (e.g. `"OFFICIAL RESULTS"`) |
+| `office` | Office name |
+| `localities_reporting` | `"X/Y"` localities reporting string |
+| `candidate` | Candidate name (cleaned — `(I)` and party suffix stripped) |
+| `party` | Party abbreviation |
+| `is_incumbent` | `TRUE` if `(I)` appears in raw candidate name |
+| `is_winner` | Always `NA` — winner marker absent from the site HTML |
+| `votes` | Vote total |
+| `pct` | Percentage of votes |
+| `url` | URL of the election page |
+
+### `$county` (when `level = "all"` or `"county"`)
+
+Same columns as `$state`, plus:
+
+| Column | Description |
+|---|---|
+| `county` | County name |
+
+### `$vote_method_state` / `$vote_method_county` (when `include_vote_methods = TRUE`)
+
+Same identifying columns as above, with votes split by method instead of a
+single `votes` + `pct`:
+
+| Column | Description |
+|---|---|
+| `votes_advance_in_person` | Advance in Person ballots |
+| `votes_election_day` | Election Day ballots |
+| `votes_absentee` | Absentee by Mail ballots |
+| `votes_provisional` | Provisional ballots |
+| `votes_total` | Sum of all methods |
+
+---
+
+## Performance notes
+
+- **`level = "state"` is much faster.** County scraping opens up to
+  `max_workers` parallel Chromium browsers across Utah's 29 counties.
+- **`include_vote_methods` is slower.** Each contest panel requires an extra
+  Playwright click-and-re-render step.
+- **Virtual scroll.** The site uses Angular virtual scrolling; the scraper
+  automatically scrolls to load all panels before parsing.
+- **Limited history.** The Utah elections site currently lists elections from
+  2023 onward. Earlier data is not available through this scraper.

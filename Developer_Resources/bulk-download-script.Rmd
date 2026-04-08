@@ -23,7 +23,7 @@ activated:
 
 ```bash
 cd inst/python
-source ../../downBallotPython/bin/activate
+source ~/.virtualenvs/downballotR/bin/activate
 ```
 
 ---

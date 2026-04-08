@@ -2,9 +2,9 @@
 One-shot script to inspect the Georgia SOS landing page.
 
 Run from inst/python/ with:
-    python -m Georgia.inspect_landing
-    python -m Georgia.inspect_landing --year 2024
-    python -m Georgia.inspect_landing --year-from 2020 --year-to 2024
+    python -m Clarity.Georgia.inspect_landing
+    python -m Clarity.Georgia.inspect_landing --year 2024
+    python -m Clarity.Georgia.inspect_landing --year-from 2020 --year-to 2024
 
 What it does:
   1. Renders https://results.sos.ga.gov/results/public/Georgia in a real browser.
@@ -55,7 +55,7 @@ def main() -> None:
         print(
             "\n[GA inspect] WARNING: parse_election_links() returned 0 elections.\n"
             "  Open the saved HTML and look for the election link structure.\n"
-            "  Then update the XPath in Georgia/discovery.py accordingly."
+            "  Then update the XPath in Clarity/Georgia/discovery.py accordingly."
         )
         sys.exit(1)
 

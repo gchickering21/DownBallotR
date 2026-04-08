@@ -10,11 +10,14 @@ to run the test suite. See `README.md` for user-facing installation and usage.
 ```
 DownBallotR/
 ├── R/                              # R package source
-│   ├── scraper_registry.R          # scrape_elections() + db_list_* exports
+│   ├── scrape_elections.R          # scrape_elections() — routing + dispatch
+│   ├── scraper_helpers.R           # Internal .scrape_*() functions (one per source)
+│   ├── db_query.R                  # db_list_sources(), db_list_states(), db_available_years()
+│   ├── state_utils.R               # .normalize_state(), .STATE_ABBREV, .to_year(), etc.
 │   ├── python_bind.R               # db_bind_python() — virtualenv + sys.path setup
 │   ├── downballot_use_python.R     # downballot_use_python() helper
 │   ├── downballot_install_python.R # downballot_install_python() — one-time setup
-│   ├── downballot_python_status.R  # db_python_status() diagnostic
+│   ├── downballot_python_status.R  # downballot_python_status() diagnostic
 │   └── zzz.R                       # .onLoad hook
 │
 ├── inst/python/                    # Python scraper modules (added to sys.path at runtime)
@@ -56,14 +59,23 @@ DownBallotR/
 │   │   ├── ballotpedia_client.py
 │   │   └── scrape_school_boards.py
 │   │
-│   └── Georgia/                    # GA Secretary of State scraper
-│       ├── pipeline.py             # GaElectionPipeline + get_ga_election_results()
-│       ├── client.py               # GaElectionClient — Playwright browser automation
-│       ├── parser.py               # parse_state_results() / parse_county_results()
-│       ├── models.py               # GA data models / column lists
-│       ├── inspect_vote_method.py  # Dev tool: inspect vote-method HTML after click
+│   ├── Georgia/                    # GA Secretary of State scraper
+│   │   ├── pipeline.py             # GaElectionPipeline + get_ga_election_results()
+│   │   ├── client.py               # GaElectionClient — Playwright browser automation
+│   │   ├── parser.py               # parse_state_results() / parse_county_results()
+│   │   ├── models.py               # GA data models / column lists
+│   │   ├── inspect_vote_method.py  # Dev tool: inspect vote-method HTML after click
+│   │   └── tests/
+│   │       └── test_ga_smoke.py    # Smoke test (single year, state level)
+│   │
+│   └── Connecticut/                # CT CTEMS scraper
+│       ├── pipeline.py             # CtElectionPipeline + get_ct_election_results()
+│       ├── client.py               # CtPlaywrightClient — AngularJS SPA automation
+│       ├── discovery.py            # parse_election_options() — election dropdown
+│       ├── parser.py               # parse_statewide_results() / parse_town_results()
+│       ├── models.py               # CtElectionInfo dataclass + date parsing
 │       └── tests/
-│           └── test_ga_smoke.py    # Smoke test (single year, state level)
+│           └── test_ct_smoke.py    # Smoke test (discovery + statewide + town)
 │
 ├── tests/testthat/                 # R-level tests (testthat)
 │   └── test-python-smoke.R
@@ -84,7 +96,7 @@ DownBallotR/
 2. Adds `inst/python/` to `sys.path`
 3. Imports `registry.py` as a module
 
-All routing logic lives in `R/scraper_registry.R`; all scraping logic lives in Python.
+Routing logic lives in `R/scrape_elections.R`; per-source argument shaping in `R/scraper_helpers.R`; state normalization in `R/state_utils.R`; all scraping logic lives in Python.
 `reticulate::py_to_r()` converts the returned pandas DataFrames to R data frames.
 
 ### Five scraper backends
@@ -96,6 +108,7 @@ All routing logic lives in `R/scraper_registry.R`; all scraping logic lives in P
 | **NC** (NCSBE ZIP pipeline) | NC | HTTP ZIP download | `NcElectionPipeline` |
 | **Ballotpedia** | All US states | `requests` | `SchoolBoardScraper` |
 | **Georgia SOS** | GA | Playwright (headless Chromium) | `GaElectionPipeline` |
+| **Connecticut CTEMS** | CT | Playwright (headless Chromium) | `CtElectionPipeline` |
 
 ### ElectionStats URL formats
 
@@ -141,17 +154,19 @@ implementation details:
 ## Python environment setup
 
 ```r
-# One-time — installs a virtualenv at ~/.virtualenvs/DownBallotR (or configured path)
-downballot_install_python()
+# One-time — installs a reticulate-managed Python and creates the downballotR virtualenv
+reticulate::install_python()
+downballot_install_python(python = reticulate::virtualenv_starter())
 
 # Check status
-db_python_status()
+downballot_python_status()
 ```
 
-Key Python dependencies: `requests`, `lxml`, `pandas`, `playwright`, `pyreadr`.
-After installing the virtualenv, install Playwright browsers once:
+Key Python dependencies: `requests`, `lxml`, `pandas`, `playwright`.
+Playwright Chromium is installed automatically by `downballot_install_python()`.
+To install it manually if needed:
 ```bash
-python -m playwright install chromium
+~/.virtualenvs/downballotR/bin/python -m playwright install chromium
 ```
 
 ---
@@ -193,6 +208,24 @@ python -m Georgia.tests.test_ga_smoke --vote-methods
 
 # Specific year
 python -m Georgia.tests.test_ga_smoke --year 2022
+```
+
+### Connecticut smoke test
+
+```bash
+cd inst/python
+
+# Discovery only — verify election dropdown loads (fast, ~10 s)
+python -m Connecticut.tests.test_ct_smoke --discovery-only
+
+# Single year — statewide + first county's towns
+python -m Connecticut.tests.test_ct_smoke --year 2024
+
+# Single year — statewide only, skip town scraping
+python -m Connecticut.tests.test_ct_smoke --year 2024 --state-only
+
+# Save rendered HTML to /tmp/ for selector debugging
+python -m Connecticut.tests.test_ct_smoke --year 2024 --save-html
 ```
 
 ### Other integration tests
@@ -296,6 +329,41 @@ Result dict keys: `"state"`, `"county"`, `"vote_method_state"`, `"vote_method_co
 
 ---
 
+## Key data flow (Connecticut CTEMS)
+
+```
+scrape_elections(state = "CT", year_from = 2024, year_to = 2024)   [R]
+  └─ .scrape_ct(year_from=2024, year_to=2024, level="all",
+                max_workers=2)                                  [R]
+       └─ registry.scrape("connecticut_results", ...)               [Python]
+            └─ _scrape_ct()                                         [Python]
+                 └─ get_ct_election_results(year_from, year_to, ...)
+                      └─ CtElectionPipeline.run()
+                           ├─ discover()
+                           │    → CtPlaywrightClient.get_landing_page()
+                           │    → parse_election_options(html)
+                           │    → list[CtElectionInfo]
+                           ├─ _scrape_state_summary(election)
+                           │    → CtPlaywrightClient.get_statewide_results()
+                           │    → parse_statewide_results(html)
+                           │    → federal_df  (empty for non-federal elections)
+                           ├─ _get_county_town_tree(election)
+                           │    → CtPlaywrightClient.get_county_town_options()
+                           │    → [(county, county_val, [(town, town_val), ...]), ...]
+                           ├─ _scrape_county()  [parallel, --ct-town-workers]
+                           │    → CtPlaywrightClient.get_all_towns_for_county()
+                           │    → parse_town_results(html) × N towns
+                           │    → list[town_df]
+                           └─ _build_state_df(summary_df, town_df)
+                                → federal rows from summary (or aggregated from towns)
+                                → state/local rows aggregated from towns
+                                → vote_pct recomputed, contest_outcome added
+```
+
+Result dict keys: `"state"`, `"town"`
+
+---
+
 ## Key data flow (ElectionStats classic)
 
 ```
@@ -374,6 +442,47 @@ Same rows as above, with `votes` split by method:
 | `votes_absentee` | Absentee by Mail ballots |
 | `votes_provisional` | Provisional ballots |
 | `votes_total` | Sum of all methods |
+
+---
+
+## Connecticut output schema
+
+### `state_df`
+
+One row per candidate per office for the whole state. Federal races come
+directly from the CTEMS statewide Summary page; State and Local races are
+aggregated by summing town-level totals.
+
+| Column | Description |
+|---|---|
+| `election_name` | Human-readable election name (e.g. "11/05/2024 -- November General Election") |
+| `election_year` | Calendar year |
+| `election_date` | ISO date string when parseable; `None` otherwise |
+| `election_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name (includes district suffix when present) |
+| `candidate` | Candidate name |
+| `party` | Party name (e.g. `"Democratic"`, `"Republican"`) |
+| `votes` | Total votes (integer) |
+| `vote_pct` | Percentage of votes in contest (recomputed from town totals) |
+| `contest_outcome` | `"Won"` or `"Lost"` (ties both receive `"Won"`); `None` if votes missing |
+
+### `town_df`
+
+One row per candidate per office per town.
+
+| Column | Description |
+|---|---|
+| `election_name` | Human-readable election name |
+| `election_year` | Calendar year |
+| `election_date` | ISO date string when parseable; `None` otherwise |
+| `county` | County name |
+| `town` | Town name |
+| `election_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `candidate` | Candidate name |
+| `party` | Party name |
+| `votes` | Votes in this town (integer) |
+| `vote_pct` | Percentage as reported by CTEMS for this town |
 
 ---
 

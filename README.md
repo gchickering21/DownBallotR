@@ -34,6 +34,8 @@ need to specify a source by name.
 |---|---|---|---|
 | `"general"` (default) | VA, MA, CO, NH, SC, NM, NY, VT | ElectionStats | Candidate + county results; years vary by state |
 | `"general"` (default) | `"NC"` / `"north_carolina"` | NC State Board of Elections | Precinct-level local election results, 2025–present |
+| `"general"` (default) | `"CT"` / `"connecticut"` | Connecticut CTEMS | Statewide + town results, 2016–present |
+| `"general"` (default) | `"GA"` / `"georgia"` | Georgia Secretary of State | Statewide + county results, 2000–present |
 | `"school_district"` | any state or `NULL` | Ballotpedia | School board elections, all US states, 2013–present |
 | `"state_elections"` | any state | Ballotpedia | Federal, state, and local candidates, all US states, 2024–present |
 | `"municipal_elections"` | any state or `NULL` | Ballotpedia | City, county, and mayoral elections, all US states, 2014–present |
@@ -69,18 +71,27 @@ scrape_elections(
 
 ## Python requirement
 
-`DownBallotR` uses Python internally via **reticulate**. **Python 3.10 or later
-must be installed on your machine** before running `downballot_install_python()`.
-
-If you do not have Python installed, download it from the official site:
-<https://www.python.org/downloads/>
-
-Once Python is available, the one-time setup command handles everything else
-(creating an isolated virtual environment and installing all required packages):
+`DownBallotR` uses Python internally via **reticulate**. The recommended setup
+lets reticulate manage Python for you, regardless of what is already installed
+on your machine:
 
 ```r
-downballot_install_python()
+reticulate::install_python()
+downballot_install_python(python = reticulate::virtualenv_starter())
 ```
+
+`reticulate::install_python()` downloads a standalone Python managed by
+reticulate (any version 3.10+ works; pin a specific one with e.g.
+`version = "3.12"` if needed). `virtualenv_starter()` then selects the best
+available Python for creating the virtual environment — no hardcoded version
+required.
+
+This creates an isolated virtual environment, installs all required packages,
+and downloads Playwright Chromium (~100–200MB, first time only).
+
+> If you already have Python 3.10+ installed and working, you can try
+> `downballot_install_python()` without arguments. Fall back to the
+> `reticulate::install_python()` approach above if virtualenv creation fails.
 
 ---
 
@@ -109,6 +120,18 @@ downballot_install_python()
 - Source: [vignettes/north-carolina.Rmd](vignettes/north-carolina.Rmd)
 - In R (after installing): `vignette("north-carolina", package = "DownBallotR")`
 - Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/north-carolina.html>
+
+**Connecticut** — CT CTEMS; statewide + town results, 2016–present:
+
+- Source: [vignettes/connecticut.Rmd](vignettes/connecticut.Rmd)
+- In R (after installing): `vignette("connecticut", package = "DownBallotR")`
+- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/connecticut.html>
+
+**Georgia** — GA Secretary of State; statewide + county results, 2000–present:
+
+- Source: [vignettes/georgia.Rmd](vignettes/georgia.Rmd)
+- In R (after installing): `vignette("georgia", package = "DownBallotR")`
+- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/georgia.html>
 
 **School district elections** — Ballotpedia school board data, all US states, 2013–present:
 

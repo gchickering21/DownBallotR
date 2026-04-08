@@ -16,21 +16,25 @@ Two-phase interaction model
 **Phase 2 — Town-level:**
   1. Load the home page, select the election.
   2. Click the "Select Town" navigation link.
-  3. Wait for the county and town dropdowns to appear.
+  3. Wait for the county and town dropdowns to become visible.
   4. Collect the full list of county + town option pairs.
   5. For each (county, town) pair: select county → select town → wait → capture HTML.
 
-Selector notes
---------------
-The selectors below were inferred from the AngularJS template structure observed
-via static HTML fetch.  **They should be verified against the live rendered page.**
-To inspect the actual selectors, run the client with ``headless=False`` and open
-browser DevTools, or save the rendered HTML to disk::
+Verified selector notes (from live site inspection)
+----------------------------------------------------
+The following have been confirmed against the live rendered HTML:
 
-    with CtPlaywrightClient(headless=False) as client:
-        html = client.get_landing_page()
-    with open("/tmp/ct_landing.html", "w") as f:
-        f.write(html)
+- Election dropdown: first ``<select>`` on the page (index 0); 60+ options.
+- County dropdown:   ``<select ng-model='selectedCounty'>`` at index 2; 9 options
+                     (already present in DOM on statewide view but hidden via ng-hide).
+- Town dropdown:     ``<select ng-model='selectedTown'>`` at index 3; 170 options.
+- Race content:      ``td.resultssummaryheader`` appears when an election has
+                     displayable races.  **Empty is normal** for special elections
+                     or elections with no federal races on the statewide summary.
+
+Still unverified against the live page:
+- The exact visible text of the "Select Town" navigation link (assumed "Select Town").
+  If town scraping fails, inspect the live HTML and update ``_click_town_tab``.
 """
 
 from __future__ import annotations
@@ -44,16 +48,15 @@ from playwright_base import BasePlaywrightClient
 CT_BASE_URL = "https://ctemspublic.tgstg.net/#/home"
 
 # ── CSS / text selectors ───────────────────────────────────────────────────────
-# TODO: verify these by inspecting the live rendered page.
 
-# The main election dropdown.  AngularJS usually renders it as the first <select>
-# on the page; we use the label text as a fallback locator.
-_ELECTION_SELECT_SEL = "select"          # first select on the page
+# The main election dropdown — confirmed as the first <select> on the page.
+_ELECTION_SELECT_SEL = "select"
 
 # Selector for a rendered race/contest container (statewide view).
-# AngularJS apps often repeat items in a div with class "race", "contest", or
-# "ng-scope".  Update this once you've inspected the live HTML.
-_RACE_CONTAINER_SEL = ".race, .contest, tr.ng-scope, table"
+# Confirmed from live HTML: race tables have a <td class="resultssummaryheader">
+# header row.  Note: this element is absent for elections with no statewide
+# federal races (special elections, off-year municipals) — empty is normal.
+_RACE_CONTAINER_SEL = "td.resultssummaryheader"
 
 # The "Select Town" navigation tab/link.
 _TOWN_TAB_SEL = "a"   # narrowed further by text match in the client method
@@ -67,7 +70,10 @@ _COUNTY_SELECT_INDEX = 2
 _TOWN_SELECT_INDEX   = 3
 
 # How long to wait (ms) for race containers to appear after selecting an election.
-_RESULTS_TIMEOUT_MS = 45_000
+# Short timeout is intentional: td.resultssummaryheader is absent for elections
+# with no federal statewide races (special elections, off-year municipals).
+# A timeout here is normal — the pipeline falls back to town aggregation.
+_RESULTS_TIMEOUT_MS = 10_000
 # How long to wait (ms) for county/town dropdowns to appear.
 _DROPDOWN_TIMEOUT_MS = 20_000
 
@@ -248,16 +254,19 @@ class CtPlaywrightClient(BasePlaywrightClient):
         time.sleep(self.sleep_s)
 
     def _wait_for_results(self) -> None:
-        """Wait for race/contest content to appear after selecting an election."""
+        """Wait for race/contest content to appear after selecting an election.
+
+        A timeout here is normal for elections with no statewide federal races
+        (e.g. special elections, off-year municipals).  The pipeline handles
+        this by falling back to town-level aggregation.
+        """
         assert self.page is not None
         try:
             self.page.wait_for_selector(_RACE_CONTAINER_SEL, timeout=_RESULTS_TIMEOUT_MS)
         except PlaywrightTimeoutError:
-            print(
-                f"[CT] WARNING: Timed out waiting for race containers "
-                f"(selector: {_RACE_CONTAINER_SEL!r}). "
-                "The selector may need updating — save the HTML for inspection."
-            )
+            # Not necessarily an error — elections with no federal statewide
+            # races will have no resultssummaryheader on the summary page.
+            pass
         if self.sleep_s:
             time.sleep(self.sleep_s)
 

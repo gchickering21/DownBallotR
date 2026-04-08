@@ -124,14 +124,15 @@ def test_single_election(
     state_df = parse_statewide_results(state_html, target)
 
     if state_df.empty:
-        _fail(
+        _warn(
             f"Statewide parser returned empty DataFrame for '{target.name}'. "
-            "Use --save-html and inspect /tmp/ct_statewide.html to update selectors."
+            "This is normal for special elections or elections with no federal races "
+            "on the statewide Summary page — town aggregation will supply the data. "
+            "If unexpected, use --save-html and inspect /tmp/ct_statewide.html."
         )
-        return False
-
-    levels = state_df["election_level"].value_counts().to_dict() if "election_level" in state_df.columns else {}
-    _pass(f"Statewide: {len(state_df)} candidate row(s). Levels: {levels}")
+    else:
+        levels = state_df["election_level"].value_counts().to_dict() if "election_level" in state_df.columns else {}
+        _pass(f"Statewide: {len(state_df)} candidate row(s). Levels: {levels}")
     print(state_df.head(8).to_string(index=False))
 
     if not scrape_towns:

@@ -122,11 +122,15 @@ class BasePlaywrightClient:
                 time.sleep(5 * attempt)
 
     def _wait_for_cloudflare(self, timeout_ms: int = 15_000) -> None:
-        """Wait for a Cloudflare challenge to resolve if one is present.
+        """Wait for a Cloudflare challenge page to clear if one is present.
+        
+        Cloudflare may temporarily serve a "Just a moment..." interstitial page
+        while it evaluates the browser (e.g., via JavaScript checks, cookies,
+        and other signals). During this time, the browser automatically executes
+        any required scripts.
 
-        Cloudflare's JS challenge temporarily serves a "Just a moment..." page
-        while the browser solves a proof-of-work puzzle.  This method detects
-        that page by title and waits until the real page loads.
+        This method detects that page by its title and waits until the real page
+        has loaded.
 
         Called automatically by ``_navigate``; subclasses rarely need to invoke
         it directly.
@@ -135,8 +139,8 @@ class BasePlaywrightClient:
         ----------
         timeout_ms : int
             Maximum milliseconds to wait for the challenge to clear (default
-            15 000).  A warning is printed if the challenge does not resolve in
-            time, but execution continues so callers can inspect whatever loaded.
+            15 000). A warning is printed if the challenge does not resolve
+            in time, but execution continues so callers can inspect whatever loaded.
         """
         assert self.page is not None
         try:

@@ -160,6 +160,22 @@
 }
 
 
+#' Call the Indiana General Election results scraper
+#' @keywords internal
+.scrape_in <- function(
+    year_from = NULL,
+    year_to   = NULL,
+    level     = "all") {
+  level <- match.arg(level, c("all", "state", "county"))
+  .db_registry()$scrape(
+    "indiana_results",
+    year_from = year_from,
+    year_to   = year_to,
+    level     = level
+  )
+}
+
+
 #' Call the Connecticut CTEMS election results scraper
 #' @keywords internal
 .scrape_ct <- function(

@@ -7,21 +7,14 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment  = "#>",
   eval     = FALSE
 )
 ```
-
-```{r setup}
-library(DownBallotR)
-library(dplyr)
-
-downballot_use_python()
-```
-
 ## What it covers
 
 The Ballotpedia municipal elections scraper collects city, county, and mayoral
@@ -62,7 +55,7 @@ Two index pages are available via the `race_type` argument:
 
 ### Index links for one year and state (fast)
 
-```{r}
+```{r, purl=FALSE}
 links <- scrape_elections(
   office = "municipal_elections",
   year   = 2022,
@@ -76,7 +69,7 @@ links %>%
 
 ### All states, one year
 
-```{r}
+```{r, purl=FALSE}
 links_all <- scrape_elections(
   office = "municipal_elections",
   year   = 2022
@@ -92,7 +85,7 @@ links_all %>%
 Use `race_type = "mayoral"` to pull only from the dedicated mayoral
 index page (available 2020–present):
 
-```{r}
+```{r, purl=FALSE}
 mayoral_links <- scrape_elections(
   office    = "municipal_elections",
   year      = 2024,
@@ -109,7 +102,7 @@ mayoral_links %>%
 `mode = "results"` follows each sub-URL — slower but returns candidate
 names, vote counts, and winner flags:
 
-```{r}
+```{r, purl=FALSE}
 results <- scrape_elections(
   office = "municipal_elections",
   year   = 2022,
@@ -125,7 +118,7 @@ results %>%
 
 ### Mayoral results only — one year, all states
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   office    = "municipal_elections",
   year      = 2022,
@@ -139,7 +132,7 @@ scrape_elections(
 
 ### Mayoral results for a single state
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   office    = "municipal_elections",
   year      = 2024,
@@ -154,7 +147,7 @@ scrape_elections(
 
 ### Multi-year mayoral results
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   office     = "municipal_elections",
   race_type  = "mayoral",
@@ -169,7 +162,7 @@ scrape_elections(
 
 ### Multi-year index links
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   office     = "municipal_elections",
   start_year = 2020,

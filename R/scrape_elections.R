@@ -222,6 +222,8 @@ scrape_elections <- function(
     "georgia_results"
   } else if (!is.null(state) && state == "Utah") {
     "utah_results"
+  } else if (!is.null(state) && state == "Indiana") {
+    "indiana_results"
   } else {
     "election_stats"
   }
@@ -243,6 +245,7 @@ scrape_elections <- function(
       "connecticut_results"   = "Connecticut (CTEMS)",
       "georgia_results"       = "Georgia (GA Secretary of State)",
       "utah_results"          = "Utah (electionresults.utah.gov)",
+      "indiana_results"       = "Indiana (enr.indianavoters.in.gov, General elections)",
       "election_stats"        = paste0(state, " (ElectionStats)")
     )
     message("Available years for ", label, ": ",
@@ -305,6 +308,11 @@ scrape_elections <- function(
       level                = match.arg(level, c("all", "state", "county")),
       max_county_workers   = as.integer(max_workers),
       include_vote_methods = isTRUE(include_vote_methods)
+    ),
+    "indiana_results" = .scrape_in(
+      year_from = year_from,
+      year_to   = year_to,
+      level     = match.arg(level, c("all", "state", "county"))
     )
   )
 

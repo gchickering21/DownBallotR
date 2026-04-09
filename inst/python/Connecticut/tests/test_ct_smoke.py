@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -56,9 +57,9 @@ def test_discovery(save_html: bool = False) -> bool:
         html = client.get_landing_page()
 
     if save_html:
-        path = "/tmp/ct_landing.html"
-        with open(path, "w", encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix="_ct_landing.html", delete=False, encoding="utf-8") as f:
             f.write(html)
+            path = f.name
         print(f"  [debug] Saved landing page HTML to {path}")
 
     elections = parse_election_options(html)
@@ -116,9 +117,9 @@ def test_single_election(
         state_html = client.get_statewide_results(target.option_value)
 
     if save_html:
-        path = "/tmp/ct_statewide.html"
-        with open(path, "w", encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix="_ct_statewide.html", delete=False, encoding="utf-8") as f:
             f.write(state_html)
+            path = f.name
         print(f"  [debug] Saved statewide HTML to {path}")
 
     state_df = parse_statewide_results(state_html, target)
@@ -173,9 +174,9 @@ def test_single_election(
     town_frames = []
     for town_name, html in town_htmls:
         if save_html and town_name == first_towns[0][0]:
-            path = "/tmp/ct_town.html"
-            with open(path, "w", encoding="utf-8") as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix="_ct_town.html", delete=False, encoding="utf-8") as f:
                 f.write(html)
+                path = f.name
             print(f"  [debug] Saved first town HTML to {path}")
         df = parse_town_results(html, town_name, first_county_name, target)
         if not df.empty:

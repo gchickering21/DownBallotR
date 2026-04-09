@@ -7,21 +7,14 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment  = "#>",
   eval     = FALSE
 )
 ```
-
-```{r setup}
-library(DownBallotR)
-library(dplyr)
-
-downballot_use_python()
-```
-
 ## What it covers
 
 The Connecticut scraper returns election results from the CT Election Management
@@ -56,7 +49,7 @@ the statewide totals.
 
 ### Statewide + town results for a single year
 
-```{r}
+```{r, purl=FALSE}
 res <- scrape_elections(state = "CT", year_from = 2024, year_to = 2024)
 
 # Statewide totals — one row per candidate per office
@@ -72,7 +65,7 @@ res$town %>%
 
 ### Statewide totals only (faster — skips town scraping)
 
-```{r}
+```{r, purl=FALSE}
 state_df <- scrape_elections(
   state     = "CT",
   year_from = 2024,
@@ -87,7 +80,7 @@ state_df %>%
 
 ### Town-level only
 
-```{r}
+```{r, purl=FALSE}
 town_df <- scrape_elections(
   state     = "CT",
   year_from = 2022,
@@ -105,7 +98,7 @@ town_df %>%
 
 ### Multi-year scrape with more parallel workers
 
-```{r}
+```{r, purl=FALSE}
 res <- scrape_elections(
   state             = "CT",
   year_from         = 2020,
@@ -117,7 +110,7 @@ res <- scrape_elections(
 
 ### Filter by election level
 
-```{r}
+```{r, purl=FALSE}
 res <- scrape_elections(state = "CT", year_from = 2023, year_to = 2023)
 
 # Local races only (municipal elections)

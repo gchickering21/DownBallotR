@@ -1,4 +1,7 @@
 testthat::test_that("optional: env can be activated and modules visible", {
+  testthat::skip_on_cran()
+  testthat::skip_if_offline()
+  testthat::skip_if_not_installed("reticulate")
   # Only run when user opts in (local dev), never by default.
   testthat::skip_if_not(isTRUE(Sys.getenv("DOWNBALLOT_TEST_PYTHON", "false") == "true"))
 

@@ -12,7 +12,18 @@ Public entry points
 
 from __future__ import annotations
 
+import pandas as pd
+
 from Clarity.pipeline import get_clarity_election_results
+
+
+def _drop_is_incumbent(result):
+    """Drop the is_incumbent column from all DataFrames in a result."""
+    if isinstance(result, pd.DataFrame):
+        return result.drop(columns=["is_incumbent"], errors="ignore")
+    if isinstance(result, dict):
+        return {k: v.drop(columns=["is_incumbent"], errors="ignore") for k, v in result.items()}
+    return result
 
 UT_BASE_URL      = "https://electionresults.utah.gov/results/public/Utah"
 UT_COUNTY_SUFFIX = "-ut"
@@ -51,7 +62,7 @@ def get_ut_election_results(
         Adds ``vote_method_state`` / ``vote_method_county`` to the result dict.
         Default False.
     """
-    return get_clarity_election_results(
+    result = get_clarity_election_results(
         base_url=UT_BASE_URL,
         county_suffix=UT_COUNTY_SUFFIX,
         log_prefix=UT_LOG_PREFIX,
@@ -61,3 +72,4 @@ def get_ut_election_results(
         max_county_workers=max_county_workers,
         include_vote_methods=include_vote_methods,
     )
+    return _drop_is_incumbent(result)

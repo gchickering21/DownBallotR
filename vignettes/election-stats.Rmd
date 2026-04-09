@@ -7,21 +7,14 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment  = "#>",
   eval     = FALSE
 )
 ```
-
-```{r setup}
-library(DownBallotR)
-library(dplyr)
-
-downballot_use_python()
-```
-
 ## What it covers
 
 The ElectionStats scraper pulls candidate-level and county-level election
@@ -69,7 +62,7 @@ they are slower but fully automated.
 
 ### Candidate-level results for a single year
 
-```{r}
+```{r, purl=FALSE}
 state_df <- scrape_elections(
   state     = "virginia",
   year_from = 2023,
@@ -85,7 +78,7 @@ state_df %>%
 
 ### County-level vote counts
 
-```{r}
+```{r, purl=FALSE}
 county_df <- scrape_elections(
   state     = "virginia",
   year_from = 2023,
@@ -102,7 +95,7 @@ county_df %>%
 
 `level = "all"` returns a named list with `$state` and `$county` elements:
 
-```{r}
+```{r, purl=FALSE}
 res <- scrape_elections(
   state     = "virginia",
   year_from = 2023,
@@ -115,7 +108,7 @@ res$county  # county breakdown data frame
 
 ### Multi-year range
 
-```{r}
+```{r, purl=FALSE}
 ma_results <- scrape_elections(
   state     = "massachusetts",
   year_from = 2018,
@@ -130,7 +123,7 @@ ma_results %>%
 
 ### Playwright state (South Carolina)
 
-```{r}
+```{r, purl=FALSE}
 sc_results <- scrape_elections(
   state     = "south_carolina",
   year_from = 2024,
@@ -145,7 +138,7 @@ sc_results %>%
 
 ### Joined data (county + candidate metadata)
 
-```{r}
+```{r, purl=FALSE}
 joined <- scrape_elections(
   state     = "virginia",
   year_from = 2023,
@@ -159,7 +152,7 @@ joined %>%
 
 ### Disable parallel scraping
 
-```{r}
+```{r, purl=FALSE}
 res_seq <- scrape_elections(
   state     = "virginia",
   year_from = 2023,

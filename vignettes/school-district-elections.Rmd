@@ -7,21 +7,14 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment  = "#>",
   eval     = FALSE
 )
 ```
-
-```{r setup}
-library(DownBallotR)
-library(dplyr)
-
-downballot_use_python()
-```
-
 ## What it covers
 
 The school district scraper collects school board election data from
@@ -55,7 +48,7 @@ all US states). Use `office = "school_district"` to activate it.
 
 ### District metadata for all states
 
-```{r}
+```{r, purl=FALSE}
 districts_2024 <- scrape_elections(
   office = "school_district",
   year   = 2024
@@ -69,7 +62,7 @@ districts_2024 %>%
 
 ### Filter to one state
 
-```{r}
+```{r, purl=FALSE}
 alabama_2024 <- scrape_elections(
   state  = "Alabama",
   office = "school_district",
@@ -82,7 +75,7 @@ alabama_2024 %>%
 
 ### Competitive districts (many seats up)
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   state  = "Texas",
   office = "school_district",
@@ -98,7 +91,7 @@ scrape_elections(
 `mode = "results"` follows each district link — slower but returns
 candidate names, vote counts, and winner flags:
 
-```{r}
+```{r, purl=FALSE}
 results <- scrape_elections(
   state  = "New Jersey",
   office = "school_district",
@@ -115,7 +108,7 @@ results %>%
 
 ### Districts + candidates joined
 
-```{r}
+```{r, purl=FALSE}
 joined <- scrape_elections(
   state  = "Texas",
   office = "school_district",
@@ -132,7 +125,7 @@ joined %>%
 
 Use `start_year` / `end_year` when `year` is omitted:
 
-```{r}
+```{r, purl=FALSE}
 multi_year <- scrape_elections(
   state      = "Ohio",
   office     = "school_district",

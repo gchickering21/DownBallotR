@@ -7,8 +7,9 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment  = "#>",
   eval     = FALSE
@@ -21,14 +22,14 @@ Before scraping data you need a working Python environment. If you have not
 done so yet, follow the steps in the
 [Python setup vignette](python-setup.html):
 
-```{r}
+```{r, purl=FALSE}
 # One-time setup (downloads ~100-200 MB the first time)
 downballot_install_python()
 ```
 
 At the start of each R session:
 
-```{r}
+```{r, eval=FALSE, purl=FALSE}
 library(DownBallotR)
 library(dplyr)
 
@@ -65,7 +66,7 @@ you never need to specify a backend by name:
 
 Use `db_available_years()` to check available year ranges programmatically:
 
-```{r}
+```{r, purl=FALSE}
 # All sources
 db_available_years()
 
@@ -98,7 +99,7 @@ db_available_years(state = "virginia")
 
 To see which states are supported by the ElectionStats scraper:
 
-```{r}
+```{r, purl=FALSE}
 db_list_states("election_stats")
 #> [1] "colorado"       "massachusetts"  "new_hampshire"  "new_mexico"
 #> [5] "new_york"       "south_carolina" "vermont"        "virginia"

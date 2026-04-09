@@ -7,8 +7,9 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment = "#>",
   eval = FALSE
@@ -19,7 +20,7 @@ knitr::opts_chunk$set(
 
 You can install the development version from GitHub:
 
-```{r}
+```{r, purl=FALSE}
 install.packages("pak")
 pak::pak("gchickering21/Downballot")
 ```
@@ -27,14 +28,14 @@ pak::pak("gchickering21/Downballot")
 
 Or using `remotes`:
 
-```{r}
+```{r, purl=FALSE}
 install.packages("remotes")
 remotes::install_github("gchickering21/Downballot")
 ```
 
 Then load the package:
 
-```{r}
+```{r, purl=FALSE}
 library(DownBallotR)
 ```
 
@@ -50,7 +51,7 @@ After installing the R package, you must set up the Python environment used by
 The most reliable approach — regardless of what Python versions you have installed
 on your machine — is to let reticulate install Python for you:
 
-```{r}
+```{r, purl=FALSE}
 reticulate::install_python()
 ```
 
@@ -63,7 +64,7 @@ needed (e.g. `reticulate::install_python(version = "3.12")`); any version
 
 Once Python is available, run the following **once**:
 
-```{r}
+```{r, purl=FALSE}
 downballot_install_python(python = reticulate::virtualenv_starter())
 ```
 
@@ -92,7 +93,7 @@ This step may take a few minutes.
 
 After installation completes, check the status:
 
-```{r}
+```{r, purl=FALSE}
 downballot_python_status()
 ```
 
@@ -115,7 +116,7 @@ session**.
 
 At the start of any R session where you plan to use `DownBallotR`, run:
 
-```{r}
+```{r, purl=FALSE}
 downballot_use_python()
 ```
 
@@ -132,7 +133,7 @@ You only need to run this once per session.
 
 At any time, you can check the current state of the Python environment:
 
-```{r}
+```{r, purl=FALSE}
 downballot_python_status()
 ```
 
@@ -151,7 +152,7 @@ This reports:
 If you restart R, open a new RStudio window, or start a separate R process,
 simply run:
 
-```{r}
+```{r, purl=FALSE}
 downballot_use_python()
 ```
 
@@ -175,7 +176,7 @@ If you have multiple R sessions open concurrently:
 
 Run:
 
-```{r}
+```{r, purl=FALSE}
 downballot_use_python()
 downballot_python_status()
 ```
@@ -183,7 +184,7 @@ downballot_python_status()
 
 If packages are still missing:
 
-```{r}
+```{r, purl=FALSE}
 downballot_install_python(reinstall = TRUE)
 ```
 
@@ -200,7 +201,7 @@ Fix:
 1. Restart your R session
 2. Immediately run:
 
-```{r}
+```{r, purl=FALSE}
 downballot_use_python()
 ```
 
@@ -211,7 +212,7 @@ Then continue using the package.
 
 If the environment becomes corrupted or inconsistent:
 
-```{r}
+```{r, purl=FALSE}
 downballot_install_python(python = reticulate::virtualenv_starter(), reinstall = TRUE)
 downballot_use_python()
 downballot_python_status()
@@ -223,7 +224,7 @@ downballot_python_status()
 
 ### First-time setup:
 
-```{r}
+```{r, purl=FALSE}
 reticulate::install_python()
 downballot_install_python(python = reticulate::virtualenv_starter())
 downballot_use_python()
@@ -231,14 +232,14 @@ downballot_use_python()
 
 ### Every new R session:
 
-```{r}
+```{r, purl=FALSE}
 downballot_use_python()
 ```
 
 
 ### Check environment status:
 
-```{r}
+```{r, purl=FALSE}
 downballot_python_status()
 ```
 

@@ -7,21 +7,14 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment  = "#>",
   eval     = FALSE
 )
 ```
-
-```{r setup}
-library(DownBallotR)
-library(dplyr)
-
-downballot_use_python()
-```
-
 ## What it covers
 
 The Ballotpedia state elections scraper collects federal, state, and local
@@ -75,7 +68,7 @@ Local Candidates — which you can filter with the `election_level` argument.
 
 ### All candidates for a state — fast listing
 
-```{r}
+```{r, purl=FALSE}
 maine_2024 <- scrape_elections(
   state  = "Maine",
   office = "state_elections",
@@ -89,7 +82,7 @@ maine_2024 %>%
 
 ### Federal candidates only
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   state          = "Pennsylvania",
   office         = "state_elections",
@@ -101,7 +94,7 @@ scrape_elections(
 
 ### Local candidates only
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   state          = "Maine",
   office         = "state_elections",
@@ -117,7 +110,7 @@ scrape_elections(
 `mode = "results"` follows each contest link and returns votes and
 winner/incumbent flags:
 
-```{r}
+```{r, purl=FALSE}
 maine_results <- scrape_elections(
   state  = "Maine",
   office = "state_elections",
@@ -134,7 +127,7 @@ maine_results %>%
 
 ### Local results with vote counts
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   state          = "Maine",
   office         = "state_elections",
@@ -149,7 +142,7 @@ scrape_elections(
 
 ### State-level incumbents running for re-election
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(
   state          = "Virginia",
   office         = "state_elections",
@@ -165,7 +158,7 @@ scrape_elections(
 
 Use `start_year` / `end_year` when `year` is omitted:
 
-```{r}
+```{r, purl=FALSE}
 multi <- scrape_elections(
   state      = "Virginia",
   office     = "state_elections",

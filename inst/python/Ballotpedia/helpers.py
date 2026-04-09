@@ -128,8 +128,10 @@ class BallotpediaBaseScraper:
                 # Sync clearance cookies back so requests can reuse them
                 self._sync_cookies_from_playwright(client.context)
             return content
+        except KeyboardInterrupt:
+            raise
         except Exception as exc:
-            print(f"  WARNING: playwright failed for {url}: {exc}")
+            print(f"  WARNING: playwright failed for {url}: {type(exc).__name__}: {exc}")
             return None
 
     def _get_html(self, url: str, _retries: int = 3) -> Optional[str]:

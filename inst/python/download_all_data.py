@@ -14,6 +14,7 @@ Sections:
     state_elections     Ballotpedia state elections (2024-present, per state)
     municipal           Ballotpedia municipal/mayoral elections (2014-present)
     georgia             Georgia Secretary of State election results (2012-present)
+    utah                Utah election results (2023-present)
     connecticut         Connecticut CTEMS election results (2016-present)
     all                 All of the above (default)
 
@@ -23,7 +24,7 @@ Options:
     --fast                  Use fast/lightweight modes (districts/listings/links)
                             instead of the default detailed modes (joined/results).
                             Much quicker but omits vote counts and candidate detail.
-                            (Has no effect on the georgia section.)
+                            (Has no effect on the georgia or utah sections.)
     --dry-run               Print tasks without scraping
 
 Georgia-specific options:
@@ -31,11 +32,19 @@ Georgia-specific options:
     --ga-year-to   INT      Last year to download (default: current year)
     --ga-level     LEVEL    State-only, county-only, or both (default: all)
                             Choices: all, state, county
-    --vote-methods          Also capture per-contest vote-method breakdowns
+    --ga-vote-methods       Also capture per-contest vote-method breakdowns
                             (Advance in Person / Election Day / Absentee / Provisional).
                             Adds extra Playwright clicks per page; significantly
                             slower but produces richer data.
-    --county-workers INT    Parallel Chromium browsers for county scraping (default: 2)
+    --ga-county-workers INT Parallel Chromium browsers for GA county scraping (default: 2)
+
+Utah-specific options:
+    --ut-year-from INT      First year to download (default: 2023)
+    --ut-year-to   INT      Last year to download (default: current year)
+    --ut-level     LEVEL    State-only, county-only, or both (default: all)
+                            Choices: all, state, county
+    --ut-vote-methods       Also capture per-contest vote-method breakdowns.
+    --ut-county-workers INT Parallel Chromium browsers for UT county scraping (default: 2)
 
 Connecticut-specific options:
     --ct-year-from INT      First year to download (default: 2000)
@@ -63,8 +72,13 @@ Output layout:
       georgia/
         ga_{year}_state.csv               (statewide candidate totals)
         ga_{year}_county.csv              (per-county candidate totals)
-        ga_{year}_vote_method_state.csv   (--vote-methods: per-method statewide)
-        ga_{year}_vote_method_county.csv  (--vote-methods: per-method by county)
+        ga_{year}_vote_method_state.csv   (--ga-vote-methods: per-method statewide)
+        ga_{year}_vote_method_county.csv  (--ga-vote-methods: per-method by county)
+      utah/
+        ut_{year}_state.csv               (statewide candidate totals)
+        ut_{year}_county.csv              (per-county candidate totals)
+        ut_{year}_vote_method_state.csv   (--ut-vote-methods: per-method statewide)
+        ut_{year}_vote_method_county.csv  (--ut-vote-methods: per-method by county)
       connecticut/
         ct_{year}_state.csv               (statewide totals: federal + aggregated state/local)
         ct_{year}_town.csv                (per-town candidate totals with election_level)
@@ -108,7 +122,9 @@ SCHOOL_BOARD_YEAR_RANGE    = (2013, CURRENT_YEAR)
 STATE_ELECTIONS_YEAR_RANGE = (2024, CURRENT_YEAR)
 MUNICIPAL_YEAR_RANGE       = (2014, CURRENT_YEAR)
 MAYORAL_YEAR_RANGE         = (2020, CURRENT_YEAR)
+IN_YEAR_RANGE              = (2019, CURRENT_YEAR)
 GA_YEAR_RANGE              = (2012, CURRENT_YEAR)
+UT_YEAR_RANGE              = (2023, CURRENT_YEAR)
 CT_YEAR_RANGE              = (2016, CURRENT_YEAR)
 
 # All 50 US states + DC (title-case full names expected by Ballotpedia scrapers)
@@ -133,10 +149,28 @@ def _slug(s: str) -> str:
     return s.lower().replace(" ", "_").replace("/", "_")
 
 
+_FORMULA_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize_csv(df: pd.DataFrame) -> pd.DataFrame:
+    """Escape string cells that start with formula-injection characters.
+
+    Spreadsheet apps (Excel, Google Sheets) treat cells starting with
+    =, +, -, @, tab, or CR as formulas.  Prepending a single quote
+    prevents execution without altering the visible cell value.
+    """
+    df = df.copy()
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = df[col].apply(
+            lambda x: f"'{x}" if isinstance(x, str) and x[:1] in _FORMULA_CHARS else x
+        )
+    return df
+
+
 def _save(df: pd.DataFrame, path: Path) -> None:
     """Write *df* to *path* as a CSV file, creating parent directories as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False)
+    _sanitize_csv(df).to_csv(path, index=False)
     # Show path relative to the repo root (4 levels up from inst/python/)
     try:
         display = path.relative_to(Path(__file__).parent.parent.parent.parent)
@@ -145,12 +179,34 @@ def _save(df: pd.DataFrame, path: Path) -> None:
     print(f"  → saved {len(df):,} rows  →  {display}")
 
 
+def _is_valid_csv(path: Path) -> bool:
+    """Return True if *path* exists and contains non-trivial content.
+
+    A file that exists but is empty or header-only (< 50 bytes) is treated as
+    corrupt — it is deleted so the next run re-scrapes rather than silently
+    skipping.  This handles the case where a previous run crashed mid-write.
+    """
+    if not path.exists():
+        return False
+    size = path.stat().st_size
+    if size < 50:
+        print(f"  ⚠ file exists but appears empty/corrupt ({size} bytes): {path.name} — will re-scrape")
+        path.unlink()
+        return False
+    return True
+
+
 def _already_exists(path: Path) -> bool:
-    """Return True and print a skip message when *path* already exists."""
-    if path.exists():
+    """Return True and print a skip message when *path* is a valid CSV."""
+    if _is_valid_csv(path):
         print(f"  ↷ already exists, skipping: {path.name}")
         return True
     return False
+
+
+def _all_valid(paths: "dict[str, Path]") -> bool:
+    """Return True when every path in *paths* is a valid (non-empty) CSV."""
+    return all(_is_valid_csv(p) for p in paths.values())
 
 
 def _run_task(
@@ -303,7 +359,7 @@ def download_nc(output_dir: Path, *, dry_run: bool, **_) -> list[bool]:
         "state":    base / f"{stem}_state.csv",
     }
     print(f"\n[{label}]")
-    if all(p.exists() for p in paths.values()):
+    if _all_valid(paths):
         print("  ↷ all three output files exist, skipping")
         return [True]
     if dry_run:
@@ -441,6 +497,90 @@ def download_municipal(
     return _run_tasks(tasks, dry_run=dry_run, workers=workers)
 
 
+def download_indiana(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    in_year_from: int = IN_YEAR_RANGE[0],
+    in_year_to: int = IN_YEAR_RANGE[1],
+    in_level: str = "all",
+    **_,
+) -> list[bool]:
+    """
+    Indiana General Election results, one set of files per year.
+
+    Output files per year (in_level='all'):
+      data/indiana/in_{year}_state.csv   — statewide candidate totals
+      data/indiana/in_{year}_county.csv  — per-county candidate totals
+    """
+    base = output_dir / "indiana"
+    results: list[bool] = []
+
+    for year in range(in_year_from, in_year_to + 1):
+        label = f"Indiana  {year}General  level={in_level}"
+        print(f"\n[{label}]")
+
+        paths: dict[str, Path] = {}
+        if in_level in ("all", "state"):
+            paths["state"]  = base / f"in_{year}_state.csv"
+        if in_level in ("all", "county"):
+            paths["county"] = base / f"in_{year}_county.csv"
+
+        if _all_valid(paths):
+            print("  ↷ all output files exist, skipping")
+            results.append(True)
+            continue
+
+        if dry_run:
+            for key, p in paths.items():
+                status = "exists" if p.exists() else "would write"
+                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
+            results.append(True)
+            continue
+
+        try:
+            result = registry.scrape(
+                "indiana_results",
+                year_from=year,
+                year_to=year,
+                level=in_level,
+            )
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            results.append(False)
+            continue
+
+        ok = True
+        try:
+            if isinstance(result, dict):
+                for key, df in result.items():
+                    if key not in paths:
+                        continue
+                    if df.empty:
+                        print(f"  ⚠ empty result for '{key}' — skipping write")
+                    else:
+                        _save(df, paths[key])
+            elif isinstance(result, pd.DataFrame):
+                key = in_level
+                if key in paths:
+                    if result.empty:
+                        print("  ⚠ empty result — skipping write")
+                    else:
+                        _save(result, paths[key])
+            else:
+                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
+                ok = False
+        except Exception:
+            print("  ✗ ERROR while saving result:")
+            traceback.print_exc()
+            ok = False
+
+        results.append(ok)
+
+    return results
+
+
 def download_georgia(
     output_dir: Path,
     *,
@@ -448,8 +588,8 @@ def download_georgia(
     ga_year_from: int = GA_YEAR_RANGE[0],
     ga_year_to: int = GA_YEAR_RANGE[1],
     ga_level: str = "all",
-    vote_methods: bool = False,
-    county_workers: int = 2,
+    ga_vote_methods: bool = False,
+    ga_county_workers: int = 2,
     **_,
 ) -> list[bool]:
     """
@@ -476,24 +616,24 @@ def download_georgia(
     results: list[bool] = []
 
     for year in range(ga_year_from, ga_year_to + 1):
-        vm_suffix = " +vote-methods" if vote_methods else ""
+        vm_suffix = " +vote-methods" if ga_vote_methods else ""
         label = f"Georgia SOS  {year}  level={ga_level}{vm_suffix}"
         print(f"\n[{label}]")
 
-        # Build expected output paths based on level and vote_methods flag
+        # Build expected output paths based on level and ga_vote_methods flag
         paths: dict[str, Path] = {}
         if ga_level in ("all", "state"):
             paths["state"] = base / f"ga_{year}_state.csv"
         if ga_level in ("all", "county"):
             paths["county"] = base / f"ga_{year}_county.csv"
-        if vote_methods:
+        if ga_vote_methods:
             if ga_level in ("all", "state"):
                 paths["vote_method_state"]  = base / f"ga_{year}_vote_method_state.csv"
             if ga_level in ("all", "county"):
                 paths["vote_method_county"] = base / f"ga_{year}_vote_method_county.csv"
 
         # Skip if all expected outputs already exist
-        if all(p.exists() for p in paths.values()):
+        if _all_valid(paths):
             print("  ↷ all output files exist, skipping")
             results.append(True)
             continue
@@ -511,8 +651,8 @@ def download_georgia(
                 year_from=year,
                 year_to=year,
                 level=ga_level,
-                include_vote_methods=vote_methods,
-                max_county_workers=county_workers,
+                include_vote_methods=ga_vote_methods,
+                max_county_workers=ga_county_workers,
             )
         except Exception:
             print("  ✗ ERROR during scrape:")
@@ -533,6 +673,109 @@ def download_georgia(
             elif isinstance(result, pd.DataFrame):
                 # level='state' or level='county' without vote_methods
                 key = ga_level
+                if key in paths:
+                    if result.empty:
+                        print("  ⚠ empty result — skipping write")
+                    else:
+                        _save(result, paths[key])
+            else:
+                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
+                ok = False
+        except Exception:
+            print("  ✗ ERROR while saving result:")
+            traceback.print_exc()
+            ok = False
+
+        results.append(ok)
+
+    return results
+
+
+def download_utah(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    ut_year_from: int = UT_YEAR_RANGE[0],
+    ut_year_to: int = UT_YEAR_RANGE[1],
+    ut_level: str = "all",
+    ut_vote_methods: bool = False,
+    ut_county_workers: int = 2,
+    **_,
+) -> list[bool]:
+    """
+    Utah election results, one set of files per year.
+
+    For each year in [ut_year_from, ut_year_to], all elections in that year are
+    scraped in a single pipeline call.  County-level pages are scraped in
+    parallel (--ut-county-workers controls concurrency; each worker spawns its
+    own Chromium process).
+
+    Output files per year (level='all'):
+      data/utah/ut_{year}_state.csv           — statewide candidate totals
+      data/utah/ut_{year}_county.csv          — per-county candidate totals
+
+    With --ut-vote-methods, additionally:
+      data/utah/ut_{year}_vote_method_state.csv   — per-method statewide
+      data/utah/ut_{year}_vote_method_county.csv  — per-method by county
+    """
+    base = output_dir / "utah"
+    results: list[bool] = []
+
+    for year in range(ut_year_from, ut_year_to + 1):
+        vm_suffix = " +vote-methods" if ut_vote_methods else ""
+        label = f"Utah  {year}  level={ut_level}{vm_suffix}"
+        print(f"\n[{label}]")
+
+        paths: dict[str, Path] = {}
+        if ut_level in ("all", "state"):
+            paths["state"] = base / f"ut_{year}_state.csv"
+        if ut_level in ("all", "county"):
+            paths["county"] = base / f"ut_{year}_county.csv"
+        if ut_vote_methods:
+            if ut_level in ("all", "state"):
+                paths["vote_method_state"]  = base / f"ut_{year}_vote_method_state.csv"
+            if ut_level in ("all", "county"):
+                paths["vote_method_county"] = base / f"ut_{year}_vote_method_county.csv"
+
+        if _all_valid(paths):
+            print("  ↷ all output files exist, skipping")
+            results.append(True)
+            continue
+
+        if dry_run:
+            for key, p in paths.items():
+                status = "exists" if p.exists() else "would write"
+                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
+            results.append(True)
+            continue
+
+        try:
+            result = registry.scrape(
+                "utah_results",
+                year_from=year,
+                year_to=year,
+                level=ut_level,
+                include_vote_methods=ut_vote_methods,
+                max_county_workers=ut_county_workers,
+            )
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            results.append(False)
+            continue
+
+        ok = True
+        try:
+            if isinstance(result, dict):
+                for key, df in result.items():
+                    if key not in paths:
+                        continue
+                    if df.empty:
+                        print(f"  ⚠ empty result for '{key}' — skipping write")
+                    else:
+                        _save(df, paths[key])
+            elif isinstance(result, pd.DataFrame):
+                key = ut_level
                 if key in paths:
                     if result.empty:
                         print("  ⚠ empty result — skipping write")
@@ -595,7 +838,7 @@ def download_connecticut(
         if ct_level in ("all", "town"):
             paths["town"] = base / f"ct_{year}_town.csv"
 
-        if all(p.exists() for p in paths.values()):
+        if _all_valid(paths):
             print("  ↷ all output files exist, skipping")
             results.append(True)
             continue
@@ -660,6 +903,8 @@ SECTIONS: dict[str, Callable] = {
     "state_elections":  download_state_elections,
     "municipal":        download_municipal,
     "georgia":          download_georgia,
+    "utah":             download_utah,
+    "indiana":          download_indiana,
     "connecticut":      download_connecticut,
 }
 
@@ -748,7 +993,7 @@ def main() -> None:
         help="What to scrape for Georgia: state totals, county totals, or both (default: all).",
     )
     ga_group.add_argument(
-        "--vote-methods",
+        "--ga-vote-methods",
         action="store_true",
         help=(
             "Capture per-contest vote-method breakdowns for Georgia "
@@ -757,7 +1002,7 @@ def main() -> None:
         ),
     )
     ga_group.add_argument(
-        "--county-workers",
+        "--ga-county-workers",
         type=int,
         default=2,
         metavar="N",
@@ -765,6 +1010,71 @@ def main() -> None:
             "Parallel Chromium browsers for Georgia county scraping (default: 2). "
             "Each worker is a separate process — keep ≤ 6 to avoid exhausting memory."
         ),
+    )
+
+    # Utah-specific options
+    ut_group = parser.add_argument_group("utah options")
+    ut_group.add_argument(
+        "--ut-year-from",
+        type=int,
+        default=UT_YEAR_RANGE[0],
+        metavar="YEAR",
+        help=f"First year to download for Utah (default: {UT_YEAR_RANGE[0]}).",
+    )
+    ut_group.add_argument(
+        "--ut-year-to",
+        type=int,
+        default=UT_YEAR_RANGE[1],
+        metavar="YEAR",
+        help="Last year to download for Utah (default: current year).",
+    )
+    ut_group.add_argument(
+        "--ut-level",
+        choices=["all", "state", "county"],
+        default="all",
+        help="What to scrape for Utah: state totals, county totals, or both (default: all).",
+    )
+    ut_group.add_argument(
+        "--ut-vote-methods",
+        action="store_true",
+        help=(
+            "Capture per-contest vote-method breakdowns for Utah "
+            "(Advance in Person / Election Day / Absentee / Provisional). "
+            "Requires extra Playwright clicks per page; significantly slower."
+        ),
+    )
+    ut_group.add_argument(
+        "--ut-county-workers",
+        type=int,
+        default=2,
+        metavar="N",
+        help=(
+            "Parallel Chromium browsers for Utah county scraping (default: 2). "
+            "Each worker is a separate process — keep ≤ 6 to avoid exhausting memory."
+        ),
+    )
+
+    # Indiana-specific options
+    in_group = parser.add_argument_group("indiana options")
+    in_group.add_argument(
+        "--in-year-from",
+        type=int,
+        default=IN_YEAR_RANGE[0],
+        metavar="YEAR",
+        help=f"First year to download for Indiana (default: {IN_YEAR_RANGE[0]}).",
+    )
+    in_group.add_argument(
+        "--in-year-to",
+        type=int,
+        default=IN_YEAR_RANGE[1],
+        metavar="YEAR",
+        help="Last year to download for Indiana (default: current year).",
+    )
+    in_group.add_argument(
+        "--in-level",
+        choices=["all", "state", "county"],
+        default="all",
+        help="What to scrape for Indiana: state totals, county totals, or both (default: all).",
     )
 
     # Connecticut-specific options
@@ -820,8 +1130,16 @@ def main() -> None:
     if args.section in ("georgia", "all"):
         print(f"GA year range    : {args.ga_year_from}–{args.ga_year_to}")
         print(f"GA level         : {args.ga_level}")
-        print(f"GA vote methods  : {args.vote_methods}")
-        print(f"GA county workers: {args.county_workers}")
+        print(f"GA vote methods  : {args.ga_vote_methods}")
+        print(f"GA county workers: {args.ga_county_workers}")
+    if args.section in ("indiana", "all"):
+        print(f"IN year range    : {args.in_year_from}–{args.in_year_to}")
+        print(f"IN level         : {args.in_level}")
+    if args.section in ("utah", "all"):
+        print(f"UT year range    : {args.ut_year_from}–{args.ut_year_to}")
+        print(f"UT level         : {args.ut_level}")
+        print(f"UT vote methods  : {args.ut_vote_methods}")
+        print(f"UT county workers: {args.ut_county_workers}")
     if args.section in ("connecticut", "all"):
         print(f"CT year range    : {args.ct_year_from}–{args.ct_year_to}")
         print(f"CT level         : {args.ct_level}")
@@ -845,8 +1163,18 @@ def main() -> None:
             ga_year_from=args.ga_year_from,
             ga_year_to=args.ga_year_to,
             ga_level=args.ga_level,
-            vote_methods=args.vote_methods,
-            county_workers=args.county_workers,
+            ga_vote_methods=args.ga_vote_methods,
+            ga_county_workers=args.ga_county_workers,
+            # Indiana-specific
+            in_year_from=args.in_year_from,
+            in_year_to=args.in_year_to,
+            in_level=args.in_level,
+            # Utah-specific
+            ut_year_from=args.ut_year_from,
+            ut_year_to=args.ut_year_to,
+            ut_level=args.ut_level,
+            ut_vote_methods=args.ut_vote_methods,
+            ut_county_workers=args.ut_county_workers,
             # Connecticut-specific
             ct_year_from=args.ct_year_from,
             ct_year_to=args.ct_year_to,

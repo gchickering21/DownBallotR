@@ -185,11 +185,13 @@ def _add_contest_outcome(df: pd.DataFrame, contest_cols: list[str]) -> pd.DataFr
         df["contest_outcome"] = pd.Series(dtype="object")
         return df
     df = df.copy()
+    # transform("max") always returns a Series with the same index as df,
+    # so boolean masks derived from it are always index-aligned.
     max_votes = df.groupby(contest_cols, dropna=False)["votes"].transform("max")
-    df["contest_outcome"] = "Lost"
-    df.loc[df["votes"] == max_votes, "contest_outcome"] = "Won"
-    # Contests where all vote counts are missing → indeterminate
-    df.loc[max_votes.isna(), "contest_outcome"] = None
+    has_votes = df["votes"].notna()
+    df["contest_outcome"] = pd.NA  # Start as NA; fill below only for rows with data
+    df.loc[has_votes, "contest_outcome"] = "Lost"
+    df.loc[has_votes & (df["votes"] == max_votes), "contest_outcome"] = "Won"
     return df
 
 

@@ -78,23 +78,67 @@ from lxml import html as lhtml
 from .models import ClarityElectionInfo
 
 # ---------------------------------------------------------------------------
+# Office-level classification
+# ---------------------------------------------------------------------------
+
+_FEDERAL_RE = re.compile(
+    r"presidential\s+elector"
+    r"|president\s+of\s+the\s+united\s+states"
+    r"|united\s+states\s+senator"
+    r"|u\.?\s*s\.?\s+senator"
+    r"|senator\s+in\s+congress"
+    r"|representative\s+in\s+congress"
+    r"|u\.?\s*s\.?\s+representative"
+    r"|congressman|congresswoman"
+    r"|u\.?\s*s\.?\s+house",
+    re.IGNORECASE,
+)
+
+_STATE_RE = re.compile(
+    r"\bgovernor\b"
+    r"|lieutenant\s+governor|lt\.?\s+governor"
+    r"|attorney\s+general"
+    r"|secretary\s+of\s+state"
+    r"|state\s+treasurer|\btreasurer\b"
+    r"|state\s+comptroller|\bcomptroller\b"
+    r"|state\s+auditor|\bauditor\b"
+    r"|superintendent\s+of\s+(public\s+)?instruction"
+    r"|commissioner\s+of\s+(agriculture|insurance|labor)"
+    r"|state\s+senator|state\s+senate"
+    r"|state\s+representative|state\s+house"
+    r"|general\s+assembly"
+    r"|state\s+school\s+board",
+    re.IGNORECASE,
+)
+
+
+def classify_office_level(office: str) -> str:
+    """Classify an office name as ``'Federal'``, ``'State'``, or ``'Local'``."""
+    if _FEDERAL_RE.search(office):
+        return "Federal"
+    if _STATE_RE.search(office):
+        return "State"
+    return "Local"
+
+
+# ---------------------------------------------------------------------------
 # Output column definitions
 # ---------------------------------------------------------------------------
 _STATE_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "office", "localities_reporting",
+    "result_status", "office_level", "office", "localities_reporting",
     "candidate", "party", "is_winner", "is_incumbent", "votes", "pct", "url",
 ]
 
 _COUNTY_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "county", "office", "localities_reporting",
+    "result_status", "county", "office_level", "office", "localities_reporting",
     "candidate", "party", "is_winner", "is_incumbent", "votes", "pct", "url",
 ]
 
 _VM_STATE_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "office", "localities_reporting",
+    "result_status", "office_level", "office", "localities_reporting",
     "candidate", "party", "is_incumbent",
     "votes_advance_in_person", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total", "url",
@@ -102,7 +146,7 @@ _VM_STATE_COLS = [
 
 _VM_COUNTY_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "county", "office", "localities_reporting",
+    "result_status", "county", "office_level", "office", "localities_reporting",
     "candidate", "party", "is_incumbent",
     "votes_advance_in_person", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total", "url",
@@ -291,6 +335,54 @@ def _parse_contest_table(panel) -> list[dict]:
     return results
 
 
+def _fix_clarity_winners(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+    """Derive is_winner: mark the top-voted candidate per contest as True.
+
+    Clarity HTML does not expose a winner flag or num_seats, so we default to
+    1 winner per contest (the candidate with the most votes).  Ties share the
+    winner flag (rank method='min').
+    """
+    if df.empty or "votes" not in df.columns:
+        return df
+    valid = df["votes"].notna()
+    if not valid.any():
+        return df
+    df = df.copy()
+    # Use pandas nullable boolean so rows with no vote data stay NA (not False).
+    # reticulate converts this to R logical, which supports NA natively.
+    df["is_winner"] = pd.NA
+    df["is_winner"] = df["is_winner"].astype("boolean")
+    ranked = (
+        df.loc[valid]
+        .groupby(group_cols, dropna=False)["votes"]
+        .rank(method="min", ascending=False)
+    )
+    df.loc[valid, "is_winner"] = (ranked <= 1).astype("boolean")
+    return df
+
+
+def _fill_pct(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute ``pct`` from votes where the HTML did not provide it.
+
+    Some candidates (write-ins, uncontested races) have votes but no
+    percentage in the rendered HTML.  When ``pct`` is null we compute it as
+    ``votes / contest_total_votes * 100``, rounded to two decimal places.
+    Rows where both ``pct`` and ``votes`` are null are left as-is.
+    """
+    if df.empty or "pct" not in df.columns or "votes" not in df.columns:
+        return df
+    missing = df["pct"].isna() & df["votes"].notna()
+    if not missing.any():
+        return df
+    contest_cols = [c for c in ("election_name", "election_year", "office") if c in df.columns]
+    if contest_cols:
+        totals = df.groupby(contest_cols, dropna=False)["votes"].transform("sum")
+        computed = (df["votes"] / totals * 100).round(2)
+        df = df.copy()
+        df.loc[missing, "pct"] = computed[missing]
+    return df
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -354,6 +446,7 @@ def parse_state_results(
             "election_slug":        election_info.slug,
             "election_date":        page_meta["election_date"],
             "result_status":        page_meta["result_status"],
+            "office_level":         classify_office_level(office),
             "office":               office,
             "localities_reporting": localities_reporting,
             "url":                  election_info.url,
@@ -371,6 +464,8 @@ def parse_state_results(
         pd.DataFrame(state_rows, columns=_STATE_COLS)
         if state_rows else pd.DataFrame(columns=_STATE_COLS)
     )
+    state_df = _fill_pct(state_df)
+    state_df = _fix_clarity_winners(state_df, ["election_name", "election_year", "office"])
     vote_method_df = (
         pd.DataFrame(vm_rows, columns=_VM_STATE_COLS)
         if vm_rows else pd.DataFrame(columns=_VM_STATE_COLS)
@@ -439,6 +534,7 @@ def parse_county_results(
             "election_date":        page_meta["election_date"],
             "result_status":        page_meta["result_status"],
             "county":               county_name,
+            "office_level":         classify_office_level(office),
             "office":               office,
             "localities_reporting": localities_reporting,
             "url":                  url,
@@ -456,6 +552,8 @@ def parse_county_results(
         pd.DataFrame(county_rows, columns=_COUNTY_COLS)
         if county_rows else pd.DataFrame(columns=_COUNTY_COLS)
     )
+    county_df = _fill_pct(county_df)
+    county_df = _fix_clarity_winners(county_df, ["election_name", "election_year", "office", "county"])
     vote_method_df = (
         pd.DataFrame(vm_rows, columns=_VM_COUNTY_COLS)
         if vm_rows else pd.DataFrame(columns=_VM_COUNTY_COLS)

@@ -235,7 +235,8 @@ class CtPlaywrightClient(BasePlaywrightClient):
         try:
             # Wait for the select to contain at least two options (placeholder + ≥1 election)
             self.page.wait_for_function(
-                f"() => document.querySelectorAll('{_ELECTION_SELECT_SEL} option').length > 1",
+                "sel => document.querySelectorAll(sel).length > 1",
+                arg=f"{_ELECTION_SELECT_SEL} option",
                 timeout=_RESULTS_TIMEOUT_MS,
             )
         except PlaywrightTimeoutError:
@@ -287,10 +288,8 @@ class CtPlaywrightClient(BasePlaywrightClient):
         try:
             # County dropdown is the 3rd select (index 2) and must be visible
             self.page.wait_for_function(
-                f"""() => {{
-                    const s = document.querySelectorAll('{_ELECTION_SELECT_SEL}');
-                    return s.length > {_COUNTY_SELECT_INDEX} && s[{_COUNTY_SELECT_INDEX}].offsetParent !== null;
-                }}""",
+                "([sel, idx]) => { const s = document.querySelectorAll(sel); return s.length > idx && s[idx].offsetParent !== null; }",
+                arg=[_ELECTION_SELECT_SEL, _COUNTY_SELECT_INDEX],
                 timeout=_DROPDOWN_TIMEOUT_MS,
             )
         except PlaywrightTimeoutError:
@@ -304,10 +303,8 @@ class CtPlaywrightClient(BasePlaywrightClient):
         try:
             # Town dropdown should have > 1 option (placeholder + at least one town)
             self.page.wait_for_function(
-                f"""() => {{
-                    const s = document.querySelectorAll('{_ELECTION_SELECT_SEL}');
-                    return s.length > {_TOWN_SELECT_INDEX} && s[{_TOWN_SELECT_INDEX}].options.length > 1;
-                }}""",
+                "([sel, idx]) => { const s = document.querySelectorAll(sel); return s.length > idx && s[idx].options.length > 1; }",
+                arg=[_ELECTION_SELECT_SEL, _TOWN_SELECT_INDEX],
                 timeout=_DROPDOWN_TIMEOUT_MS,
             )
         except PlaywrightTimeoutError:
@@ -319,13 +316,8 @@ class CtPlaywrightClient(BasePlaywrightClient):
         """Return all (text, value) pairs from the select at the given 0-based index."""
         assert self.page is not None
         return self.page.evaluate(
-            f"""
-            () => {{
-                const selects = document.querySelectorAll('{_ELECTION_SELECT_SEL}');
-                if (selects.length <= {index}) return [];
-                return Array.from(selects[{index}].options).map(o => [o.text.trim(), o.value]);
-            }}
-            """
+            "([sel, idx]) => { const selects = document.querySelectorAll(sel); if (selects.length <= idx) return []; return Array.from(selects[idx].options).map(o => [o.text.trim(), o.value]); }",
+            [_ELECTION_SELECT_SEL, index],
         )
 
     def _select_by_index(self, index: int, value: str) -> None:

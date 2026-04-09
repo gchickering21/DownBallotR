@@ -1,6 +1,6 @@
 Package: DownBallotR
 Title: Local and State Election Data via R with Python-Backed Scrapers
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: c(
     person(
         given = "Graham",
@@ -25,6 +25,7 @@ URL: https://gchickering21.github.io/DownBallotR/,
 BugReports: https://github.com/gchickering21/DownBallotR/issues
 Encoding: UTF-8
 Language: en-US
+SystemRequirements: Python (>= 3.9), pip
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Depends:
@@ -32,10 +33,13 @@ Depends:
 Imports:
     reticulate
 Suggests:
+    dplyr,
     knitr,
+    pak,
+    remotes,
     rmarkdown,
     testthat (>= 3.0.0),
     withr
 Config/testthat/edition: 3
 VignetteBuilder: knitr
-LazyData: true
+BuildVignettes: false

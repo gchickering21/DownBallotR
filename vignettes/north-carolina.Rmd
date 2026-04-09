@@ -7,21 +7,14 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
+```{r, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(
+  purl     = FALSE,
   collapse = TRUE,
   comment  = "#>",
   eval     = FALSE
 )
 ```
-
-```{r setup}
-library(DownBallotR)
-library(dplyr)
-
-downballot_use_python()
-```
-
 ## What it covers
 
 The NC scraper returns precinct-level local election results from the
@@ -47,7 +40,7 @@ NC State Board of Elections, filtered by year range.
 
 ### All currently supported NC results
 
-```{r}
+```{r, purl=FALSE}
 nc_all <- scrape_elections(state = "NC")
 
 nc_all %>%
@@ -57,7 +50,7 @@ nc_all %>%
 
 ### Single year
 
-```{r}
+```{r, purl=FALSE}
 nc_2025 <- scrape_elections(
   state     = "NC",
   year_from = 2025,
@@ -71,7 +64,7 @@ nc_2025 %>%
 
 ### Filter to a specific county
 
-```{r}
+```{r, purl=FALSE}
 scrape_elections(state = "NC") %>%
   filter(county == "Wake") %>%
   select(year, office, candidate, party, votes) %>%
@@ -80,7 +73,7 @@ scrape_elections(state = "NC") %>%
 
 ### Multi-year range
 
-```{r}
+```{r, purl=FALSE}
 nc_range <- scrape_elections(
   state     = "NC",
   year_from = 2025,

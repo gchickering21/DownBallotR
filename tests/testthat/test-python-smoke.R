@@ -1,4 +1,6 @@
 testthat::test_that("python status returns expected structure and class", {
+  testthat::skip_on_cran()
+  testthat::skip_if_not_installed("reticulate")
   st <- downballot_python_status(quiet = TRUE)
 
   testthat::expect_true(is.list(st))
@@ -25,6 +27,8 @@ testthat::test_that("python status returns expected structure and class", {
 })
 
 testthat::test_that("print method runs without error", {
+  testthat::skip_on_cran()
+  testthat::skip_if_not_installed("reticulate")
   st <- downballot_python_status(quiet = TRUE)
   testthat::expect_output(print(st), regexp = "downballot", fixed = FALSE)
 })

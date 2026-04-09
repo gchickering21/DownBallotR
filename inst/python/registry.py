@@ -19,14 +19,25 @@ from df_utils import concat_or_empty as _concat_or_empty
 # Shared helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+_VALID_LEVELS = ("all", "state", "county")
+
+
 def _to_year(v) -> "int | None":
     """Coerce *v* to an integer year, accepting int/float/str/None."""
     if v is None:
         return None
     try:
-        return int(float(v))
+        year = int(float(v))
     except (TypeError, ValueError):
         raise ValueError(f"Cannot convert {v!r} to a year integer.")
+    if not (1900 <= year <= 2100):
+        raise ValueError(f"Year must be between 1900 and 2100; got {year}.")
+    return year
+
+
+def _validate_level(level: str) -> None:
+    if level not in _VALID_LEVELS:
+        raise ValueError(f"level must be one of {_VALID_LEVELS}; got {level!r}.")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -60,8 +71,10 @@ def _scrape_ut(
         ``'vote_method_state'`` / ``'vote_method_county'`` to the result dict
         (default False).
     """
+    _validate_level(level)
     year_from = _to_year(year_from)
     year_to   = _to_year(year_to)
+    year_from, year_to = _clamp_year_range(year_from, year_to, "utah_results")
 
     label = (
         f"{year_from}–{year_to}" if year_from and year_to
@@ -108,8 +121,10 @@ def _scrape_ga(
         ``'vote_method_state'`` / ``'vote_method_county'`` to the result dict
         (default False).
     """
+    _validate_level(level)
     year_from = _to_year(year_from)
     year_to   = _to_year(year_to)
+    year_from, year_to = _clamp_year_range(year_from, year_to, "georgia_results")
 
     label = (
         f"{year_from}–{year_to}" if year_from and year_to
@@ -126,6 +141,46 @@ def _scrape_ga(
         level=level,
         max_county_workers=max_county_workers,
         include_vote_methods=include_vote_methods,
+    )
+
+
+def _scrape_in(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    level: str = "all",
+    **_,
+):
+    """Scrape Indiana General Election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive (default: 2020).
+    year_to : int | None
+        End year, inclusive (default: current calendar year).
+    level : str
+        ``'all'`` (default) — dict with ``'state'`` and ``'county'`` DataFrames;
+        ``'state'`` — statewide candidate totals only;
+        ``'county'`` — county-level totals only.
+    """
+    _validate_level(level)
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+    year_from, year_to = _clamp_year_range(year_from, year_to, "indiana_results")
+
+    label = (
+        f"{year_from}–{year_to}" if year_from and year_to
+        else f"{year_from}–" if year_from
+        else f"–{year_to}" if year_to
+        else "all years"
+    )
+    print(f"[IN] Starting scrape | {label} | level={level!r}")
+
+    from Indiana.pipeline import get_in_election_results
+    return get_in_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
     )
 
 
@@ -546,6 +601,9 @@ _YEAR_RANGES: dict = {
     "northcarolina_results": {
         "NC": (2000, 2025),
     },
+    "indiana_results": {
+        "IN": (2019, None),  # open-ended; new elections added as they occur
+    },
     "connecticut_results": {
         "CT": (2016, None),  # open-ended; discovery determines actual availability
     },
@@ -572,6 +630,49 @@ _YEAR_RANGES: dict = {
 }
 
 
+def _clamp_year_range(
+    year_from: "int | None",
+    year_to: "int | None",
+    source: str,
+) -> "tuple[int | None, int | None]":
+    """Clamp year_from/year_to to the available range for *source* in _YEAR_RANGES.
+
+    Looks up all state ranges under *source*, derives the union
+    (earliest start, latest end), then clamps the requested range to that
+    window.  Prints a warning for any clamping applied.  Returns unchanged
+    values if *source* is not in _YEAR_RANGES.
+    """
+    ranges = _YEAR_RANGES.get(source)
+    if not ranges:
+        return year_from, year_to
+
+    current_year = datetime.datetime.now().year
+    starts = [r[0] for r in ranges.values()]
+    ends   = [r[1] if r[1] is not None else current_year for r in ranges.values()]
+    min_start = min(starts)
+    max_end   = max(ends)
+
+    if year_from is not None and year_to is not None and year_from > year_to:
+        raise ValueError(
+            f"year_from ({year_from}) cannot be greater than year_to ({year_to})."
+        )
+
+    new_from = year_from
+    new_to   = year_to
+
+    if year_from is not None and year_from < min_start:
+        print(f"  [WARNING] year_from={year_from} is before the earliest available year "
+              f"for '{source}' ({min_start}). Clamping to {min_start}.")
+        new_from = min_start
+
+    if year_to is not None and year_to > max_end:
+        print(f"  [WARNING] year_to={year_to} is after the latest available year "
+              f"for '{source}' ({max_end}). Clamping to {max_end}.")
+        new_to = max_end
+
+    return new_from, new_to
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Registry
 # ──────────────────────────────────────────────────────────────────────────────
@@ -591,6 +692,11 @@ _SOURCES: dict = {
         "description": "Utah election results (electionresults.utah.gov)",
         "scrape_fn": _scrape_ut,
         "states": ["UT"],
+    },
+    "indiana_results": {
+        "description": "Indiana General Election results (enr.indianavoters.in.gov, 2020–present)",
+        "scrape_fn": _scrape_in,
+        "states": ["IN"],
     },
     "connecticut_results": {
         "description": "Connecticut CTEMS election results (ctemspublic.tgstg.net)",
@@ -690,6 +796,10 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
 
     if source == "northcarolina_results":
         start, end = ranges["NC"]
+        return {"start_year": start, "end_year": end or current_year}
+
+    if source == "indiana_results":
+        start, end = ranges["IN"]
         return {"start_year": start, "end_year": end or current_year}
 
     if source == "georgia_results":

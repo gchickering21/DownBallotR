@@ -191,9 +191,47 @@ scrape_elections <- function(
     )
   }
 
-  state     <- .normalize_state(state)
-  year_from <- .to_year(year_from)
-  year_to   <- .to_year(year_to)
+  # ── Input validation ─────────────────────────────────────────────────────────
+
+  # state must be a single string (not a vector)
+  .stop_if_not_scalar(state, "state")
+
+  # logical scalars
+  if (!is.logical(parallel) || length(parallel) != 1L || is.na(parallel))
+    stop("'parallel' must be TRUE or FALSE.", call. = FALSE)
+  if (!is.logical(include_vote_methods) || length(include_vote_methods) != 1L || is.na(include_vote_methods))
+    stop("'include_vote_methods' must be TRUE or FALSE.", call. = FALSE)
+
+  # max_workers must be a positive integer
+  max_workers <- .validate_max_workers(max_workers)
+
+  # year arguments: scalar + integer coercion
+  year_from  <- .to_year(year_from,  "year_from")
+  year_to    <- .to_year(year_to,    "year_to")
+  year       <- .to_year(year,       "year")
+  start_year <- .to_year(start_year, "start_year")
+  end_year   <- .to_year(end_year,   "end_year")
+
+  # year range cross-check (R-level, before hitting Python)
+  if (!is.null(year_from) && !is.null(year_to) && year_from > year_to)
+    stop(sprintf("'year_from' (%d) cannot be greater than 'year_to' (%d).", year_from, year_to),
+         call. = FALSE)
+  if (!is.null(start_year) && !is.null(end_year) && start_year > end_year)
+    stop(sprintf("'start_year' (%d) cannot be greater than 'end_year' (%d).", start_year, end_year),
+         call. = FALSE)
+
+  # Normalize and validate state
+  state <- .normalize_state(state)
+  .check_state_recognized(state)
+
+  # office-specific required-argument checks (catch early before Python does)
+  if (office == "state_elections" && is.null(state))
+    stop("'state' is required when office = \"state_elections\".", call. = FALSE)
+
+  if (office %in% c("school_district", "state_elections") &&
+      mode %in% c("results", "joined") && is.null(year))
+    stop(sprintf("'year' is required when office = \"%s\" and mode = \"%s\".", office, mode),
+         call. = FALSE)
 
   # Set default start_year per office type if not supplied
   if (is.null(start_year)) {
@@ -224,36 +262,138 @@ scrape_elections <- function(
     "utah_results"
   } else if (!is.null(state) && state == "Indiana") {
     "indiana_results"
+  } else if (!is.null(state) && state == "Louisiana") {
+    "louisiana_results"
   } else {
     "election_stats"
   }
 
-  # ── Print available year range for chosen source/state ────────────────────
-  tryCatch({
-    avail <- .db_registry()$get_available_years(
+  # ── Post-routing: argument-compatibility checks ───────────────────────────────
+
+  # Which level values are meaningful per source (NULL = level is ignored)
+  .SOURCE_LEVELS <- list(
+    election_stats        = c("all", "state", "county", "joined"),
+    northcarolina_results = NULL,
+    connecticut_results   = c("all", "state", "town"),
+    georgia_results       = c("all", "state", "county"),
+    utah_results          = c("all", "state", "county"),
+    indiana_results       = c("all", "state", "county"),
+    louisiana_results     = c("all", "state", "parish"),
+    ballotpedia           = NULL,
+    ballotpedia_elections = NULL,
+    ballotpedia_municipal = NULL
+  )
+
+  .source_name <- switch(
+    source,
+    election_stats        = paste0(state, " (ElectionStats)"),
+    northcarolina_results = "North Carolina (NC State Board of Elections)",
+    connecticut_results   = "Connecticut (CTEMS)",
+    georgia_results       = "Georgia (GA Secretary of State)",
+    utah_results          = "Utah",
+    indiana_results       = "Indiana",
+    louisiana_results     = "Louisiana (Secretary of State)",
+    ballotpedia           = "school district elections (Ballotpedia)",
+    ballotpedia_elections = paste0(state, " state elections (Ballotpedia)"),
+    ballotpedia_municipal = "municipal elections (Ballotpedia)",
+    source
+  )
+
+  valid_levels <- .SOURCE_LEVELS[[source]]
+  if (is.null(valid_levels)) {
+    # Scraper returns a single flat data frame; 'level' has no effect
+    if (level != "all")
+      warning(sprintf(
+        "'level = \"%s\"' is not applicable for %s and will be ignored.\n  This scraper always returns a single data frame.",
+        level, .source_name
+      ), call. = FALSE)
+  } else if (!level %in% valid_levels) {
+    stop(sprintf(
+      paste0(
+        "'level = \"%s\"' is not valid for %s.\n",
+        "  Valid options: %s\n",
+        "  Tip: \"joined\" and the county/town/parish sub-levels depend on the scraper;\n",
+        "       use level = \"all\" to return everything."
+      ),
+      level, .source_name,
+      paste0('"', valid_levels, '"', collapse = ", ")
+    ), call. = FALSE)
+  }
+
+  # include_vote_methods is only meaningful for GA and UT
+  if (isTRUE(include_vote_methods) && !source %in% c("georgia_results", "utah_results"))
+    warning(
+      "'include_vote_methods = TRUE' is only supported for Georgia and Utah; it will be ignored.",
+      call. = FALSE
+    )
+
+  # Warn when office-specific parameters are set but won't be used
+  if (office == "general" && !mode %in% c("districts", "results", "joined"))
+    warning(sprintf(
+      "'mode = \"%s\"' is not used for office = \"general\";\n  routing is determined by state. Did you mean a different 'office'?",
+      mode
+    ), call. = FALSE)
+
+  if (office != "state_elections" && election_level != "all")
+    warning(sprintf(
+      "'election_level = \"%s\"' is only used with office = \"state_elections\"; it will be ignored.",
+      election_level
+    ), call. = FALSE)
+
+  if (office != "municipal_elections" && race_type != "all")
+    warning(sprintf(
+      "'race_type = \"%s\"' is only used with office = \"municipal_elections\"; it will be ignored.",
+      race_type
+    ), call. = FALSE)
+
+  # ── Availability info + unconfirmed-year notice ───────────────────────────
+  .avail_label <- switch(
+    source,
+    "ballotpedia"           = "school district elections (Ballotpedia)",
+    "ballotpedia_elections" = paste0(state, " state elections (Ballotpedia)"),
+    "ballotpedia_municipal" = paste0(
+      "municipal/mayoral elections (Ballotpedia, race_type='", race_type, "')"
+    ),
+    "northcarolina_results" = "North Carolina (NC State Board of Elections)",
+    "connecticut_results"   = "Connecticut (CTEMS)",
+    "georgia_results"       = "Georgia (GA Secretary of State)",
+    "utah_results"          = "Utah (electionresults.utah.gov)",
+    "indiana_results"       = "Indiana (enr.indianavoters.in.gov, General elections)",
+    "louisiana_results"     = "Louisiana (voterportal.sos.la.gov)",
+    "election_stats"        = paste0(state, " (ElectionStats)")
+  )
+
+  .avail <- tryCatch(
+    .db_registry()$get_available_years(
       source = source,
       state  = if (source == "election_stats") .state_to_es_key(state) else NULL
-    )
-    label <- switch(
-      source,
-      "ballotpedia"           = "school district elections (Ballotpedia)",
-      "ballotpedia_elections" = paste0(state, " state elections (Ballotpedia)"),
-      "ballotpedia_municipal" = paste0(
-        "municipal/mayoral elections (Ballotpedia, race_type='", race_type, "')"
-      ),
-      "northcarolina_results" = "North Carolina (NC State Board of Elections)",
-      "connecticut_results"   = "Connecticut (CTEMS)",
-      "georgia_results"       = "Georgia (GA Secretary of State)",
-      "utah_results"          = "Utah (electionresults.utah.gov)",
-      "indiana_results"       = "Indiana (enr.indianavoters.in.gov, General elections)",
-      "election_stats"        = paste0(state, " (ElectionStats)")
-    )
-    message("Available years for ", label, ": ",
-            avail$start_year, "\u2013", avail$end_year)
-  }, error = function(e) NULL)
+    ),
+    error = function(e) NULL
+  )
+
+  if (!is.null(.avail)) {
+    message("Available years for ", .avail_label, ": ",
+            .avail$start_year, "\u2013", .avail$end_year)
+
+    # Determine the furthest year the user is requesting
+    .requested_to <- year_to
+    if (is.null(.requested_to)) .requested_to <- year
+    if (is.null(.requested_to)) .requested_to <- end_year
+
+    if (!is.null(.requested_to) && .requested_to > .avail$end_year) {
+      message(
+        "\nNote: ", .requested_to, " is beyond the last confirmed year (",
+        .avail$end_year, ") for ", .avail_label, ".\n",
+        "  This year has not been verified. DownBallotR will attempt the scrape,\n",
+        "  but results are not guaranteed.\n",
+        "  If you encounter problems, please file a report at:\n",
+        "  https://github.com/gchickering21/DownBallotR/issues"
+      )
+    }
+  }
 
   # ── Dispatch ─────────────────────────────────────────────────────────────────
-  result <- switch(
+  result <- tryCatch(switch(
     source,
     "election_stats" = .scrape_election_stats(
       state     = .state_to_es_key(state),
@@ -292,29 +432,45 @@ scrape_elections <- function(
     "connecticut_results" = .scrape_ct(
       year_from        = year_from,
       year_to          = year_to,
-      level            = match.arg(level, c("all", "state", "town")),
+      level            = level,
       max_town_workers = as.integer(max_workers)
     ),
     "georgia_results" = .scrape_ga(
       year_from            = year_from,
       year_to              = year_to,
-      level                = match.arg(level, c("all", "state", "county")),
+      level                = level,
       max_county_workers   = as.integer(max_workers),
       include_vote_methods = isTRUE(include_vote_methods)
     ),
     "utah_results" = .scrape_ut(
       year_from            = year_from,
       year_to              = year_to,
-      level                = match.arg(level, c("all", "state", "county")),
+      level                = level,
       max_county_workers   = as.integer(max_workers),
       include_vote_methods = isTRUE(include_vote_methods)
     ),
     "indiana_results" = .scrape_in(
       year_from = year_from,
       year_to   = year_to,
-      level     = match.arg(level, c("all", "state", "county"))
+      level     = level
+    ),
+    "louisiana_results" = .scrape_la(
+      year_from          = year_from,
+      year_to            = year_to,
+      level              = level,
+      max_parish_workers = as.integer(max_workers)
     )
-  )
+  ),
+  error = function(e) {
+    stop(
+      "Scraping failed for ", .avail_label, ".\n\n",
+      "  Error: ", conditionMessage(e), "\n\n",
+      "  If this looks like a bug or the data source may have changed,\n",
+      "  please file a report (including the error above) at:\n",
+      "  https://github.com/gchickering21/DownBallotR/issues",
+      call. = FALSE
+    )
+  })
 
   reticulate::py_to_r(result)
 }

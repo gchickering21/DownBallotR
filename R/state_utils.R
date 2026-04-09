@@ -62,9 +62,78 @@
 
 #' Coerce a year value to integer, accepting numeric, string, or NULL
 #' @keywords internal
-.to_year <- function(x) {
+.to_year <- function(x, arg = deparse(substitute(x))) {
   if (is.null(x)) return(NULL)
+  if (length(x) != 1L)
+    stop(sprintf("'%s' must be a single value, not a vector of length %d.", arg, length(x)),
+         call. = FALSE)
   val <- suppressWarnings(as.integer(as.numeric(as.character(x))))
-  if (is.na(val)) stop("Cannot convert year value ", deparse(x), " to an integer.")
+  if (is.na(val))
+    stop(sprintf("Cannot convert '%s' value %s to an integer year.", arg, deparse(x)),
+         call. = FALSE)
   val
+}
+
+
+#' Stop if a scalar argument has length != 1
+#' @keywords internal
+.stop_if_not_scalar <- function(x, arg) {
+  if (!is.null(x) && length(x) != 1L)
+    stop(sprintf("'%s' must be a single value, not a vector of length %d.", arg, length(x)),
+         call. = FALSE)
+  invisible(x)
+}
+
+
+#' Validate and coerce max_workers to a positive integer, capped at 4
+#'
+#' R users are capped at 4 parallel workers to avoid overwhelming public
+#' election data sites. Values above 4 are silently reduced with a message.
+#' @keywords internal
+.validate_max_workers <- function(x, arg = "max_workers") {
+  .stop_if_not_scalar(x, arg)
+  val <- suppressWarnings(as.integer(x))
+  if (is.na(val) || val < 1L)
+    stop(sprintf("'%s' must be a positive integer (e.g. 4L); got %s.", arg, deparse(x)),
+         call. = FALSE)
+  if (val > 4L) {
+    message(sprintf(
+      paste0(
+        "Note: '%s' has been capped at 4 (requested %d).\n",
+        "  DownBallotR scrapes government election sites that are not\n",
+        "  designed for high-volume automated access. Running too many parallel browsers\n",
+        "  at once can slow or crash these sites for other users, including election\n",
+        "  officials. A limit of 4 workers balances scraping speed with being a\n",
+        "  responsible user of shared public infrastructure."
+      ),
+      arg, val
+    ))
+    val <- 4L
+  }
+  val
+}
+
+
+#' Check that a normalized state name is a recognized US state
+#'
+#' Raises a user-friendly error with fuzzy-match suggestions when the state
+#' cannot be identified. Pass \code{required = FALSE} to only warn (used when
+#' \code{NULL} is a valid "all states" sentinel).
+#' @keywords internal
+.check_state_recognized <- function(state) {
+  if (is.null(state)) return(invisible(NULL))
+  known <- unname(.STATE_ABBREV)
+  if (state %in% known) return(invisible(state))
+
+  # Fuzzy-match suggestions for a helpful hint
+  matches <- agrep(state, known, ignore.case = TRUE, value = TRUE, max.distance = 0.2)
+  hint <- if (length(matches) > 0L)
+    paste0('\n  Did you mean: "', paste(utils::head(matches, 3L), collapse = '", "'), '"?')
+  else
+    ""
+
+  stop(sprintf(
+    'Unrecognized state: "%s".%s\n  Pass a 2-letter abbreviation (e.g. "VA") or full name (e.g. "Virginia").',
+    state, hint
+  ), call. = FALSE)
 }

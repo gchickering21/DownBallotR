@@ -4,7 +4,7 @@
 \alias{.to_year}
 \title{Coerce a year value to integer, accepting numeric, string, or NULL}
 \usage{
-.to_year(x)
+.to_year(x, arg = deparse(substitute(x)))
 }
 \description{
 Coerce a year value to integer, accepting numeric, string, or NULL

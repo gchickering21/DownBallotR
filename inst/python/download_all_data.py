@@ -16,6 +16,7 @@ Sections:
     georgia             Georgia Secretary of State election results (2012-present)
     utah                Utah election results (2023-present)
     connecticut         Connecticut CTEMS election results (2016-present)
+    louisiana           Louisiana SOS Graphical election results (1982-present)
     all                 All of the above (default)
 
 Options:
@@ -82,6 +83,18 @@ Output layout:
       connecticut/
         ct_{year}_state.csv               (statewide totals: federal + aggregated state/local)
         ct_{year}_town.csv                (per-town candidate totals with election_level)
+      louisiana/
+        la_{year}_state.csv               (statewide tab results: all non-Parish tabs combined)
+        la_{year}_parish.csv              (per-parish candidate totals)
+
+Louisiana-specific options:
+    --la-year-from INT      First year to download (default: 2024)
+    --la-year-to   INT      Last year to download (default: 2024)
+                            Full history goes back to 1982; use --la-year-from 1982
+                            once the scraper is validated.
+    --la-level     LEVEL    State-only, parish-only, or both (default: all)
+                            Choices: all, state, parish
+    --la-parish-workers INT Parallel Chromium browsers for parish scraping (default: 2)
 """
 
 from __future__ import annotations
@@ -126,6 +139,8 @@ IN_YEAR_RANGE              = (2019, CURRENT_YEAR)
 GA_YEAR_RANGE              = (2012, CURRENT_YEAR)
 UT_YEAR_RANGE              = (2023, CURRENT_YEAR)
 CT_YEAR_RANGE              = (2016, CURRENT_YEAR)
+# Default to 2024 only until the scraper is validated; full history goes back to 1982.
+LA_YEAR_RANGE              = (2024, 2024)
 
 # All 50 US states + DC (title-case full names expected by Ballotpedia scrapers)
 ALL_STATES: list[str] = [
@@ -160,7 +175,7 @@ def _sanitize_csv(df: pd.DataFrame) -> pd.DataFrame:
     prevents execution without altering the visible cell value.
     """
     df = df.copy()
-    for col in df.select_dtypes(include="object").columns:
+    for col in df.select_dtypes(include="str").columns:
         df[col] = df[col].apply(
             lambda x: f"'{x}" if isinstance(x, str) and x[:1] in _FORMULA_CHARS else x
         )
@@ -894,6 +909,104 @@ def download_connecticut(
     return results
 
 
+def download_louisiana(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    la_year_from: int = LA_YEAR_RANGE[0],
+    la_year_to: int = LA_YEAR_RANGE[1],
+    la_level: str = "all",
+    la_parish_workers: int = 2,
+    **_,
+) -> list[bool]:
+    """
+    Louisiana SOS Graphical election results, one set of files per year.
+
+    For each year in [la_year_from, la_year_to], all elections in that year are
+    scraped in a single pipeline call (the LA SOS site groups elections by date,
+    discoverable from the dropdown on the landing page).
+
+    Parish-level pages are scraped sequentially by default (la_parish_workers=1)
+    or in parallel across multiple Chromium processes.
+
+    Output files per year (la_level='all'):
+      data/louisiana/la_{year}_state.csv   — statewide tab results (Congressional,
+                                             Presidential, Statewide, Legislative,
+                                             Multiparish — deduped across tabs)
+      data/louisiana/la_{year}_parish.csv  — per-parish candidate totals
+
+    la_level='state'  omits parish scraping (much faster).
+    la_level='parish' omits statewide tab scraping.
+    """
+    base = output_dir / "louisiana"
+    results: list[bool] = []
+
+    for year in range(la_year_from, la_year_to + 1):
+        label = f"Louisiana SOS  {year}  level={la_level}"
+        print(f"\n[{label}]")
+
+        paths: dict[str, Path] = {}
+        if la_level in ("all", "state"):
+            paths["state"]  = base / f"la_{year}_state.csv"
+        if la_level in ("all", "parish"):
+            paths["parish"] = base / f"la_{year}_parish.csv"
+
+        if _all_valid(paths):
+            print("  ↷ all output files exist, skipping")
+            results.append(True)
+            continue
+
+        if dry_run:
+            for key, p in paths.items():
+                status = "exists" if p.exists() else "would write"
+                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
+            results.append(True)
+            continue
+
+        try:
+            result = registry.scrape(
+                "louisiana_results",
+                year_from=year,
+                year_to=year,
+                level=la_level,
+                max_parish_workers=la_parish_workers,
+            )
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            results.append(False)
+            continue
+
+        ok = True
+        try:
+            if isinstance(result, dict):
+                for key, df in result.items():
+                    if key not in paths:
+                        continue
+                    if df.empty:
+                        print(f"  ⚠ empty result for '{key}' — skipping write")
+                    else:
+                        _save(df, paths[key])
+            elif isinstance(result, pd.DataFrame):
+                key = la_level
+                if key in paths:
+                    if result.empty:
+                        print("  ⚠ empty result — skipping write")
+                    else:
+                        _save(result, paths[key])
+            else:
+                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
+                ok = False
+        except Exception:
+            print("  ✗ ERROR while saving result:")
+            traceback.print_exc()
+            ok = False
+
+        results.append(ok)
+
+    return results
+
+
 # ── Dispatch table ─────────────────────────────────────────────────────────────
 
 SECTIONS: dict[str, Callable] = {
@@ -906,6 +1019,7 @@ SECTIONS: dict[str, Callable] = {
     "utah":             download_utah,
     "indiana":          download_indiana,
     "connecticut":      download_connecticut,
+    "louisiana":        download_louisiana,
 }
 
 
@@ -1077,6 +1191,36 @@ def main() -> None:
         help="What to scrape for Indiana: state totals, county totals, or both (default: all).",
     )
 
+    # Louisiana-specific options
+    la_group = parser.add_argument_group("louisiana options")
+    la_group.add_argument(
+        "--la-year-from",
+        type=int,
+        default=LA_YEAR_RANGE[0],
+        metavar="YEAR",
+        help=f"First year to download for Louisiana (default: {LA_YEAR_RANGE[0]}). Full history starts at 1982.",
+    )
+    la_group.add_argument(
+        "--la-year-to",
+        type=int,
+        default=LA_YEAR_RANGE[1],
+        metavar="YEAR",
+        help=f"Last year to download for Louisiana (default: {LA_YEAR_RANGE[1]}).",
+    )
+    la_group.add_argument(
+        "--la-level",
+        choices=["all", "state", "parish"],
+        default="all",
+        help="What to scrape for Louisiana: state tabs, parish results, or both (default: all).",
+    )
+    la_group.add_argument(
+        "--la-parish-workers",
+        type=int,
+        default=2,
+        metavar="N",
+        help="Parallel Chromium browsers for Louisiana parish scraping (default: 2).",
+    )
+
     # Connecticut-specific options
     ct_group = parser.add_argument_group("connecticut options")
     ct_group.add_argument(
@@ -1144,6 +1288,10 @@ def main() -> None:
         print(f"CT year range    : {args.ct_year_from}–{args.ct_year_to}")
         print(f"CT level         : {args.ct_level}")
         print(f"CT town workers  : {args.ct_town_workers}")
+    if args.section in ("louisiana", "all"):
+        print(f"LA year range    : {args.la_year_from}–{args.la_year_to}")
+        print(f"LA level         : {args.la_level}")
+        print(f"LA parish workers: {args.la_parish_workers}")
     print("=" * 70)
 
     to_run = SECTIONS if args.section == "all" else {args.section: SECTIONS[args.section]}
@@ -1180,6 +1328,11 @@ def main() -> None:
             ct_year_to=args.ct_year_to,
             ct_level=args.ct_level,
             ct_town_workers=args.ct_town_workers,
+            # Louisiana-specific
+            la_year_from=args.la_year_from,
+            la_year_to=args.la_year_to,
+            la_level=args.la_level,
+            la_parish_workers=args.la_parish_workers,
         )
         all_results.extend(section_results)
 

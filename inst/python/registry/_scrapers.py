@@ -1,48 +1,33 @@
-# inst/python/registry.py
+# registry/_scrapers.py
 #
-# Central Python registry for all DownBallotR scrapers.
-# Imported by R via reticulate; each _scrape_* function uses lazy imports
-# so only the deps needed for the requested source are loaded.
+# Internal dispatch functions — one per data source.  Each function validates
+# its inputs, then delegates to the relevant pipeline module via a lazy import
+# so only the dependencies needed for the requested source are loaded.
+#
+# These are private (_-prefixed) and called only through registry.scrape().
+# To add a new source: write a _scrape_<name>() here, register it in
+# __init__._SOURCES, and add routing in R/scrape_elections.R.
 
 from __future__ import annotations
 
 import datetime
-from typing import List
 
 import pandas as pd
 
 from date_utils import validate_year_range, year_to_date_range
 from df_utils import concat_or_empty as _concat_or_empty
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Shared helpers
-# ──────────────────────────────────────────────────────────────────────────────
-
-_VALID_LEVELS = ("all", "state", "county")
-
-
-def _to_year(v) -> "int | None":
-    """Coerce *v* to an integer year, accepting int/float/str/None."""
-    if v is None:
-        return None
-    try:
-        year = int(float(v))
-    except (TypeError, ValueError):
-        raise ValueError(f"Cannot convert {v!r} to a year integer.")
-    if not (1900 <= year <= 2100):
-        raise ValueError(f"Year must be between 1900 and 2100; got {year}.")
-    return year
+from ._validators import (
+    _to_year,
+    _validate_level,
+    _validate_level_ct,
+    _validate_workers,
+    _VALID_LEVELS_LA,
+)
+from ._year_ranges import _clamp_year_range
 
 
-def _validate_level(level: str) -> None:
-    if level not in _VALID_LEVELS:
-        raise ValueError(f"level must be one of {_VALID_LEVELS}; got {level!r}.")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Internal scraper functions
-# ──────────────────────────────────────────────────────────────────────────────
+# ── State-portal scrapers (Clarity / Playwright-based) ────────────────────────
 
 def _scrape_ut(
     year_from: "int | None" = None,
@@ -72,6 +57,7 @@ def _scrape_ut(
         (default False).
     """
     _validate_level(level)
+    max_county_workers = _validate_workers(max_county_workers, "max_county_workers")
     year_from = _to_year(year_from)
     year_to   = _to_year(year_to)
     year_from, year_to = _clamp_year_range(year_from, year_to, "utah_results")
@@ -122,6 +108,7 @@ def _scrape_ga(
         (default False).
     """
     _validate_level(level)
+    max_county_workers = _validate_workers(max_county_workers, "max_county_workers")
     year_from = _to_year(year_from)
     year_to   = _to_year(year_to)
     year_from, year_to = _clamp_year_range(year_from, year_to, "georgia_results")
@@ -141,6 +128,96 @@ def _scrape_ga(
         level=level,
         max_county_workers=max_county_workers,
         include_vote_methods=include_vote_methods,
+    )
+
+
+def _scrape_ct(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    level: str = "all",
+    max_town_workers: int = 2,
+    **_,
+):
+    """Scrape Connecticut CTEMS election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive.
+    year_to : int | None
+        End year, inclusive.
+    level : str
+        ``'all'`` (default) — dict with ``'state'`` and ``'town'`` DataFrames;
+        ``'state'`` — statewide totals only (no town scraping, much faster);
+        ``'town'`` — town-level DataFrame only.
+    max_town_workers : int
+        Parallel Chromium browsers for town scraping (default 2).
+    """
+    _validate_level_ct(level)
+    max_town_workers = _validate_workers(max_town_workers, "max_town_workers")
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+
+    label = (
+        f"{year_from}–{year_to}" if year_from and year_to
+        else f"{year_from}–" if year_from
+        else f"–{year_to}" if year_to
+        else "all years"
+    )
+    print(f"[CT] Starting scrape | {label} | level={level!r}")
+
+    from Connecticut.pipeline import get_ct_election_results
+    return get_ct_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        max_town_workers=max_town_workers,
+    )
+
+
+def _scrape_la(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    level: str = "all",
+    max_parish_workers: int = 2,
+    **_,
+):
+    """Scrape Louisiana Secretary of State Graphical election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive (default: no lower bound; data goes back to 1982).
+    year_to : int | None
+        End year, inclusive (default: current calendar year).
+    level : str
+        ``'all'`` (default) — dict with ``'state'`` and ``'parish'`` DataFrames;
+        ``'state'`` — statewide tab results only (no parish scraping, much faster);
+        ``'parish'`` — parish-level DataFrame only.
+    max_parish_workers : int
+        Parallel Chromium browsers for parish scraping (default 2).
+    """
+    if level not in _VALID_LEVELS_LA:
+        raise ValueError(f"level must be one of {_VALID_LEVELS_LA}; got {level!r}.")
+    max_parish_workers = _validate_workers(max_parish_workers, "max_parish_workers")
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+    year_from, year_to = _clamp_year_range(year_from, year_to, "louisiana_results")
+
+    label = (
+        f"{year_from}–{year_to}" if year_from and year_to
+        else f"{year_from}–" if year_from
+        else f"–{year_to}" if year_to
+        else "all years"
+    )
+    print(f"[LA] Starting scrape | {label} | level={level!r}")
+
+    from Louisiana.pipeline import get_la_election_results
+    return get_la_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        max_parish_workers=max_parish_workers,
     )
 
 
@@ -184,47 +261,7 @@ def _scrape_in(
     )
 
 
-def _scrape_ct(
-    year_from: "int | None" = None,
-    year_to: "int | None" = None,
-    level: str = "all",
-    max_town_workers: int = 2,
-    **_,
-):
-    """Scrape Connecticut CTEMS election results.
-
-    Parameters
-    ----------
-    year_from : int | None
-        Start year, inclusive.
-    year_to : int | None
-        End year, inclusive.
-    level : str
-        ``'all'`` (default) — dict with ``'state'`` and ``'town'`` DataFrames;
-        ``'state'`` — statewide totals only (no town scraping, much faster);
-        ``'town'`` — town-level DataFrame only.
-    max_town_workers : int
-        Parallel Chromium browsers for town scraping (default 2).
-    """
-    year_from = _to_year(year_from)
-    year_to   = _to_year(year_to)
-
-    label = (
-        f"{year_from}–{year_to}" if year_from and year_to
-        else f"{year_from}–" if year_from
-        else f"–{year_to}" if year_to
-        else "all years"
-    )
-    print(f"[CT] Starting scrape | {label} | level={level!r}")
-
-    from Connecticut.pipeline import get_ct_election_results
-    return get_ct_election_results(
-        year_from=year_from,
-        year_to=year_to,
-        level=level,
-        max_town_workers=max_town_workers,
-    )
-
+# ── Requests-based state scrapers ─────────────────────────────────────────────
 
 def _scrape_nc(
     year_from: "int | None" = None,
@@ -353,7 +390,7 @@ def _scrape_election_stats(
     if failed_years:
         print(f"[ElectionStats] WARNING: {len(failed_years)} year(s) failed for {state_key}: {failed_years}")
 
-    state_all = _concat_or_empty(state_frames)
+    state_all  = _concat_or_empty(state_frames)
     county_all = _concat_or_empty(county_frames)
 
     print(
@@ -371,6 +408,8 @@ def _scrape_election_stats(
     # "all" — return both as a dict; reticulate converts to a named R list
     return {"state": state_all, "county": county_all}
 
+
+# ── Ballotpedia scrapers ──────────────────────────────────────────────────────
 
 def _scrape_ballotpedia_elections(
     year: "int | None" = None,
@@ -414,7 +453,6 @@ def _scrape_ballotpedia_elections(
     if state is None:
         raise ValueError("'state' is required for Ballotpedia state elections scraper.")
 
-    # ── Year validation ──────────────────────────────────────────────────────
     _SUPPORTED_FROM = 2024
     _effective_years = (
         [year] if year is not None
@@ -524,11 +562,11 @@ def _scrape_ballotpedia_municipal(
 
 
 def _scrape_ballotpedia(
-    year: int | None = None,
-    state: str | None = None,
+    year: "int | None" = None,
+    state: "str | None" = None,
     mode: str = "districts",
     start_year: int = 2013,
-    end_year: int | None = None,
+    end_year: "int | None" = None,
     **_,
 ) -> pd.DataFrame:
     """Scrape Ballotpedia school board election data.
@@ -571,280 +609,9 @@ def _scrape_ballotpedia(
 
     # mode == "districts"
     if year is not None:
-        # Single-year district metadata: reuse scrape_all_to_dataframe with year as both bounds
         return scraper.scrape_all_to_dataframe(
             start_year=year, end_year=year, state=state
         )
-    # Multi-year district metadata
     return scraper.scrape_all_to_dataframe(
         start_year=start_year, end_year=end_year, state=state
     )
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Year availability registry
-# ──────────────────────────────────────────────────────────────────────────────
-
-# (start_year, end_year) tuples per source / state.
-# end_year of None means "through current calendar year" (open-ended).
-_YEAR_RANGES: dict = {
-    "election_stats": {
-        "vermont":        (1789, 2024),
-        "virginia":       (1789, 2025),
-        "colorado":       (1902, 2024),
-        "massachusetts":  (1970, 2026),
-        "new_hampshire":  (1970, 2024),
-        "new_york":       (1994, 2024),
-        "new_mexico":     (2000, 2024),
-        "south_carolina": (2008, 2025),
-    },
-    "northcarolina_results": {
-        "NC": (2000, 2025),
-    },
-    "indiana_results": {
-        "IN": (2019, None),  # open-ended; new elections added as they occur
-    },
-    "connecticut_results": {
-        "CT": (2016, None),  # open-ended; discovery determines actual availability
-    },
-    "georgia_results": {
-        "GA": (2000, None),
-    },
-    "utah_results": {
-        "UT": (2023, 2025),
-    },
-    "ballotpedia": {
-        # Ballotpedia covers all US states from 2013 onward (open-ended).
-        "_all": (2013, None),
-    },
-    "ballotpedia_elections": {
-        # State-level election pages use the widget-table-container layout
-        # introduced in 2024; not all states have pages for every year.
-        "_all": (2024, None),
-    },
-    "ballotpedia_municipal": {
-        # Municipal index (race_type="all") covers 2014–present.
-        # Mayoral-only index (race_type="mayoral") covers 2020–present.
-        "_all": (2014, None),
-    },
-}
-
-
-def _clamp_year_range(
-    year_from: "int | None",
-    year_to: "int | None",
-    source: str,
-) -> "tuple[int | None, int | None]":
-    """Clamp year_from/year_to to the available range for *source* in _YEAR_RANGES.
-
-    Looks up all state ranges under *source*, derives the union
-    (earliest start, latest end), then clamps the requested range to that
-    window.  Prints a warning for any clamping applied.  Returns unchanged
-    values if *source* is not in _YEAR_RANGES.
-    """
-    ranges = _YEAR_RANGES.get(source)
-    if not ranges:
-        return year_from, year_to
-
-    current_year = datetime.datetime.now().year
-    starts = [r[0] for r in ranges.values()]
-    ends   = [r[1] if r[1] is not None else current_year for r in ranges.values()]
-    min_start = min(starts)
-    max_end   = max(ends)
-
-    if year_from is not None and year_to is not None and year_from > year_to:
-        raise ValueError(
-            f"year_from ({year_from}) cannot be greater than year_to ({year_to})."
-        )
-
-    new_from = year_from
-    new_to   = year_to
-
-    if year_from is not None and year_from < min_start:
-        print(f"  [WARNING] year_from={year_from} is before the earliest available year "
-              f"for '{source}' ({min_start}). Clamping to {min_start}.")
-        new_from = min_start
-
-    if year_to is not None and year_to > max_end:
-        print(f"  [WARNING] year_to={year_to} is after the latest available year "
-              f"for '{source}' ({max_end}). Clamping to {max_end}.")
-        new_to = max_end
-
-    return new_from, new_to
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Registry
-# ──────────────────────────────────────────────────────────────────────────────
-
-def _list_election_stats_states() -> List[str]:
-    from ElectionStats.state_config import STATE_CONFIGS
-    return sorted(STATE_CONFIGS.keys())
-
-
-_SOURCES: dict = {
-    "georgia_results": {
-        "description": "Georgia Secretary of State election results (results.sos.ga.gov)",
-        "scrape_fn": _scrape_ga,
-        "states": ["GA"],
-    },
-    "utah_results": {
-        "description": "Utah election results (electionresults.utah.gov)",
-        "scrape_fn": _scrape_ut,
-        "states": ["UT"],
-    },
-    "indiana_results": {
-        "description": "Indiana General Election results (enr.indianavoters.in.gov, 2020–present)",
-        "scrape_fn": _scrape_in,
-        "states": ["IN"],
-    },
-    "connecticut_results": {
-        "description": "Connecticut CTEMS election results (ctemspublic.tgstg.net)",
-        "scrape_fn": _scrape_ct,
-        "states": ["CT"],
-    },
-    "northcarolina_results": {
-        "description": "North Carolina local election results (NC State Board of Elections)",
-        "scrape_fn": _scrape_nc,
-        "states": ["NC"],
-    },
-    "election_stats": {
-        "description": (
-            "Multi-state ElectionStats scraper "
-            "(VA, MA, CO, NH, SC, NM, NY)"
-        ),
-        "scrape_fn": _scrape_election_stats,
-        # Stored as a callable so deps are not imported at registry load time
-        "states": _list_election_stats_states,
-    },
-    "ballotpedia": {
-        "description": "Ballotpedia school board elections (all US states, 2013–present)",
-        "scrape_fn": _scrape_ballotpedia,
-        "states": [],  # Ballotpedia covers all states; use state= param to filter
-    },
-    "ballotpedia_elections": {
-        "description": (
-            "Ballotpedia state elections — federal, state, and local candidates "
-            "(all US states, 2024–present)"
-        ),
-        "scrape_fn": _scrape_ballotpedia_elections,
-        "states": [],  # state= param required; covers all US states
-    },
-    "ballotpedia_municipal": {
-        "description": (
-            "Ballotpedia municipal and mayoral elections "
-            "(all US states, 2014–present)"
-        ),
-        "scrape_fn": _scrape_ballotpedia_municipal,
-        "states": [],  # use state= param to filter; covers all US states
-    },
-}
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Public API
-# ──────────────────────────────────────────────────────────────────────────────
-
-def list_sources() -> List[str]:
-    """Return names of all registered scraper sources."""
-    return sorted(_SOURCES.keys())
-
-
-def list_states(source: str) -> List[str]:
-    """Return supported state keys for a given source.
-
-    Parameters
-    ----------
-    source : str
-        One of the names returned by list_sources().
-    """
-    if source not in _SOURCES:
-        raise ValueError(
-            f"Unknown source: {source!r}. Available: {list_sources()}"
-        )
-    states = _SOURCES[source]["states"]
-    return states() if callable(states) else list(states)
-
-
-def get_available_years(source: str, state: "str | None" = None) -> dict:
-    """Return the earliest and latest available year for a source/state.
-
-    Parameters
-    ----------
-    source : str
-        One of 'northcarolina_results', 'election_stats', 'ballotpedia',
-        'ballotpedia_elections'.
-    state : str | None
-        State key for 'election_stats' (e.g. 'virginia').
-        Pass None to get the earliest year across all ElectionStats states.
-        Ignored for 'northcarolina_results', 'ballotpedia', and 'ballotpedia_elections'.
-
-    Returns
-    -------
-    dict with keys 'start_year' (int) and 'end_year' (int, current calendar year).
-    """
-    if source not in _YEAR_RANGES:
-        raise ValueError(
-            f"Unknown source: {source!r}. Available: {sorted(_YEAR_RANGES.keys())}"
-        )
-    ranges = _YEAR_RANGES[source]
-    current_year = datetime.date.today().year
-
-    if source in ("ballotpedia", "ballotpedia_elections", "ballotpedia_municipal"):
-        start, end = ranges["_all"]
-        return {"start_year": start, "end_year": end or current_year}
-
-    if source == "northcarolina_results":
-        start, end = ranges["NC"]
-        return {"start_year": start, "end_year": end or current_year}
-
-    if source == "indiana_results":
-        start, end = ranges["IN"]
-        return {"start_year": start, "end_year": end or current_year}
-
-    if source == "georgia_results":
-        start, end = ranges["GA"]
-        return {"start_year": start, "end_year": end or current_year}
-
-    if source == "utah_results":
-        start, end = ranges["UT"]
-        return {"start_year": start, "end_year": end or current_year}
-
-    # election_stats
-    if state is None:
-        start_year = min(v[0] for v in ranges.values())
-        end_year   = max(v[1] or current_year for v in ranges.values())
-        return {"start_year": start_year, "end_year": end_year}
-
-    state_key = state.strip().lower().replace(" ", "_")
-    if state_key not in ranges:
-        raise ValueError(
-            f"No year range recorded for state {state!r} "
-            f"(looked up as {state_key!r}). "
-            f"Available: {sorted(ranges.keys())}"
-        )
-    start, end = ranges[state_key]
-    return {"start_year": start, "end_year": end or current_year}
-
-
-def scrape(source: str, **kwargs) -> "pd.DataFrame | dict":
-    """Dispatch a scrape call to the registered source handler.
-
-    Parameters
-    ----------
-    source : str
-        One of 'northcarolina_results', 'election_stats', 'ballotpedia',
-        'ballotpedia_elections'. Call list_sources() to see all options.
-    **kwargs
-        Passed through to the source's scrape function.
-        See the individual _scrape_* functions for parameter details.
-
-    Returns
-    -------
-    pd.DataFrame, or dict of DataFrames when level='all' for election_stats.
-    """
-    if source not in _SOURCES:
-        raise ValueError(
-            f"Unknown source: {source!r}. Available: {list_sources()}"
-        )
-    return _SOURCES[source]["scrape_fn"](**kwargs)

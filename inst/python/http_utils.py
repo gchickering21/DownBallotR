@@ -4,10 +4,39 @@ HTTP retry helpers shared across DownBallotR scrapers.
 
 from __future__ import annotations
 
+import datetime
 import time
 import requests
 
 _RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+# Canonical User-Agent for all requests-based scrapers in DownBallotR.
+# Identifies the tool and links to the repo so site admins can contact us.
+DOWNBALLOT_UA = "DownBallotR/1.0 (+https://github.com/gchickering21/DownBallotR)"
+
+
+def _parse_retry_after(response) -> "float | None":
+    """Return the number of seconds to wait from a Retry-After header, or None.
+
+    Handles both the integer-seconds form (``Retry-After: 30``) and the
+    HTTP-date form (``Retry-After: Wed, 21 Oct 2025 07:28:00 GMT``).
+    """
+    val = response.headers.get("Retry-After")
+    if val is None:
+        return None
+    # Integer seconds form
+    try:
+        return max(float(val), 0.0)
+    except ValueError:
+        pass
+    # HTTP-date form
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(val)
+        wait = (dt - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+        return max(wait, 0.0)
+    except Exception:
+        return None
 
 
 def fetch_with_retry(
@@ -18,6 +47,9 @@ def fetch_with_retry(
     retry_statuses: frozenset = _RETRY_STATUSES,
 ) -> str:
     """Call ``fetch_fn(url)`` with exponential-backoff retries on transient errors.
+
+    Honors the ``Retry-After`` response header on 429 replies — if the server
+    specifies a wait time, that takes precedence over the local backoff value.
 
     Parameters
     ----------
@@ -52,6 +84,16 @@ def fetch_with_retry(
             resp = getattr(e, "response", None)
             if resp is not None and resp.status_code not in retry_statuses:
                 raise
+            # Respect Retry-After on 429 — the server is explicitly telling us
+            # how long to back off; ignoring it risks getting blocked entirely.
+            if resp is not None and resp.status_code == 429:
+                server_wait = _parse_retry_after(resp)
+                if server_wait is not None:
+                    delay = max(delay, server_wait)
+                    print(
+                        f"  [WARN] Rate-limited (429) — server requests "
+                        f"{server_wait:.0f}s wait. Honoring Retry-After."
+                    )
             last_exc = e
 
         if attempt < retries:

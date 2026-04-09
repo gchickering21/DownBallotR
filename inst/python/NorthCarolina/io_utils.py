@@ -7,6 +7,10 @@ import zipfile
 import pandas as pd
 import requests
 
+from http_utils import DOWNBALLOT_UA
+
+_HEADERS = {"User-Agent": DOWNBALLOT_UA}
+
 _MEMBER_SCORE_RULES = [
     (re.compile(r"results[_-]?pct", re.IGNORECASE), 200),
     (re.compile(r"\bresults\b", re.IGNORECASE), 40),
@@ -17,7 +21,7 @@ _MEMBER_SCORE_RULES = [
 
 
 def download_zip_bytes(zip_url: str, timeout: int = 60) -> bytes:
-    r = requests.get(zip_url, timeout=timeout)
+    r = requests.get(zip_url, headers=_HEADERS, timeout=timeout)
     r.raise_for_status()
     return r.content
 

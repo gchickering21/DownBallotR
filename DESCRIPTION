@@ -1,5 +1,5 @@
 Package: DownBallotR
-Title: Local and State Election Data via R with Python-Backed Scrapers
+Title: Access Federal, State, and Local Election Data
 Version: 0.1.0
 Authors@R: c(
     person(
@@ -12,34 +12,38 @@ Authors@R: c(
         given = "Chris",
         family = "Warshaw",
         email = "chris.warshaw@georgetown.edu",
-        role = "aut"
+        role = "ctb"
     )
   )
-Description: Provides an R interface for downloading and standardizing local
-    and state election data. The package wraps state-specific Python web
-    scrapers (e.g., Playwright- or requests-based) via reticulate and exposes
-    consistent R functions for querying election availability and results.
-License: MIT + file LICENSE
+Description: Provides an R interface for downloading and standardizing
+    election data to support research workflows. Election results are
+    published by states through heterogeneous and often dynamic web
+    interfaces that are not consistently accessible through existing
+    R packages or APIs. To address this, the package wraps state-specific
+    Python web scrapers through the 'reticulate' package, enabling access
+    to dynamic content while exposing consistent R functions for querying
+    election availability and results across jurisdictions.The package is intended 
+    for responsible use and relies on publicly accessible election result pages.
+License: Apache License (>= 2)
 URL: https://gchickering21.github.io/DownBallotR/,
     https://github.com/gchickering21/DownBallotR
 BugReports: https://github.com/gchickering21/DownBallotR/issues
 Encoding: UTF-8
 Language: en-US
 SystemRequirements: Python (>= 3.9), pip
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
 Depends:
     R (>= 4.1.0)
 Imports:
     reticulate
 Suggests:
-    dplyr,
     knitr,
+    dplyr,
     pak,
     remotes,
     rmarkdown,
     testthat (>= 3.0.0),
     withr
-Config/testthat/edition: 3
 VignetteBuilder: knitr
-BuildVignettes: false
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3

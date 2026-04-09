@@ -2,7 +2,8 @@
 
 #' @keywords internal
 db_required_python_packages <- function() {
-  c("pandas", "requests", "lxml", "playwright", "datetime", "re", "dataclasses")
+  # datetime, re, and dataclasses are Python stdlib — not pip-installable
+  c("pandas", "requests", "lxml", "playwright")
 }
 
 #' @keywords internal
@@ -250,6 +251,22 @@ db_install_plan <- function(pkgs, reinstall = FALSE, install_chromium = TRUE) {
 #'
 #' Creates/uses a named virtual environment and installs Python requirements
 #' (pandas, requests, lxml, playwright), then installs Playwright Chromium.
+#'
+#' **Python must already be installed on your system before calling this
+#' function.** \code{downballot_install_python()} creates a virtual environment
+#' using an existing Python interpreter — it does not install Python itself.
+#' If Python is not found, \code{reticulate} will error with a message about
+#' being unable to create a virtualenv.
+#'
+#' \itemize{
+#'   \item \strong{Windows}: Install Python from \url{https://www.python.org/downloads/}.
+#'     Make sure to check "Add Python to PATH" during installation.
+#'   \item \strong{macOS}: Python 3 is available via Xcode Command Line Tools
+#'     (\code{xcode-select --install}) or \url{https://www.python.org/downloads/}.
+#'   \item \strong{Linux}: Install via your package manager, e.g.
+#'     \code{sudo apt install python3 python3-venv} (Debian/Ubuntu) or
+#'     \code{sudo dnf install python3} (Fedora/RHEL).
+#' }
 #'
 #' If the environment already exists and all required packages are present,
 #' the function prints a message and returns without doing work (unless Chromium

@@ -176,6 +176,24 @@
 }
 
 
+#' Call the Louisiana Secretary of State election results scraper
+#' @keywords internal
+.scrape_la <- function(
+    year_from          = NULL,
+    year_to            = NULL,
+    level              = "all",
+    max_parish_workers = 2L) {
+  level <- match.arg(level, c("all", "state", "parish"))
+  .db_registry()$scrape(
+    "louisiana_results",
+    year_from          = year_from,
+    year_to            = year_to,
+    level              = level,
+    max_parish_workers = as.integer(max_parish_workers)
+  )
+}
+
+
 #' Call the Connecticut CTEMS election results scraper
 #' @keywords internal
 .scrape_ct <- function(

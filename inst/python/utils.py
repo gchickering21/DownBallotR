@@ -21,7 +21,7 @@ from text_utils import (
 )
 from df_utils import concat_or_empty, rows_to_dataframe
 from date_utils import year_to_date_range, validate_year_range
-from http_utils import fetch_with_retry
+from http_utils import fetch_with_retry, DOWNBALLOT_UA
 
 __all__ = [
     "clean_text",
@@ -37,4 +37,5 @@ __all__ = [
     "year_to_date_range",
     "validate_year_range",
     "fetch_with_retry",
+    "DOWNBALLOT_UA",
 ]

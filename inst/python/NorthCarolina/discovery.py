@@ -5,14 +5,17 @@ from datetime import datetime
 import requests
 from lxml import html
 
+from http_utils import DOWNBALLOT_UA
 from .models import NcElectionZip
 
 INDEX_URL = "https://www.ncsbe.gov/results-data/election-results/historical-election-results-data"
 ZIP_RE = re.compile(r"results_pct_(\d{8})\.zip$")
 
+_HEADERS = {"User-Agent": DOWNBALLOT_UA}
+
 
 def discover_northcarolina_results_zips() -> list[NcElectionZip]:
-    r = requests.get(INDEX_URL, timeout=30)
+    r = requests.get(INDEX_URL, headers=_HEADERS, timeout=30)
     r.raise_for_status()
     doc = html.fromstring(r.text)
 

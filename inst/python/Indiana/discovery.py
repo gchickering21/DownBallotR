@@ -18,6 +18,7 @@ from datetime import date
 import requests
 from bs4 import BeautifulSoup
 
+from http_utils import DOWNBALLOT_UA
 from .client import InElectionClient
 from .models import InElectionInfo
 
@@ -34,17 +35,7 @@ _ARCHIVE_RE = re.compile(
 
 
 def _fetch_html(url: str) -> str:
-    resp = requests.get(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            )
-        },
-        timeout=30,
-    )
+    resp = requests.get(url, headers={"User-Agent": DOWNBALLOT_UA}, timeout=30)
     resp.raise_for_status()
     return resp.text
 

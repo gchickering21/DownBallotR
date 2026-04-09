@@ -31,3 +31,14 @@
 # Any scratch output directories
 _outputs?$
 output_$
+
+
+^data/
+^inst/python/Ballotpedia
+^build$
+^build/
+^inst/python/.*/tests$
+^inst/python/.*/tests/
+^inst/python/.*/test_.*\.py$
+^inst/python/.*/inspect_.*\.py$
+^inst/python/download_all_data\.py$

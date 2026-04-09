@@ -149,10 +149,31 @@ db_available_years <- function(state = NULL,
     stringsAsFactors = FALSE
   )
 
-  result <- rbind(es_df, nc_row, ct_row, ga_row, ut_row)
+  la_avail <- reg$get_available_years("louisiana_results")
+  la_row <- data.frame(
+    source     = "louisiana_results",
+    state      = "LA",
+    start_year = la_avail$start_year,
+    end_year   = la_avail$end_year,
+    stringsAsFactors = FALSE
+  )
+
+  in_avail <- reg$get_available_years("indiana_results")
+  in_row <- data.frame(
+    source     = "indiana_results",
+    state      = "IN",
+    start_year = in_avail$start_year,
+    end_year   = in_avail$end_year,
+    stringsAsFactors = FALSE
+  )
+
+  result <- rbind(es_df, nc_row, ct_row, ga_row, ut_row, la_row, in_row)
 
   if (!is.null(state)) {
-    state_key  <- .state_to_es_key(.normalize_state(state))
+    .stop_if_not_scalar(state, "state")
+    state_norm <- .normalize_state(state)
+    .check_state_recognized(state_norm)
+    state_key  <- .state_to_es_key(state_norm)
     result_key <- vapply(result$state, function(s) .state_to_es_key(.normalize_state(s)),
                          character(1L))
     result <- result[result_key == state_key, , drop = FALSE]

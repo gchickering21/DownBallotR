@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 @dataclass(frozen=True)
 class HttpConfig:
     timeout_s: int = 60
-    sleep_s: float = 0.0  # polite delay between requests
+    sleep_s: float = 0.5  # polite delay between requests
     user_agent: str = "DownBallotR (+https://github.com/gchickering21/DownBallotR)"
 
 class BaseHttpClient:

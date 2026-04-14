@@ -41,20 +41,6 @@ _YEAR_RANGES: dict = {
     "louisiana_results": {
         "LA": (1982, None),  # open-ended; dropdown goes back to 1982
     },
-    "ballotpedia": {
-        # Ballotpedia covers all US states from 2013 onward (open-ended).
-        "_all": (2013, None),
-    },
-    "ballotpedia_elections": {
-        # State-level election pages use the widget-table-container layout
-        # introduced in 2024; not all states have pages for every year.
-        "_all": (2024, None),
-    },
-    "ballotpedia_municipal": {
-        # Municipal index (race_type="all") covers 2014–present.
-        # Mayoral-only index (race_type="mayoral") covers 2020–present.
-        "_all": (2014, None),
-    },
 }
 
 

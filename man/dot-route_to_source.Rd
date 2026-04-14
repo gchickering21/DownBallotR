@@ -4,7 +4,7 @@
 \alias{.route_to_source}
 \title{Route office + normalised state to a registry source name}
 \usage{
-.route_to_source(office, state)
+.route_to_source(state)
 }
 \description{
 Route office + normalised state to a registry source name

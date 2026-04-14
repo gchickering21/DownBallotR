@@ -4,7 +4,7 @@
 \alias{.source_label}
 \title{Human-readable label for a source, used in messages and errors}
 \usage{
-.source_label(source, state = NULL, race_type = "all")
+.source_label(source, state = NULL)
 }
 \description{
 Human-readable label for a source, used in messages and errors

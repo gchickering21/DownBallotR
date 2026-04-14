@@ -4,7 +4,7 @@
 \alias{.emit_availability}
 \title{Emit source availability and unconfirmed-year notice}
 \usage{
-.emit_availability(source, state, race_type, year_to, year, end_year)
+.emit_availability(source, state, year_to)
 }
 \description{
 Emit source availability and unconfirmed-year notice

@@ -4,21 +4,11 @@
 \alias{db_available_years}
 \title{Show data availability for election scrapers}
 \usage{
-db_available_years(
-  state = NULL,
-  office = c("general", "school_district", "state_elections", "municipal_elections")
-)
+db_available_years(state = NULL)
 }
 \arguments{
 \item{state}{Optional state name to filter results (e.g. \code{"Virginia"}).
-Pass \code{NULL} (default) to return all states for the chosen source(s).}
-
-\item{office}{Type of election, matching \code{scrape_elections()}.
-\code{"general"} (default) returns availability for ElectionStats states,
-North Carolina, Connecticut, and Georgia; \code{"school_district"} returns
-Ballotpedia school board availability; \code{"state_elections"} returns
-Ballotpedia state election availability; \code{"municipal_elections"}
-returns Ballotpedia municipal and mayoral election availability.}
+Pass \code{NULL} (default) to return all states.}
 }
 \value{
 A \code{data.frame} with columns \code{source}, \code{state},
@@ -31,17 +21,8 @@ current calendar year.
 }
 \examples{
 \dontrun{
-# General election sources
+# All sources
 db_available_years()
-
-# School district (Ballotpedia)
-db_available_years(office = "school_district")
-
-# State elections (Ballotpedia)
-db_available_years(office = "state_elections")
-
-# Municipal and mayoral elections (Ballotpedia)
-db_available_years(office = "municipal_elections")
 
 # Filter to one state
 db_available_years(state = "Virginia")

@@ -54,11 +54,6 @@ DownBallotR/
 │   │   ├── constants.py
 │   │   └── io_utils.py             # ZIP download helpers
 │   │
-│   ├── Ballotpedia/                # School board elections scraper
-│   │   ├── school_board_elections.py  # SchoolBoardScraper
-│   │   ├── ballotpedia_client.py
-│   │   └── scrape_school_boards.py
-│   │
 │   ├── Georgia/                    # GA Secretary of State scraper
 │   │   ├── pipeline.py             # GaElectionPipeline + get_ga_election_results()
 │   │   ├── client.py               # GaElectionClient — Playwright browser automation
@@ -99,16 +94,17 @@ DownBallotR/
 Routing logic lives in `R/scrape_elections.R`; per-source argument shaping in `R/scraper_helpers.R`; state normalization in `R/state_utils.R`; all scraping logic lives in Python.
 `reticulate::py_to_r()` converts the returned pandas DataFrames to R data frames.
 
-### Five scraper backends
+### Scraper backends
 
 | Backend | States | Transport | Entry point |
 |---|---|---|---|
 | **Classic** (ElectionStats v1) | MA, NH, CO, ID, VT | `requests` | `StateHttpClient` |
 | **V2** (ElectionStats v2 / React) | SC, NM, NY, VA | Playwright (headless Chromium) | `PlaywrightClient` |
 | **NC** (NCSBE ZIP pipeline) | NC | HTTP ZIP download | `NcElectionPipeline` |
-| **Ballotpedia** | All US states | `requests` | `SchoolBoardScraper` |
 | **Georgia SOS** | GA | Playwright (headless Chromium) | `GaElectionPipeline` |
 | **Connecticut CTEMS** | CT | Playwright (headless Chromium) | `CtElectionPipeline` |
+| **Indiana ENR** | IN | `requests` | `InElectionPipeline` |
+| **Louisiana SOS** | LA | Playwright (headless Chromium) | `LaElectionPipeline` |
 
 ### ElectionStats URL formats
 

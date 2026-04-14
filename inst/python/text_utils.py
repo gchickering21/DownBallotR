@@ -37,7 +37,7 @@ def parse_percentage(p: str | None) -> Optional[float]:
         return None
 
 
-# ── Ballotpedia candidate-cell helpers ────────────────────────────────────────
+# ── Candidate-cell helpers ────────────────────────────────────────────────────
 
 def strip_trailing_parens(name: str) -> str:
     """Remove a trailing parenthetical suffix from a candidate name.
@@ -67,7 +67,7 @@ def extract_party_from_parens(text: str) -> str:
 
 
 def is_incumbent(text: str) -> bool:
-    """Return True if *text* contains the Ballotpedia incumbent marker ``(i)``."""
+    """Return True if *text* contains the incumbent marker ``(i)``."""
     return "(i)" in text
 
 

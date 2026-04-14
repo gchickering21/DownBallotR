@@ -30,18 +30,15 @@ through a single function, `scrape_elections()`. The appropriate backend scraper
 is selected **automatically** based on the `state` and `office` arguments — no
 need to specify a source by name.
 
-| `office` | `state` | Scraper | Coverage |
-|---|---|---|---|
-| `"general"` (default) | VA, MA, CO, NH, ID, SC, NM, NY, VT | ElectionStats | Candidate + county results (+ precinct for CO, MA, ID, SC, NM, VA); years vary by state |
-| `"general"` (default) | `"NC"` / `"north_carolina"` | NC State Board of Elections | Precinct-level local election results, 2000–present |
-| `"general"` (default) | `"CT"` / `"connecticut"` | Connecticut CTEMS | Statewide + town results, 2016–present |
-| `"general"` (default) | `"GA"` / `"georgia"` | Georgia Secretary of State | Statewide + county results, 2000–present |
-| `"general"` (default) | `"UT"` / `"utah"` | Utah elections site | Statewide + county results, 2023–present |
-| `"general"` (default) | `"IN"` / `"indiana"` | Indiana voters portal | Statewide + county General Election results, 2019–present |
-| `"general"` (default) | `"LA"` / `"louisiana"` | Louisiana Secretary of State | Statewide + parish results, 1982–present |
-| `"school_district"` | any state or `NULL` | Ballotpedia | School board elections, all US states, 2013–present |
-| `"state_elections"` | any state | Ballotpedia | Federal, state, and local candidates, all US states, 2024–present |
-| `"municipal_elections"` | any state or `NULL` | Ballotpedia | City, county, and mayoral elections, all US states, 2014–present |
+| `state` | Scraper | Coverage |
+|---|---|---|
+| VA, MA, CO, NH, ID, SC, NM, NY, VT | ElectionStats | Candidate + county results (+ precinct for CO, MA, ID, SC, NM, VA); years vary by state |
+| `"NC"` / `"north_carolina"` | NC State Board of Elections | Precinct-level local election results, 2000–present |
+| `"CT"` / `"connecticut"` | Connecticut CTEMS | Statewide + town results, 2016–present |
+| `"GA"` / `"georgia"` | Georgia Secretary of State | Statewide + county results, 2000–present |
+| `"UT"` / `"utah"` | Utah elections site | Statewide + county results, 2023–present |
+| `"IN"` / `"indiana"` | Indiana voters portal | Statewide + county General Election results, 2019–present |
+| `"LA"` / `"louisiana"` | Louisiana Secretary of State | Statewide + parish results, 1982–present |
 
 ```r
 library(DownBallotR)
@@ -61,22 +58,6 @@ scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
 
 # Louisiana statewide + parish results
 scrape_elections(state = "LA", year_from = 2024, year_to = 2024)
-
-# School board elections — all US states (Ballotpedia)
-scrape_elections(office = "school_district", year = 2024)
-
-# State + federal + local candidate listings (Ballotpedia)
-scrape_elections(state = "Maine", office = "state_elections", year = 2024)
-
-# Municipal election results with tidyverse filtering
-scrape_elections(
-  office    = "municipal_elections",
-  year      = 2022,
-  state     = "Texas",
-  mode      = "results"
-) %>%
-  filter(is_winner, office == "Mayor") %>%
-  select(location, state, candidate, party, pct, votes)
 ```
 
 ---
@@ -112,10 +93,9 @@ and downloads Playwright Chromium (~100–200MB, first time only).
 sources at the time of your request. No data is bundled with the package or
 hosted by the maintainers.
 
-**Coverage:** 15+ US states across 9 distinct sources (ElectionStats, state
-election portals for NC, CT, GA, UT, IN, LA, and Ballotpedia for school board,
-state, and municipal elections). Historical depth varies from 1789 (Vermont,
-Virginia via ElectionStats) to 2019–present (Indiana).
+**Coverage:** 15 US states across 7 distinct sources (ElectionStats and state
+election portals for NC, CT, GA, UT, IN, LA). Historical depth varies from 1789
+(Vermont, Virginia via ElectionStats) to 2019–present (Indiana).
 
 **What the data is:** Vote totals by candidate and contest at the statewide,
 county/parish/town, or precinct level, depending on source and the `level`
@@ -188,20 +168,3 @@ responsible use is in the
 - In R (after installing): `vignette("louisiana", package = "DownBallotR")`
 - Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/louisiana.html>
 
-**School district elections** — Ballotpedia school board data, all US states, 2013–present:
-
-- Source: [vignettes/school-district-elections.Rmd](vignettes/school-district-elections.Rmd)
-- In R (after installing): `vignette("school-district-elections", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/school-district-elections.html>
-
-**State elections** — Ballotpedia federal/state/local candidates, all US states, 2024–present:
-
-- Source: [vignettes/state-elections.Rmd](vignettes/state-elections.Rmd)
-- In R (after installing): `vignette("state-elections", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/state-elections.html>
-
-**Municipal elections** — Ballotpedia city, county, and mayoral races, all US states, 2014–present:
-
-- Source: [vignettes/municipal-elections.Rmd](vignettes/municipal-elections.Rmd)
-- In R (after installing): `vignette("municipal-elections", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/municipal-elections.html>

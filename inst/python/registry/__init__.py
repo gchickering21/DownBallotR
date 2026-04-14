@@ -14,9 +14,6 @@ from __future__ import annotations
 from typing import List
 
 from ._scrapers import (
-    _scrape_ballotpedia,
-    _scrape_ballotpedia_elections,
-    _scrape_ballotpedia_municipal,
     _scrape_ct,
     _scrape_election_stats,
     _scrape_ga,
@@ -80,27 +77,6 @@ _SOURCES: dict = {
         # Stored as a callable so deps are not imported at registry load time
         "states": _list_election_stats_states,
     },
-    "ballotpedia": {
-        "description": "Ballotpedia school board elections (all US states, 2013–present)",
-        "scrape_fn": _scrape_ballotpedia,
-        "states": [],  # Ballotpedia covers all states; use state= param to filter
-    },
-    "ballotpedia_elections": {
-        "description": (
-            "Ballotpedia state elections — federal, state, and local candidates "
-            "(all US states, 2024–present)"
-        ),
-        "scrape_fn": _scrape_ballotpedia_elections,
-        "states": [],  # state= param required; covers all US states
-    },
-    "ballotpedia_municipal": {
-        "description": (
-            "Ballotpedia municipal and mayoral elections "
-            "(all US states, 2014–present)"
-        ),
-        "scrape_fn": _scrape_ballotpedia_municipal,
-        "states": [],  # use state= param to filter; covers all US states
-    },
 }
 
 
@@ -149,10 +125,6 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
         )
     ranges = _YEAR_RANGES[source]
     current_year = datetime.date.today().year
-
-    if source in ("ballotpedia", "ballotpedia_elections", "ballotpedia_municipal"):
-        start, end = ranges["_all"]
-        return {"start_year": start, "end_year": end or current_year}
 
     if source == "northcarolina_results":
         start, end = ranges["NC"]

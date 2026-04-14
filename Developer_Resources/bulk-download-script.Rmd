@@ -35,8 +35,6 @@ source ~/.virtualenvs/downballotR/bin/activate
 | Download everything | `python download_all_data.py` |
 | One section only | `python download_all_data.py --section <name>` |
 | One state (ElectionStats) | `python download_all_data.py --section election_stats --state new_york` |
-| Fast/lightweight mode | `python download_all_data.py --section municipal --fast` |
-| Parallel workers | `python download_all_data.py --section state_elections --workers 4` |
 | Preview without downloading | `python download_all_data.py --dry-run` |
 | Georgia — all years, state + county | `python download_all_data.py --section georgia` |
 | Georgia — 2024 only, state totals only | `python download_all_data.py --section georgia --ga-year-from 2024 --ga-year-to 2024 --ga-level state` |
@@ -44,6 +42,8 @@ source ~/.virtualenvs/downballotR/bin/activate
 | Connecticut — all years, state + town | `python download_all_data.py --section connecticut` |
 | Connecticut — single year | `python download_all_data.py --section connecticut --ct-year-from 2024 --ct-year-to 2024` |
 | Connecticut — statewide totals only | `python download_all_data.py --section connecticut --ct-level state` |
+| Indiana — all years | `python download_all_data.py --section indiana` |
+| Louisiana — all years | `python download_all_data.py --section louisiana` |
 
 ---
 
@@ -53,7 +53,6 @@ source ~/.virtualenvs/downballotR/bin/activate
 |---|---|---|
 | `--section` | `all` | Which section to run. See [Sections](#sections) below. |
 | `--state` | all states | Restrict `election_stats` to one state (e.g. `new_york`). |
-| `--fast` | off | Use lightweight scrape modes (no vote counts). Has no effect on `georgia`. |
 | `--workers N` | `1` | Number of parallel download threads. See [Parallelism](#parallelism). |
 | `--output-dir PATH` | `<repo>/data/` | Root folder for output CSV files. |
 | `--dry-run` | off | Print tasks without downloading anything. |
@@ -76,6 +75,23 @@ source ~/.virtualenvs/downballotR/bin/activate
 | `--ct-year-to YEAR` | current year | Last year to download for Connecticut. |
 | `--ct-level` | `all` | `all` — statewide + town; `state` — statewide totals only (much faster, no town scraping); `town` — town-level only. |
 | `--ct-town-workers N` | `2` | Parallel Chromium browsers for town scraping (one per county). Keep ≤ 4 to avoid memory exhaustion. |
+
+### Indiana-specific options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--in-year-from YEAR` | `2019` | First year to download for Indiana. |
+| `--in-year-to YEAR` | current year | Last year to download for Indiana. |
+| `--in-level` | `all` | `all` — state + county; `state` or `county` only. |
+
+### Louisiana-specific options
+
+| Flag | Default | Description |
+|---|---|---|
+| `--la-year-from YEAR` | `1982` | First year to download for Louisiana. |
+| `--la-year-to YEAR` | `2024` | Last year to download for Louisiana. |
+| `--la-level` | `all` | `all` — state + parish; `state` or `parish` only. |
+| `--la-parish-workers N` | `2` | Parallel Chromium browsers for parish scraping. |
 
 ---
 
@@ -142,93 +158,6 @@ data/northcarolina/nc_2000_2025_county.csv
 data/northcarolina/nc_2000_2025_state.csv
 ```
 
-> North Carolina is unaffected by `--fast` — it always downloads all three
-> granularity levels.
-
----
-
-### `school_board`
-
-Scrapes Ballotpedia school board elections for all 50 states + DC.
-
-```bash
-# Full mode — districts + candidate results (slow; thousands of requests/year)
-python download_all_data.py --section school_board
-
-# Fast mode — district metadata only (~1 request/year)
-python download_all_data.py --section school_board --fast
-```
-
-| Years | Granularity |
-|---|---|
-| 2013–present | District, Candidate |
-
-**Output:**
-```
-data/Ballotpedia/school_board/school_board_{year}.csv          # full
-data/Ballotpedia/school_board/school_board_{year}_districts.csv # --fast
-```
-
-> **Note:** Full mode (`joined`) triggers Playwright for WAF-protected pages.
-> Use `--workers 1` (the default) for reliability.
-
----
-
-### `state_elections`
-
-Scrapes Ballotpedia state election pages for all 50 states + DC.
-
-```bash
-# Full mode — vote counts per contest (many requests per state/year)
-python download_all_data.py --section state_elections
-
-# Fast mode — candidate listings only (~1 request per state/year)
-python download_all_data.py --section state_elections --fast
-
-# Parallel — safe for HTTP-only mode
-python download_all_data.py --section state_elections --fast --workers 6
-```
-
-| Years | Election levels | Granularity |
-|---|---|---|
-| 2024–present | Federal, State, Local | Candidate, Office, Party, Votes |
-
-**Output:**
-```
-data/Ballotpedia/state_elections/{state_slug}_{year}.csv
-# e.g. data/Ballotpedia/state_elections/new_york_2024.csv
-```
-
----
-
-### `municipal`
-
-Scrapes Ballotpedia municipal and mayoral election pages.
-
-```bash
-# Full mode — candidate + vote data (one extra request per location)
-python download_all_data.py --section municipal
-
-# Fast mode — location index + sub-URLs only (no vote data)
-python download_all_data.py --section municipal --fast
-
-# Parallel fast mode (recommended starting point)
-python download_all_data.py --section municipal --fast --workers 4
-```
-
-Downloads run **most recent year first** (e.g. 2026 → 2014).
-
-| Race type | Years | Coverage |
-|---|---|---|
-| All municipal | 2014–present | City, county, and mayoral races |
-| Mayoral only | 2020–present | Mayoral races only |
-
-**Output:**
-```
-data/Ballotpedia/municipal/municipal_all_{year}.csv
-data/Ballotpedia/municipal/municipal_mayoral_{year}.csv
-```
-
 ---
 
 ### `georgia`
@@ -280,9 +209,6 @@ data/georgia/ga_{year}_vote_method_state.csv   # per-method statewide
 data/georgia/ga_{year}_vote_method_county.csv  # per-method by county
 ```
 
-**Vote-method columns** (in `vote_method_state` / `vote_method_county`):
-`votes_advanced`, `votes_election_day`, `votes_absentee`, `votes_provisional`, `votes_total`
-
 > **Performance notes:**
 >
 > - County scraping spawns up to `--county-workers` (default 4) Chromium processes
@@ -292,9 +218,6 @@ data/georgia/ga_{year}_vote_method_county.csv  # per-method by county
 >
 > - `--vote-methods` adds a Playwright click-and-re-render step for every contest
 >   panel (50–125+ per page).  Budget an extra 5–15 minutes per election page.
->
-> - The outer loop over years runs sequentially; parallelism within each year is
->   controlled by `--county-workers`.
 
 ---
 
@@ -304,14 +227,6 @@ Scrapes the Connecticut Election Management System (CTEMS) at
 `ctemspublic.tgstg.net` for all elections from 2016 to the present.  CTEMS is
 a JavaScript-rendered AngularJS SPA; all scraping uses a headless Chromium
 browser via Playwright.
-
-Each year's download collects every election held in that year (primaries,
-runoffs, generals, special elections) and scrapes all 169 towns across 8
-counties in parallel.
-
-Results include an `election_level` column (`"Federal"` / `"State"` /
-`"Local"`) and a `contest_outcome` column (`"Won"` / `"Lost"`) on the
-statewide totals.
 
 ```bash
 # All years (2016–present), state + town totals
@@ -325,18 +240,6 @@ python download_all_data.py --section connecticut --ct-year-from 2024 --ct-year-
 
 # Statewide totals only — skips all-town scrape (much faster)
 python download_all_data.py --section connecticut --ct-level state
-
-# Town-level only — no state aggregation
-python download_all_data.py --section connecticut --ct-level town
-
-# Increase parallel county workers (default: 2)
-python download_all_data.py --section connecticut --ct-town-workers 4
-
-# All options combined
-python download_all_data.py --section connecticut \
-    --ct-year-from 2020 --ct-year-to 2024 \
-    --ct-level all \
-    --ct-town-workers 4
 ```
 
 | Years | Granularity | Contents |
@@ -345,52 +248,51 @@ python download_all_data.py --section connecticut \
 
 **Output:**
 ```
-data/connecticut/ct_{year}_state.csv   # statewide totals: federal (from Summary page)
-                                       #   + state/local aggregated from towns
-                                       #   includes contest_outcome column
-data/connecticut/ct_{year}_town.csv    # per-town candidate totals with election_level
+data/connecticut/ct_{year}_state.csv   # statewide totals
+data/connecticut/ct_{year}_town.csv    # per-town results with election_level
 ```
-
-**State DataFrame columns:**
-`election_name`, `election_year`, `election_date`, `election_level`,
-`office`, `candidate`, `party`, `votes`, `vote_pct`, `contest_outcome`
-
-**Town DataFrame columns:**
-`election_name`, `election_year`, `election_date`, `county`, `town`,
-`election_level`, `office`, `candidate`, `party`, `votes`, `vote_pct`
-
-> **Performance notes:**
->
-> - Town scraping opens one Chromium browser per county, iterating all towns
->   in that county within the same session.  Connecticut has 8 counties and
->   169 towns.  With `--ct-town-workers 2` (default), expect roughly 30–60
->   minutes per election year.  Use `--ct-level state` to skip town scraping
->   when only statewide totals are needed.
->
-> - Each year may contain multiple elections (e.g. 2024 had 8 elections:
->   presidential general, August primary, special elections, etc.).  All are
->   scraped and combined in a single year's output files.
->
-> - The outer loop over years runs sequentially; town-level parallelism within
->   each election is controlled by `--ct-town-workers`.
 
 ---
 
-## Fast Mode {#fast-mode}
+### `indiana`
 
-`--fast` switches every section to a lightweight scrape that skips vote counts
-and detail pages.  Use it for a quick structural survey before committing to a
-full download.
+Scrapes the Indiana voters portal for General Election results.
 
-| Section | Default (full) | `--fast` |
-|---|---|---|
-| `school_board` | `mode=joined` — districts + candidate results | `mode=districts` — district metadata only |
-| `state_elections` | `mode=results` — follows each contest URL for vote counts | `mode=listings` — candidate names, offices, parties, status |
-| `municipal` | `mode=results` — full candidate + vote data per location | `mode=links` — location index + sub-URLs only |
-| `election_stats` | always full | always full |
-| `nc` | always full | always full |
-| `georgia` | always full | always full (use `--ga-level state` to reduce scope) |
-| `connecticut` | always full | always full (use `--ct-level state` to skip town scraping) |
+```bash
+python download_all_data.py --section indiana
+python download_all_data.py --section indiana --in-year-from 2024 --in-year-to 2024
+```
+
+| Years | Granularity |
+|---|---|
+| 2019–present | State, County |
+
+**Output:**
+```
+data/indiana/in_{year}_state.csv
+data/indiana/in_{year}_county.csv
+```
+
+---
+
+### `louisiana`
+
+Scrapes the Louisiana Secretary of State Graphical election results site.
+
+```bash
+python download_all_data.py --section louisiana
+python download_all_data.py --section louisiana --la-year-from 2024 --la-year-to 2024
+```
+
+| Years | Granularity |
+|---|---|
+| 1982–present | State, Parish |
+
+**Output:**
+```
+data/louisiana/la_{year}_state.csv
+data/louisiana/la_{year}_parish.csv
+```
 
 ---
 
@@ -399,15 +301,6 @@ full download.
 `--workers N` runs up to N tasks simultaneously using Python threads.
 
 ```bash
-# State elections — safe to parallelise (pure HTTP)
-python download_all_data.py --section state_elections --workers 4
-
-# Municipal fast mode — safe to parallelise
-python download_all_data.py --section municipal --fast --workers 6
-
-# Municipal full mode — moderate parallelism
-python download_all_data.py --section municipal --workers 3
-
 # ElectionStats classic states only — safe to parallelise
 python download_all_data.py --section election_stats --state virginia --workers 1
 
@@ -420,26 +313,17 @@ python download_all_data.py --section georgia --county-workers 4
 
 | Section | Recommended `--workers` | Notes |
 |---|---|---|
-| `state_elections` | 4–8 | HTTP only — safe |
-| `municipal --fast` | 4–8 | HTTP only — safe |
-| `municipal` (full) | 2–3 | Moderate HTTP load |
 | `election_stats` (VA / MA / CO / NH) | 4 | HTTP only — safe |
 | `election_stats` (includes SC / NM / NY) | 1 | Playwright — not thread-safe |
-| `school_board` full | 1 | Playwright fallback — not thread-safe |
 | `nc` | 1 | Single large ZIP pipeline |
 | `georgia` | 1 (use `--county-workers` instead) | County parallelism is internal |
 | `connecticut` | 1 (use `--ct-town-workers` instead) | Town parallelism is internal |
+| `indiana` | 1 | Sequential year loop |
+| `louisiana` | 1 (use `--la-parish-workers` instead) | Parish parallelism is internal |
 
-> **Why the limit?** South Carolina, New Mexico, New York (ElectionStats), and
-> `school_board` full mode all use a Playwright headless Chromium browser.
-> Playwright's synchronous API is not thread-safe, so running multiple Playwright
-> tasks in parallel can cause crashes.  HTTP-only sections (classic ElectionStats
-> states, `state_elections`, `municipal --fast`) are safe to parallelise.
->
-> Georgia and Connecticut use Playwright internally but manage their own
-> parallelism via `--county-workers` / `--ct-town-workers` (separate Chromium
-> processes per county/county).  The year-level outer loop always runs
-> sequentially regardless of `--workers`.
+> **Why the limit?** South Carolina, New Mexico, and New York (ElectionStats) all use a
+> Playwright headless Chromium browser. Playwright's synchronous API is not thread-safe,
+> so running multiple Playwright tasks in parallel can cause crashes.
 
 ---
 
@@ -460,27 +344,9 @@ data/
     nc_2000_2025_county.csv
     nc_2000_2025_state.csv
 
-  Ballotpedia/
-    school_board/
-      school_board_2013.csv
-      school_board_2014.csv
-      ...
-    state_elections/
-      alabama_2024.csv
-      alaska_2024.csv
-      ...
-    municipal/
-      municipal_all_2026.csv
-      municipal_all_2025.csv
-      ...
-      municipal_mayoral_2026.csv
-      ...
-
   georgia/
     ga_2012_state.csv
     ga_2012_county.csv
-    ga_2013_state.csv
-    ga_2013_county.csv
     ...
     ga_2024_state.csv
     ga_2024_county.csv
@@ -490,11 +356,19 @@ data/
   connecticut/
     ct_2016_state.csv
     ct_2016_town.csv
-    ct_2001_state.csv
-    ct_2001_town.csv
     ...
-    ct_2024_state.csv                # statewide totals with contest_outcome
-    ct_2024_town.csv                 # per-town results with election_level
+    ct_2024_state.csv
+    ct_2024_town.csv
+
+  indiana/
+    in_2019_state.csv
+    in_2019_county.csv
+    ...
+
+  louisiana/
+    la_1982_state.csv
+    la_1982_parish.csv
+    ...
 ```
 
 ---
@@ -506,9 +380,6 @@ year fails, simply re-run the same command — completed years will be skipped
 and only missing files will be downloaded.
 
 ```bash
-# Resume a partial municipal download
-python download_all_data.py --section municipal
-
 # Resume a partial Georgia download
 python download_all_data.py --section georgia --ga-year-from 2012
 
@@ -526,7 +397,6 @@ Preview all tasks without downloading anything:
 
 ```bash
 python download_all_data.py --dry-run
-python download_all_data.py --section municipal --dry-run
 python download_all_data.py --section georgia --ga-year-from 2022 --vote-methods --dry-run
 python download_all_data.py --section connecticut --ct-year-from 2020 --ct-level state --dry-run
 ```
@@ -545,10 +415,8 @@ python download_all_data.py --section connecticut --ct-year-from 2020 --ct-level
 | ElectionStats | New Mexico | 2000–2024 | State, County | Candidate results + county vote counts |
 | ElectionStats | New York | 1994–2024 | State, County | Candidate results + county vote counts |
 | NC State Board | North Carolina | 2000–2025 | Precinct, County, State | Raw precinct results aggregated up |
-| Ballotpedia | All 50 states + DC | 2013–present | District | School board districts + candidates + votes |
-| Ballotpedia | All 50 states + DC | 2024–present | Federal/State/Local | State election candidates + vote counts |
-| Ballotpedia | All 50 states + DC | 2014–present | Municipality | Municipal candidate + vote data |
-| Ballotpedia | All 50 states + DC | 2020–present | Municipality | Mayoral candidate + vote data |
 | GA SOS | Georgia | 2012–present | State, County | Candidate results, incumbency, vote totals, pct, election metadata |
 | GA SOS (vote methods) | Georgia | 2012–present | State, County | Per-method vote counts (Advanced / Election Day / Absentee / Provisional) |
 | CT CTEMS | Connecticut | 2016–present | State, Town | Candidate results, party, election level (Federal/State/Local), vote totals, pct, contest outcome |
+| Indiana voters portal | Indiana | 2019–present | State, County | General Election candidate results |
+| Louisiana SOS | Louisiana | 1982–present | State, Parish | Statewide + parish candidate results |

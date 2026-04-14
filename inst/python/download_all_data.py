@@ -10,22 +10,16 @@ Usage (run from inst/python/):
 Sections:
     election_stats      ElectionStats (VT, VA, CO, MA, NH, ID, NY, NM, SC)
     nc                  North Carolina (NC State Board of Elections, 2000-2025)
-    school_board        Ballotpedia school board elections (2013-present)
-    state_elections     Ballotpedia state elections (2024-present, per state)
-    municipal           Ballotpedia municipal/mayoral elections (2014-present)
     georgia             Georgia Secretary of State election results (2012-present)
     utah                Utah election results (2023-present)
     connecticut         Connecticut CTEMS election results (2016-present)
     louisiana           Louisiana SOS Graphical election results (1982-present)
+    indiana             Indiana General Election results (2019-present)
     all                 All of the above (default)
 
 Options:
     --output-dir PATH       Root output directory (default: <repo>/data/)
     --section NAME          Run only one section (default: all)
-    --fast                  Use fast/lightweight modes (districts/listings/links)
-                            instead of the default detailed modes (joined/results).
-                            Much quicker but omits vote counts and candidate detail.
-                            (Has no effect on the georgia or utah sections.)
     --dry-run               Print tasks without scraping
 
 ElectionStats-specific options:
@@ -67,14 +61,6 @@ Output layout:
         nc_{year_from}_{year_to}_precinct.csv
         nc_{year_from}_{year_to}_county.csv
         nc_{year_from}_{year_to}_state.csv
-      school_board/
-        school_board_{year}.csv           (fast: district metadata)
-        school_board_{year}_joined.csv    (full: districts + candidates)
-      state_elections/
-        {state_slug}_{year}.csv
-      municipal/
-        municipal_all_{year}.csv
-        municipal_mayoral_{year}.csv
       georgia/
         ga_{year}_state.csv               (statewide candidate totals)
         ga_{year}_county.csv              (per-county candidate totals)
@@ -148,30 +134,12 @@ ELECTION_STATS_STATES: dict[str, tuple[int, int]] = {
 }
 
 NC_YEAR_RANGE              = (2000, 2025)
-SCHOOL_BOARD_YEAR_RANGE    = (2013, CURRENT_YEAR)
-STATE_ELECTIONS_YEAR_RANGE = (2024, CURRENT_YEAR)
-MUNICIPAL_YEAR_RANGE       = (2014, CURRENT_YEAR)
-MAYORAL_YEAR_RANGE         = (2020, CURRENT_YEAR)
 IN_YEAR_RANGE              = (2019, CURRENT_YEAR)
 GA_YEAR_RANGE              = (2012, CURRENT_YEAR)
 UT_YEAR_RANGE              = (2023, CURRENT_YEAR)
 CT_YEAR_RANGE              = (2016, CURRENT_YEAR)
 # Default to 2024 only until the scraper is validated; full history goes back to 1982.
 LA_YEAR_RANGE              = (1982, 2024)
-
-# All 50 US states + DC (title-case full names expected by Ballotpedia scrapers)
-ALL_STATES: list[str] = [
-    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado",
-    "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho",
-    "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana",
-    "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota",
-    "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
-    "New Hampshire", "New Jersey", "New Mexico", "New York",
-    "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon",
-    "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
-    "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
-    "West Virginia", "Wisconsin", "Wyoming", "District of Columbia",
-]
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -305,7 +273,7 @@ def _run_tasks(
     workers=1 (default) runs sequentially.
     workers>1 uses ThreadPoolExecutor.
 
-    Note: Playwright-based scrapers (SC, NM, NY, VA, school_board WAF fallback)
+    Note: Playwright-based scrapers (SC, NM, NY, VA)
     are not thread-safe — use workers=1 for those sections.
     """
     if workers <= 1:
@@ -502,102 +470,6 @@ def download_nc(output_dir: Path, *, dry_run: bool, **_) -> list[bool]:
             traceback.print_exc()
             ok = False
     return [ok]
-
-
-def download_school_board(
-    output_dir: Path, *, dry_run: bool, full: bool = False, workers: int = 1, **_
-) -> list[bool]:
-    """
-    Ballotpedia school board elections, one file per year (all US states).
-
-    Default (full): mode='joined'    — districts + candidate results; one
-                    extra request per district (thousands of HTTP calls/year).
-    --fast (quick): mode='districts' — district metadata only, ~1 request/year.
-    Note: WAF Playwright fallback is not thread-safe — use workers=1.
-    """
-    base = output_dir / "Ballotpedia" / "school_board"
-    mode = "joined" if full else "districts"
-    start, end = SCHOOL_BOARD_YEAR_RANGE
-    suffix = "" if full else "_districts"
-
-    tasks = [
-        (
-            f"Ballotpedia school board  {year}  mode={mode}",
-            base / f"school_board_{year}{suffix}.csv",
-            lambda y=year: registry.scrape("ballotpedia", year=y, state=None, mode=mode),
-        )
-        for year in range(start, end + 1)
-    ]
-    return _run_tasks(tasks, dry_run=dry_run, workers=workers)
-
-
-def download_state_elections(
-    output_dir: Path, *, dry_run: bool, full: bool = False, workers: int = 1, **_
-) -> list[bool]:
-    """
-    Ballotpedia state elections, one file per (state, year) (all US states).
-
-    Default (full): mode='results'  — follows each contest URL for vote counts
-                    and percentages; many extra requests per state/year.
-    --fast (quick): mode='listings' — candidate names, offices, parties, status;
-                    no vote counts; ~1 request per state/year.
-    """
-    base  = output_dir / "Ballotpedia" / "state_elections"
-    mode  = "results" if full else "listings"
-    start, end = STATE_ELECTIONS_YEAR_RANGE
-
-    tasks = [
-        (
-            f"Ballotpedia state elections  {state}  {year}  mode={mode}",
-            base / f"{_slug(state)}_{year}.csv",
-            lambda s=state, y=year: registry.scrape(
-                "ballotpedia_elections",
-                state=s, year=y, mode=mode, election_level="all",
-            ),
-        )
-        for state in ALL_STATES
-        for year in range(start, end + 1)
-    ]
-    return _run_tasks(tasks, dry_run=dry_run, workers=workers)
-
-
-def download_municipal(
-    output_dir: Path, *, dry_run: bool, full: bool = False, workers: int = 1, **_
-) -> list[bool]:
-    """
-    Ballotpedia municipal and mayoral elections, one file per (race_type, year).
-
-    Default (full): mode='results' — follows every sub-URL for candidate and
-                    vote data; one extra request per location.
-    --fast (quick): mode='links'   — index discovery only; location metadata
-                    and sub-URLs, no vote data; 1 request/year.
-
-    race_type='all'    covers municipal elections 2014–present.
-    race_type='mayoral' covers mayoral-only elections 2020–present.
-    """
-    base = output_dir / "Ballotpedia" / "municipal"
-    mode = "results" if full else "links"
-
-    tasks = [
-        (
-            f"Ballotpedia municipal (all)    {year}  mode={mode}",
-            base / f"municipal_all_{year}.csv",
-            lambda y=year: registry.scrape(
-                "ballotpedia_municipal", year=y, state=None, race_type="all", mode=mode,
-            ),
-        )
-        for year in range(MUNICIPAL_YEAR_RANGE[1], MUNICIPAL_YEAR_RANGE[0] - 1, -1)
-    ] + [
-        (
-            f"Ballotpedia municipal (mayoral) {year}  mode={mode}",
-            base / f"municipal_mayoral_{year}.csv",
-            lambda y=year: registry.scrape(
-                "ballotpedia_municipal", year=y, state=None, race_type="mayoral", mode=mode,
-            ),
-        )
-        for year in range(MAYORAL_YEAR_RANGE[1], MAYORAL_YEAR_RANGE[0] - 1, -1)
-    ]
-    return _run_tasks(tasks, dry_run=dry_run, workers=workers)
 
 
 def download_indiana(
@@ -1099,9 +971,6 @@ def download_louisiana(
 SECTIONS: dict[str, Callable] = {
     "election_stats":   download_election_stats,
     "nc":               download_nc,
-    "school_board":     download_school_board,
-    "state_elections":  download_state_elections,
-    "municipal":        download_municipal,
     "georgia":          download_georgia,
     "utah":             download_utah,
     "indiana":          download_indiana,
@@ -1139,11 +1008,7 @@ def main() -> None:
     parser.add_argument(
         "--fast",
         action="store_true",
-        help=(
-            "Use fast/lightweight scrape modes: school_board→districts, "
-            "state_elections→listings, municipal→links. "
-            "Much faster but omits vote counts. Has no effect on georgia."
-        ),
+        help="(No effect currently — reserved for future lightweight scrape modes.)",
     )
     parser.add_argument(
         "--state",
@@ -1161,8 +1026,7 @@ def main() -> None:
         metavar="N",
         help=(
             "Number of parallel download workers (default: 1 = sequential). "
-            "Recommended: 4–8 for HTTP-only sections (state_elections, municipal --fast). "
-            "Keep at 1 for Playwright sections (election_stats SC/NM/NY/VA, school_board full)."
+            "Keep at 1 for Playwright sections (election_stats SC/NM/NY/VA)."
         ),
     )
     parser.add_argument(
@@ -1380,7 +1244,6 @@ def main() -> None:
     print(f"Output directory : {output_dir}")
     print(f"Section          : {args.section}")
     print(f"State filter     : {args.state or 'all'}")
-    print(f"Fast mode        : {args.fast}")
     print(f"Workers          : {args.workers}")
     print(f"Dry run          : {args.dry_run}")
     if args.section in ("election_stats", "all"):
@@ -1420,7 +1283,6 @@ def main() -> None:
         section_results = fn(
             output_dir,
             dry_run=args.dry_run,
-            full=not args.fast,
             state=args.state,
             workers=args.workers,
             # ElectionStats-specific

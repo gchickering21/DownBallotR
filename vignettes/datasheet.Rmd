@@ -69,9 +69,6 @@ the `level` argument, results may be available at the **statewide**,
 | Utah elections portal | Utah | 2023 | County |
 | Indiana voters portal | Indiana | 2019 | County |
 | Louisiana Secretary of State | Louisiana | 1982 | Parish |
-| Ballotpedia (school board) | All US states | 2013 | District metadata |
-| Ballotpedia (state elections) | All US states | 2024 | Candidate listings |
-| Ballotpedia (municipal) | All US states | 2014 | Location metadata |
 
 > **Start years are approximate.** Each source has a confirmed range documented
 > in `db_available_years()`. Data quality and completeness for the earliest years
@@ -85,10 +82,6 @@ Coverage depends on the source:
   offices vary by state and year.
 - **State-portal scrapers** (NC, CT, GA, UT, IN, LA): general elections as
   published by the respective state authority.
-- **Ballotpedia school board**: school board elections only.
-- **Ballotpedia state elections**: federal, state-level, and local candidates as
-  listed on Ballotpedia state election pages.
-- **Ballotpedia municipal**: city, county, and mayoral election index data.
 
 Primary elections, runoffs, special elections, and referenda are **not
 systematically included** across all sources.
@@ -301,9 +294,7 @@ will be reflected in the major or minor version number.
 
 Election results published by government entities are generally in the public
 domain in the United States, but users should verify this for their specific
-jurisdiction and use case. Ballotpedia content is subject to its own terms of
-use and licensing; users relying on Ballotpedia data should review those terms
-independently.
+jurisdiction and use case.
 
 ### Does the package collect or transmit user data?
 
@@ -361,11 +352,7 @@ The following limitations are known and should be considered by users:
    election day, some sources may not clearly distinguish certified from
    uncertified results.
 
-8. **Ballotpedia data is not official.** Ballotpedia is a secondary source that
-   aggregates information from official sources, press releases, and other
-   inputs. It may contain errors or omissions not present in primary sources.
-
-9. **The package has no guaranteed uptime.** Because it depends on live
+8. **The package has no guaranteed uptime.** Because it depends on live
    external websites, it may fail at any time due to website downtime, bot
    mitigation, or network issues outside the maintainer's control.
 
@@ -409,8 +396,7 @@ citation("DownBallotR")
 
 **Original sources** should be cited individually. Official state election
 results are typically citeable by state, office, and year from the relevant
-Secretary of State or State Board of Elections website. Ballotpedia content
-should be cited per Ballotpedia's citation guidelines.
+Secretary of State or State Board of Elections website.
 
 ---
 

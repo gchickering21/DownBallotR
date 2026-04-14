@@ -6,17 +6,10 @@
 \usage{
 scrape_elections(
   state = NULL,
-  office = c("general", "school_district", "state_elections", "municipal_elections"),
   year_from = NULL,
   year_to = NULL,
   level = c("all", "state", "county", "precinct", "town", "parish"),
   parallel = TRUE,
-  year = NULL,
-  mode = c("districts", "results", "joined", "listings", "links"),
-  start_year = NULL,
-  end_year = NULL,
-  election_level = c("all", "federal", "state", "local"),
-  race_type = c("all", "mayoral"),
   max_workers = 4L,
   include_vote_methods = FALSE
 )
@@ -26,28 +19,17 @@ scrape_elections(
 spacing style (e.g. \code{"VA"}, \code{"virginia"}, \code{"Virginia"},
 \code{"south_carolina"}, \code{"SC"}).  The value is normalised
 automatically before being passed to the underlying scraper, so callers
-do not need to worry about the exact format. Pass \code{NULL} to return
-all states (Ballotpedia scrapers only).}
+do not need to worry about the exact format.}
 
-\item{office}{Type of election to retrieve. \code{"general"} (default)
-fetches general election results via ElectionStats or the NC scraper;
-\code{"school_district"} fetches school board elections via Ballotpedia;
-\code{"state_elections"} fetches federal, state, and local candidate
-listings from Ballotpedia state election pages (2024–present);
-\code{"municipal_elections"} fetches city, county, and mayoral election
-data from Ballotpedia municipal election index pages (2014–present).}
+\item{year_from}{Start year, inclusive (default \code{NULL}). When
+\code{NULL}, ElectionStats starts at \code{1789}; all state-portal scrapers
+apply no lower bound (data is clamped to each scraper's earliest confirmed
+year).}
 
-\item{year_from}{(\code{general} / NC / CT / GA / UT / IN / LA) Start year,
-inclusive (default \code{NULL}). When \code{NULL}, ElectionStats starts at
-\code{1789}; all state-portal scrapers apply no lower bound (data is
-clamped to each scraper's earliest confirmed year).}
+\item{year_to}{End year, inclusive (default \code{NULL}). When \code{NULL},
+the current calendar year is used as the upper bound.}
 
-\item{year_to}{(\code{general} / NC / CT / GA / UT / IN / LA) End year,
-inclusive (default \code{NULL}). When \code{NULL}, the current calendar
-year is used as the upper bound.}
-
-\item{level}{(\code{general} / ElectionStats / NC / CT / GA / UT / IN / LA)
-What to return. \code{"all"} (default) returns a named list with
+\item{level}{What to return. \code{"all"} (default) returns a named list with
 \code{$state}, \code{$county}, and (when available) \code{$precinct} data
 frames (ElectionStats); \code{$state} and \code{$county} data frames
 (Georgia / Utah / Indiana); \code{$state} and \code{$town} data frames
@@ -64,57 +46,20 @@ NC via \code{state="NC"});
 \code{"town"} returns town-level results only (Connecticut);
 \code{"parish"} returns parish-level results only (Louisiana).}
 
-\item{parallel}{(\code{general} / ElectionStats) Use parallel county
-scraping for classic (requests-based) states (default \code{TRUE}).
-Ignored automatically for Playwright-based states (SC, NM, NY, VA).}
+\item{parallel}{(\code{ElectionStats}) Use parallel county scraping for
+classic (requests-based) states (default \code{TRUE}). Ignored
+automatically for Playwright-based states (SC, NM, NY, VA).}
 
-\item{year}{(\code{school_district}) Election year (e.g. \code{2024}).
-Required when \code{mode = "results"} or \code{mode = "joined"}. If
-\code{NULL} with \code{mode = "districts"}, use \code{start_year} /
-\code{end_year} for a multi-year scrape.}
+\item{max_workers}{(Georgia / Utah / Connecticut / Louisiana) Maximum number
+of parallel Chromium browsers (default \code{4L}). For Georgia and Utah,
+controls county-level parallelism; for Connecticut, controls town-level
+parallelism; for Louisiana, controls parish-level parallelism (default is
+capped at 2 for LA). Ignored for all other states.}
 
-\item{mode}{(\code{school_district}) What to return. \code{"districts"}
-(default) returns fast district metadata (one request per year-page);
-\code{"results"} follows each district URL for candidate/vote data;
-\code{"joined"} returns districts and candidates merged into one data
-frame. For \code{state_elections}: \code{"listings"} (default) returns
-one row per candidate from the state+year page (fast); \code{"results"}
-additionally follows each contest URL for vote counts (slower).
-For \code{municipal_elections}: \code{"links"} (default) returns index
-discovery only; \code{"results"} follows each sub-URL for full candidate
-and vote data (slower).}
-
-\item{start_year}{(\code{school_district}) Earliest year for a multi-year
-district scrape when \code{year} is \code{NULL} (default \code{2013}).
-For \code{state_elections}, earliest year when \code{year} is \code{NULL}
-(default \code{2024}). For \code{municipal_elections}, earliest year when
-\code{year} is \code{NULL} (default \code{2014}).}
-
-\item{end_year}{(\code{school_district} / \code{state_elections} /
-\code{municipal_elections}) Latest year for a multi-year scrape when
-\code{year} is \code{NULL} (default: current calendar year).}
-
-\item{election_level}{(\code{state_elections}) Which candidate tier to
-return. \code{"all"} (default) returns all tiers; \code{"federal"}
-returns U.S. House / Senate / Presidential Electors only; \code{"state"}
-returns state-level races only; \code{"local"} returns local races only.}
-
-\item{race_type}{(\code{municipal_elections}) Which index page to use.
-\code{"all"} (default) uses the broader United_States_municipal_elections
-page (2014–present). \code{"mayoral"} uses the mayoral-only page
-(2020–present).}
-
-\item{max_workers}{(\code{general} / Georgia / Utah / Connecticut /
-Louisiana) Maximum number of parallel Chromium browsers (default
-\code{4L}). For Georgia and Utah, controls county-level parallelism; for
-Connecticut, controls town-level parallelism; for Louisiana, controls
-parish-level parallelism (default is capped at 2 for LA).
+\item{include_vote_methods}{(Georgia / Utah) If \code{TRUE}, also return a
+vote-method breakdown table (Advance in Person, Election Day, Absentee by
+Mail, Provisional) for Georgia and Utah results (default \code{FALSE}).
 Ignored for all other states.}
-
-\item{include_vote_methods}{(\code{general} / Georgia / Utah) If
-\code{TRUE}, also return a vote-method breakdown table (Advance in Person,
-Election Day, Absentee by Mail, Provisional) for Georgia and Utah results
-(default \code{FALSE}). Ignored for all other states.}
 }
 \value{
 A \code{data.frame}, or a named list when \code{level = "all"}:
@@ -123,24 +68,17 @@ A \code{data.frame}, or a named list when \code{level = "all"}:
 \code{$state} + \code{$town} for Connecticut;
 \code{$state} + \code{$parish} for Louisiana;
 \code{$precinct} + \code{$county} + \code{$state} for North Carolina.
-Ballotpedia scrapers always return a single \code{data.frame}.
 Each component is also assigned directly into the calling environment
 (e.g. \code{ga_state}, \code{ga_county}) when \code{level = "all"}.
 }
 \description{
 A single entry point that automatically routes to the appropriate scraper
-based on \code{state} and \code{office}. Use \code{db_list_states("election_stats")}
+based on \code{state}. Use \code{db_list_states("election_stats")}
 to see states supported by the general-election scraper.
 }
 \details{
 Routing rules (applied in order):
 \enumerate{
-\item \code{office = "school_district"} → Ballotpedia school board scraper
-(all US states; use \code{state} to filter to one state).
-\item \code{office = "state_elections"} → Ballotpedia state elections
-scraper (federal, state, and local candidates; 2024–present).
-\item \code{office = "municipal_elections"} → Ballotpedia municipal and
-mayoral elections scraper (all US states, 2014–present).
 \item \code{state} matches North Carolina (e.g. \code{"NC"},
 \code{"north_carolina"}) → NC State Board of Elections scraper (2000–present).
 \item \code{state} matches Connecticut (e.g. \code{"CT"},
@@ -214,16 +152,6 @@ res$parish  # parish-level breakdown
 # Louisiana — statewide only (faster; skips parish scraping)
 df <- scrape_elections(state = "LA", year_from = 2023, year_to = 2023,
                        level = "state")
-
-# School district elections — one state, one year
-df <- scrape_elections(state = "Alabama", office = "school_district", year = 2024)
-
-# State elections — candidate listings
-df <- scrape_elections(state = "Maine", office = "state_elections", year = 2024)
-
-# Municipal elections — mayoral only, full results
-df <- scrape_elections(office = "municipal_elections", year = 2022,
-                       race_type = "mayoral", mode = "results")
 }
 
 }

@@ -9,8 +9,7 @@ db_list_states(source = NULL)
 \arguments{
 \item{source}{One of the sources returned by \code{db_list_sources()}, or
 \code{NULL} (default) to return all states with dedicated scrapers across
-all sources (Ballotpedia sources, which accept any US state via a
-\code{state=} filter, are excluded from this aggregation).}
+all sources.}
 }
 \value{
 Named character vector of canonical state names. When

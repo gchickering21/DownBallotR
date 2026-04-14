@@ -1,7 +1,11 @@
 testthat::test_that("optional: env can be activated and modules visible", {
   testthat::skip_on_cran()
   testthat::skip_if_not_installed("reticulate")
-  testthat::skip_if_offline()
+  # skip_if_offline() requires curl; use a lightweight fallback
+  if (!isTRUE(tryCatch(
+    { suppressWarnings(con <- url("https://example.com", open = "r")); close(con); TRUE },
+    error = function(e) FALSE
+  ))) testthat::skip("offline")
   # Only run when user opts in (local dev), never by default.
   testthat::skip_if_not(isTRUE(Sys.getenv("DOWNBALLOT_TEST_PYTHON", "false") == "true"))
 

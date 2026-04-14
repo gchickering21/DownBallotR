@@ -27,10 +27,7 @@
   georgia_results       = c("all", "state", "county"),
   utah_results          = c("all", "state", "county"),
   indiana_results       = c("all", "state", "county"),
-  louisiana_results     = c("all", "state", "parish"),
-  ballotpedia           = NULL,
-  ballotpedia_elections = NULL,
-  ballotpedia_municipal = NULL
+  louisiana_results     = c("all", "state", "parish")
 )
 
 # Sources that use max_workers for sub-unit parallelism (county/town/parish)
@@ -50,7 +47,7 @@
 
 #' Human-readable label for a source, used in messages and errors
 #' @keywords internal
-.source_label <- function(source, state = NULL, race_type = "all") {
+.source_label <- function(source, state = NULL) {
   switch(source,
     election_stats        = paste0(state, " (ElectionStats)"),
     northcarolina_results = "North Carolina (NC State Board of Elections)",
@@ -59,11 +56,6 @@
     utah_results          = "Utah (electionresults.utah.gov)",
     indiana_results       = "Indiana (enr.indianavoters.in.gov)",
     louisiana_results     = "Louisiana (voterportal.sos.la.gov)",
-    ballotpedia           = "school district elections (Ballotpedia)",
-    ballotpedia_elections = paste0(state, " state elections (Ballotpedia)"),
-    ballotpedia_municipal = paste0(
-      "municipal/mayoral elections (Ballotpedia, race_type='", race_type, "')"
-    ),
     source
   )
 }
@@ -71,10 +63,7 @@
 
 #' Route office + normalised state to a registry source name
 #' @keywords internal
-.route_to_source <- function(office, state) {
-  if (office == "school_district")     return("ballotpedia")
-  if (office == "state_elections")     return("ballotpedia_elections")
-  if (office == "municipal_elections") return("ballotpedia_municipal")
+.route_to_source <- function(state) {
   if (!is.null(state) && state %in% names(.STATE_ROUTES))
     return(unname(.STATE_ROUTES[state]))
   "election_stats"
@@ -83,8 +72,8 @@
 
 #' Emit source availability and unconfirmed-year notice
 #' @keywords internal
-.emit_availability <- function(source, state, race_type, year_to, year, end_year) {
-  label <- .source_label(source, state, race_type)
+.emit_availability <- function(source, state, year_to) {
+  label <- .source_label(source, state)
   avail <- tryCatch(
     .db_registry()$get_available_years(
       source = source,
@@ -97,11 +86,7 @@
   message("Available years for ", label, ": ",
           avail$start_year, "\u2013", avail$end_year)
 
-  requested_to <- year_to
-  if (is.null(requested_to)) requested_to <- year
-  if (is.null(requested_to)) requested_to <- end_year
-
-  if (!is.null(requested_to) && requested_to > avail$end_year) {
+  if (!is.null(year_to) && year_to > avail$end_year) {
     message(
       "\nNote: ", requested_to, " is beyond the last confirmed year (",
       avail$end_year, ") for ", label, ".\n",
@@ -164,75 +149,6 @@
     year_to   = year_to,        # NULL becomes Python None via reticulate
     level     = level,
     parallel  = parallel
-  )
-}
-
-
-#' Call the Ballotpedia school board scraper
-#' @keywords internal
-.scrape_ballotpedia <- function(
-    year       = NULL,
-    state      = NULL,
-    mode       = "districts",
-    start_year = 2013L,
-    end_year   = NULL) {
-
-  mode <- match.arg(mode, c("districts", "results", "joined"))
-  .db_registry()$scrape(
-    "ballotpedia",
-    year       = year,
-    state      = state,
-    mode       = mode,
-    start_year = as.integer(start_year),
-    end_year   = end_year       # NULL becomes Python None via reticulate
-  )
-}
-
-
-#' Call the Ballotpedia municipal/mayoral elections scraper
-#' @keywords internal
-.scrape_ballotpedia_municipal <- function(
-    year       = NULL,
-    state      = NULL,
-    race_type  = "all",
-    mode       = "links",
-    start_year = 2014L,
-    end_year   = NULL) {
-
-  race_type <- match.arg(race_type, c("all", "mayoral"))
-  mode      <- match.arg(mode, c("links", "results"))
-  .db_registry()$scrape(
-    "ballotpedia_municipal",
-    year       = year,
-    state      = state,
-    race_type  = race_type,
-    mode       = mode,
-    start_year = as.integer(start_year),
-    end_year   = end_year        # NULL becomes Python None via reticulate
-  )
-}
-
-
-#' Call the Ballotpedia state elections scraper
-#' @keywords internal
-.scrape_ballotpedia_elections <- function(
-    year            = NULL,
-    state           = NULL,
-    mode            = "listings",
-    election_level  = "all",
-    start_year      = 2024L,
-    end_year        = NULL) {
-
-  mode            <- match.arg(mode, c("listings", "results"))
-  election_level  <- match.arg(election_level, c("all", "federal", "state", "local"))
-  .db_registry()$scrape(
-    "ballotpedia_elections",
-    year            = year,
-    state           = state,
-    mode            = mode,
-    election_level  = election_level,
-    start_year      = as.integer(start_year),
-    end_year        = end_year        # NULL becomes Python None via reticulate
   )
 }
 

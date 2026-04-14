@@ -4,19 +4,6 @@
 # Python is touched (they raise errors in the R validation block), so no
 # virtualenv is required and no real scraping occurs.
 
-# ── Legacy source= guard ──────────────────────────────────────────────────────
-
-test_that("scrape_elections: legacy source= values produce informative error", {
-  expect_error(scrape_elections("ballotpedia"),    regexp = "source.*argument has been removed")
-  expect_error(scrape_elections("election_stats"), regexp = "source.*argument has been removed")
-})
-
-# ── office match.arg ──────────────────────────────────────────────────────────
-
-test_that("scrape_elections: invalid office errors", {
-  expect_error(scrape_elections(state = "VA", office = "nope"))
-})
-
 # ── parallel / include_vote_methods must be logical ───────────────────────────
 
 test_that("scrape_elections: non-logical parallel errors", {
@@ -67,13 +54,6 @@ test_that("scrape_elections: year_from > year_to errors", {
   )
 })
 
-test_that("scrape_elections: start_year > end_year errors", {
-  expect_error(
-    scrape_elections(office = "school_district", start_year = 2022, end_year = 2019),
-    "'start_year' \\(2022\\) cannot be greater than 'end_year' \\(2019\\)"
-  )
-})
-
 test_that("scrape_elections: year vector errors (not scalar)", {
   expect_error(
     scrape_elections(state = "VA", year_from = c(2020, 2024)),
@@ -93,36 +73,6 @@ test_that("scrape_elections: typo in state name gives unrecognized error", {
 
 test_that("scrape_elections: state vector errors (not scalar)", {
   expect_error(scrape_elections(state = c("VA", "NC")), "single value")
-})
-
-# ── office-specific required-arg checks ───────────────────────────────────────
-
-test_that("scrape_elections: state_elections requires state", {
-  expect_error(
-    scrape_elections(office = "state_elections"),
-    "'state' is required when office = \"state_elections\""
-  )
-})
-
-test_that("scrape_elections: school_district + mode=results requires year", {
-  expect_error(
-    scrape_elections(office = "school_district", mode = "results"),
-    "'year' is required"
-  )
-})
-
-test_that("scrape_elections: state_elections + mode=results requires year", {
-  expect_error(
-    scrape_elections(state = "Virginia", office = "state_elections", mode = "results"),
-    "'year' is required"
-  )
-})
-
-test_that("scrape_elections: state_elections + mode=joined requires year", {
-  expect_error(
-    scrape_elections(state = "Virginia", office = "state_elections", mode = "joined"),
-    "'year' is required"
-  )
 })
 
 # ── year_from > year_to triggers before any Python call ──────────────────────
@@ -231,8 +181,7 @@ test_that("scrape_elections: level=parish invalid for GA", {
   )
 })
 
-test_that("scrape_elections: level=parish invalid for ElectionStats (NC)", {
-  # NC has its own scraper and its own valid levels (all/precinct/county/state)
+test_that("scrape_elections: level=parish invalid for NC", {
   expect_error(
     scrape_elections(state = "NC", level = "parish"),
     "not valid for"
@@ -274,31 +223,6 @@ test_that("scrape_elections: level=parish invalid for IN", {
   )
 })
 
-# ── level produces error for Ballotpedia scrapers ─────────────────────────────
-# Ballotpedia scrapers always return a single flat data frame; level= is not
-# applicable and should raise an error before any scraping occurs.
-
-test_that("scrape_elections: level=county errors for school_district", {
-  expect_error(
-    scrape_elections(office = "school_district", year = 2024, level = "county"),
-    "not applicable"
-  )
-})
-
-test_that("scrape_elections: level=precinct errors for school_district", {
-  expect_error(
-    scrape_elections(office = "school_district", year = 2024, level = "precinct"),
-    "not applicable"
-  )
-})
-
-test_that("scrape_elections: level=state errors for municipal_elections", {
-  expect_error(
-    scrape_elections(office = "municipal_elections", year = 2022, level = "state"),
-    "not applicable"
-  )
-})
-
 # ── Cross-parameter errors ────────────────────────────────────────────────────
 
 test_that("scrape_elections: include_vote_methods=TRUE errors for non-GA/UT states", {
@@ -313,101 +237,6 @@ test_that("scrape_elections: include_vote_methods=TRUE errors for non-GA/UT stat
   expect_error(
     scrape_elections(state = "LA", include_vote_methods = TRUE),
     "only supported for Georgia and Utah"
-  )
-})
-
-test_that("scrape_elections: election_level errors when office != state_elections", {
-  expect_error(
-    scrape_elections(state = "VA", election_level = "federal"),
-    "only valid when office = .state_elections"
-  )
-})
-
-test_that("scrape_elections: race_type errors when office != municipal_elections", {
-  expect_error(
-    scrape_elections(state = "VA", race_type = "mayoral"),
-    "only valid when office = .municipal_elections"
-  )
-})
-
-test_that("scrape_elections: mode=listings errors when office=general", {
-  expect_error(
-    scrape_elections(state = "VA", office = "general", mode = "listings"),
-    "not valid for office = .general"
-  )
-})
-
-test_that("scrape_elections: mode=links errors when office=general", {
-  expect_error(
-    scrape_elections(state = "VA", office = "general", mode = "links"),
-    "not valid for office = .general"
-  )
-})
-
-test_that("scrape_elections: mode=results errors when office=general", {
-  expect_error(
-    scrape_elections(state = "VA", office = "general", mode = "results"),
-    "not valid for office = .general"
-  )
-})
-
-test_that("scrape_elections: mode=joined errors when office=general", {
-  expect_error(
-    scrape_elections(state = "VA", office = "general", mode = "joined"),
-    "not valid for office = .general"
-  )
-})
-
-# ── year param routing errors ─────────────────────────────────────────────────
-
-test_that("scrape_elections: year_from errors for Ballotpedia scrapers", {
-  expect_error(
-    scrape_elections(office = "school_district", year_from = 2022),
-    "'year_from' is not used"
-  )
-  expect_error(
-    scrape_elections(state = "Virginia", office = "state_elections", year_from = 2024),
-    "'year_from' is not used"
-  )
-  expect_error(
-    scrape_elections(office = "municipal_elections", year_from = 2022),
-    "'year_from' is not used"
-  )
-})
-
-test_that("scrape_elections: year_to errors for Ballotpedia scrapers", {
-  expect_error(
-    scrape_elections(office = "school_district", year_to = 2024),
-    "'year_to' is not used"
-  )
-})
-
-test_that("scrape_elections: year errors for general election scrapers", {
-  expect_error(
-    scrape_elections(state = "VA", year = 2024),
-    "'year' is not used"
-  )
-  expect_error(
-    scrape_elections(state = "NC", year = 2024),
-    "'year' is not used"
-  )
-  expect_error(
-    scrape_elections(state = "GA", year = 2024),
-    "'year' is not used"
-  )
-})
-
-test_that("scrape_elections: start_year errors for general election scrapers", {
-  expect_error(
-    scrape_elections(state = "VA", start_year = 2020),
-    "'start_year' is not used"
-  )
-})
-
-test_that("scrape_elections: end_year errors for general election scrapers", {
-  expect_error(
-    scrape_elections(state = "VA", end_year = 2024),
-    "'end_year' is not used"
   )
 })
 
@@ -440,31 +269,5 @@ test_that("scrape_elections: max_workers errors for sources without sub-unit par
   expect_error(
     scrape_elections(state = "IN", max_workers = 2L),
     "'max_workers' is not applicable"
-  )
-})
-
-# ── Ballotpedia mode=joined requires year ─────────────────────────────────────
-
-test_that("scrape_elections: school_district + mode=joined requires year", {
-  expect_error(
-    scrape_elections(office = "school_district", mode = "joined"),
-    "'year' is required"
-  )
-})
-
-# ── start_year > end_year for all Ballotpedia scrapers ────────────────────────
-
-test_that("scrape_elections: start_year > end_year errors for state_elections", {
-  expect_error(
-    scrape_elections(state = "Virginia", office = "state_elections",
-                     start_year = 2026, end_year = 2024),
-    "'start_year' \\(2026\\) cannot be greater than 'end_year' \\(2024\\)"
-  )
-})
-
-test_that("scrape_elections: start_year > end_year errors for municipal_elections", {
-  expect_error(
-    scrape_elections(office = "municipal_elections", start_year = 2023, end_year = 2020),
-    "'start_year' \\(2023\\) cannot be greater than 'end_year' \\(2020\\)"
   )
 })

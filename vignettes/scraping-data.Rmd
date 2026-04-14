@@ -43,24 +43,21 @@ downballot_use_python()
 All data retrieval flows through one function:
 
 ```r
-scrape_elections(state, office = "general", ...)
+scrape_elections(state, ...)
 ```
 
-The scraper is selected **automatically** based on `state` and `office` —
+The scraper is selected **automatically** based on `state` —
 you never need to specify a backend by name:
 
 | Priority | Condition | Scraper used |
 |---|---|---|
-| 1 | `office = "school_district"` | Ballotpedia school board scraper (all US states) |
-| 2 | `office = "state_elections"` | Ballotpedia state elections (2024–present) |
-| 3 | `office = "municipal_elections"` | Ballotpedia municipal + mayoral elections (2014–present) |
-| 4 | `state` is North Carolina | NC State Board of Elections scraper (2000–present) |
-| 5 | `state` is Connecticut | Connecticut CTEMS scraper (2016–present) |
-| 6 | `state` is Georgia | Georgia Secretary of State scraper (2000–present) |
-| 7 | `state` is Utah | Utah election results scraper (2023–present) |
-| 8 | `state` is Indiana | Indiana voters portal scraper (2019–present) |
-| 9 | `state` is Louisiana | Louisiana SOS scraper (1982–present) |
-| 10 | All other states | ElectionStats multi-state scraper |
+| 1 | `state` is North Carolina | NC State Board of Elections scraper (2000–present) |
+| 2 | `state` is Connecticut | Connecticut CTEMS scraper (2016–present) |
+| 3 | `state` is Georgia | Georgia Secretary of State scraper (2000–present) |
+| 4 | `state` is Utah | Utah election results scraper (2023–present) |
+| 5 | `state` is Indiana | Indiana voters portal scraper (2019–present) |
+| 6 | `state` is Louisiana | Louisiana SOS scraper (1982–present) |
+| 7 | All other states | ElectionStats multi-state scraper |
 
 ---
 
@@ -71,11 +68,6 @@ Use `db_available_years()` to check available year ranges programmatically:
 ```{r, purl=FALSE}
 # All sources
 db_available_years()
-
-# Filter to one office type
-db_available_years(office = "school_district")
-db_available_years(office = "state_elections")
-db_available_years(office = "municipal_elections")
 
 # Filter to one state
 db_available_years(state = "Virginia")
@@ -98,17 +90,14 @@ db_available_years(state = "Virginia")
 | Utah elections site | Utah | 2023 | present |
 | Indiana voters portal | Indiana | 2019 | present |
 | Louisiana SOS | Louisiana | 1982 | present |
-| Ballotpedia (school boards) | All US states | 2013 | present |
-| Ballotpedia (state elections) | All US states\* | 2024 | present |
-| Ballotpedia (municipal elections) | All US states | 2014 (`"all"`) / 2020 (`"mayoral"`) | present |
 
 To see which states are supported by the ElectionStats scraper:
 
 ```{r, purl=FALSE}
 db_list_states("election_stats")
-#> [1] "colorado"       "idaho"          "massachusetts"  "new_hampshire"
-#> [5] "new_mexico"     "new_york"       "south_carolina" "vermont"
-#> [9] "virginia"
+#> [1] "Colorado"        "Idaho"           "Massachusetts"   "New Hampshire"
+#> [5] "New Mexico"      "New York"        "South Carolina"  "Vermont"
+#> [9] "Virginia"
 ```
 
 ---
@@ -132,13 +121,6 @@ db_list_states("election_stats")
 | IN statewide only (faster) | `scrape_elections(state = "IN", year_from = 2022, year_to = 2022, level = "state")` |
 | LA statewide + parish results | `scrape_elections(state = "LA", year_from = 2024, year_to = 2024)` |
 | LA statewide only (faster; skips parish scraping) | `scrape_elections(state = "LA", year_from = 2023, year_to = 2023, level = "state")` |
-| School board district schedules, any state | `scrape_elections(office = "school_district", mode = "districts", ...)` |
-| School board candidates + results | `scrape_elections(office = "school_district", mode = "results", ...)` |
-| All candidates for a state (federal + state + local), 2024+ | `scrape_elections(state = "Maine", office = "state_elections", year = 2024)` |
-| Federal candidates only, with vote counts | `scrape_elections(state = "Maine", office = "state_elections", year = 2024, election_level = "federal", mode = "results")` |
-| Discover municipal/mayoral election URLs for a year | `scrape_elections(office = "municipal_elections", year = 2022)` |
-| Full candidate results for municipal elections | `scrape_elections(office = "municipal_elections", year = 2022, mode = "results")` |
-| Multi-year mayoral results, one state | `scrape_elections(office = "municipal_elections", state = "Texas", race_type = "mayoral", mode = "results", start_year = 2020, end_year = 2024)` |
 
 ---
 
@@ -161,12 +143,6 @@ worked examples, and column descriptions:
   Indiana voters portal; statewide + county General Election results, 2019–present
 - [Louisiana](louisiana.html) —
   Louisiana Secretary of State; statewide + parish results, 1982–present
-- [School district elections](school-district-elections.html) —
-  Ballotpedia school board elections, all US states, 2013–present
-- [State elections](state-elections.html) —
-  Ballotpedia federal/state/local candidate listings, 2024–present
-- [Municipal elections](municipal-elections.html) —
-  Ballotpedia city, county, and mayoral races, 2014–present
 
 ---
 
@@ -176,10 +152,6 @@ worked examples, and column descriptions:
   large date ranges.
 - **Playwright states are slower** — South Carolina, New Mexico, and New York
   launch a headless browser for each scrape. Expect several seconds per year.
-- **Ballotpedia `mode = "results"`** makes one extra HTTP request per
-  district, contest, or election page. Use `mode = "districts"` /
-  `mode = "listings"` / `mode = "links"` for a fast overview without
-  vote counts.
 - **Parallel scraping is on by default** for classic (requests-based)
   ElectionStats states. Pass `parallel = FALSE` to disable.
 - **Be polite** — built-in delays are intentional. Do not reduce or

@@ -17,8 +17,7 @@ db_list_sources <- function() {
 #'
 #' @param source One of the sources returned by \code{db_list_sources()}, or
 #'   \code{NULL} (default) to return all states with dedicated scrapers across
-#'   all sources (Ballotpedia sources, which accept any US state via a
-#'   \code{state=} filter, are excluded from this aggregation).
+#'   all sources.
 #' @return Named character vector of canonical state names. When
 #'   \code{source = NULL} each element is named by its source; when a single
 #'   source is given the names are omitted.
@@ -31,8 +30,6 @@ db_list_states <- function(source = NULL) {
   }
 
   # Aggregate across all sources, skipping sources with no state list
-  # (Ballotpedia sources accept any US state via a state= parameter and do not
-  # enumerate individual states).
   all_sources <- unlist(reg$list_sources())
   result <- unlist(lapply(all_sources, function(src) {
     states <- unlist(reg$list_states(src))
@@ -51,76 +48,25 @@ db_list_states <- function(source = NULL) {
 #' current calendar year.
 #'
 #' @param state Optional state name to filter results (e.g. \code{"Virginia"}).
-#'   Pass \code{NULL} (default) to return all states for the chosen source(s).
-#' @param office Type of election, matching \code{scrape_elections()}.
-#'   \code{"general"} (default) returns availability for ElectionStats states,
-#'   North Carolina, Connecticut, and Georgia; \code{"school_district"} returns
-#'   Ballotpedia school board availability; \code{"state_elections"} returns
-#'   Ballotpedia state election availability; \code{"municipal_elections"}
-#'   returns Ballotpedia municipal and mayoral election availability.
+#'   Pass \code{NULL} (default) to return all states.
 #'
 #' @return A \code{data.frame} with columns \code{source}, \code{state},
 #'   \code{start_year}, and \code{end_year}.
 #'
 #' @examples
 #' \dontrun{
-#' # General election sources
+#' # All sources
 #' db_available_years()
-#'
-#' # School district (Ballotpedia)
-#' db_available_years(office = "school_district")
-#'
-#' # State elections (Ballotpedia)
-#' db_available_years(office = "state_elections")
-#'
-#' # Municipal and mayoral elections (Ballotpedia)
-#' db_available_years(office = "municipal_elections")
 #'
 #' # Filter to one state
 #' db_available_years(state = "Virginia")
 #' }
 #'
 #' @export
-db_available_years <- function(state = NULL,
-                               office = c("general", "school_district",
-                                          "state_elections", "municipal_elections")) {
-  office <- match.arg(office)
-  reg    <- .db_registry()
+db_available_years <- function(state = NULL) {
+  reg <- .db_registry()
 
-  if (office == "school_district") {
-    avail <- reg$get_available_years("ballotpedia")
-    return(data.frame(
-      source     = "ballotpedia",
-      state      = "All US states",
-      start_year = avail$start_year,
-      end_year   = avail$end_year,
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  if (office == "state_elections") {
-    avail <- reg$get_available_years("ballotpedia_elections")
-    return(data.frame(
-      source     = "ballotpedia_elections",
-      state      = "All US states (where page exists)",
-      start_year = avail$start_year,
-      end_year   = avail$end_year,
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  if (office == "municipal_elections") {
-    avail <- reg$get_available_years("ballotpedia_municipal")
-    return(data.frame(
-      source     = "ballotpedia_municipal",
-      state      = "All US states (race_type='all': 2014+; 'mayoral': 2020+)",
-      start_year = avail$start_year,
-      end_year   = avail$end_year,
-      stringsAsFactors = FALSE
-    ))
-  }
-
-  # General elections: ElectionStats + NC + CT + GA
+  # ElectionStats states
   es_states <- db_list_states("election_stats")
   es_rows <- lapply(es_states, function(s) {
     avail <- reg$get_available_years("election_stats", state = s)

@@ -103,8 +103,8 @@ Routing logic lives in `R/scrape_elections.R`; per-source argument shaping in `R
 
 | Backend | States | Transport | Entry point |
 |---|---|---|---|
-| **Classic** (ElectionStats v1) | VA, MA, NH, CO | `requests` | `StateHttpClient` |
-| **V2** (ElectionStats v2 / React) | SC, NM, NY | Playwright (headless Chromium) | `PlaywrightClient` |
+| **Classic** (ElectionStats v1) | MA, NH, CO, ID, VT | `requests` | `StateHttpClient` |
+| **V2** (ElectionStats v2 / React) | SC, NM, NY, VA | Playwright (headless Chromium) | `PlaywrightClient` |
 | **NC** (NCSBE ZIP pipeline) | NC | HTTP ZIP download | `NcElectionPipeline` |
 | **Ballotpedia** | All US states | `requests` | `SchoolBoardScraper` |
 | **Georgia SOS** | GA | Playwright (headless Chromium) | `GaElectionPipeline` |
@@ -114,17 +114,24 @@ Routing logic lives in `R/scrape_elections.R`; per-source argument shaping in `R
 
 Classic states (v1) use Rails-style path segments:
 ```
-https://historical.elections.virginia.gov/elections/search/year_from:2024/year_to:2024
+https://co.elstats2.civera.com/elections/search/year_from:2024/year_to:2024
 ```
 
-Colorado (Civera backend) uses query parameters:
+V2 states (SC/NM/NY/VA) use the Civera React SPA with query-parameter URLs:
 ```
-https://co.elstats2.civera.com/eng/contests?year_from=2024&year_to=2024&page=1
+https://electionstats.sos.nm.gov/eng/contests?year_from=2024&year_to=2024&page=1
 ```
 
-V2 states (SC/NM/NY) use a React SPA with the same query-param URL shape as CO but
-require Playwright for rendering; the `url_style` field in `STATE_CONFIGS` controls
+These require Playwright for rendering; the `url_style` field in `STATE_CONFIGS` controls
 which format `StateHttpClient.build_search_url()` generates.
+
+V2 states also expose a public CSV download API for county/precinct data that does
+**not** require a browser:
+```
+{base_url}/api/download_contest/{election_id}_table.csv?split_party=false
+```
+The CSV contains all geographic levels (County, Precinct) tagged in the first column.
+SC, NM, and VA have precinct data; NY does not.
 
 ### Cloudflare (NY)
 
@@ -398,12 +405,10 @@ One row per candidate per election. Key columns: `state`, `year`, `election_id`,
 One row per candidate per county per election. Key columns: `state`, `year`,
 `election_id`, `candidate_id`, `county_or_city`, `candidate_name`, `votes`.
 
-### `level = "joined"`
-County rows left-joined with state-level candidate metadata on
-`(state, election_id, candidate_id)`.
-
 ### `level = "all"` (default)
-Returns a named R list with `$state` and `$county` data frames.
+Returns a named R list with `$state`, `$county`, and (for CO, MA, ID, SC, NM, VA)
+`$precinct` data frames. NH, VT, and NY only return `$state` and `$county`; `$precinct`
+is `NULL` for those states.
 
 ---
 
@@ -497,7 +502,7 @@ db_list_states("election_stats")
 
 # Check data availability per state
 db_available_years()
-db_available_years(state = "south_carolina")
+db_available_years(state = "South Carolina")
 ```
 
 ```python

@@ -100,13 +100,15 @@ def _extract_candidate_names_from_thead(table) -> List[str]:
                 node = sp[0]
 
         if node is None:
-            # If there is no tooltip node, treat this header as "not a candidate" and skip.
-            continue
-
-        # Prefer oldtitle (usually the full candidate name), fallback to visible text.
-        oldtitle = (node.get("oldtitle") or "").strip()
-        text = " ".join(node.xpath(".//text()")).strip()
-        nm = oldtitle or text
+            # Fallback: use plain th text directly (Idaho/Civera-style: no tooltip
+            # wrapper). The cell has already passed both ignore-set checks above,
+            # so if we reach here it is safe to treat the label as a candidate name.
+            nm = label
+        else:
+            # Prefer oldtitle (usually the full candidate name), fallback to visible text.
+            oldtitle = (node.get("oldtitle") or "").strip()
+            text = " ".join(node.xpath(".//text()")).strip()
+            nm = oldtitle or text
 
         # Extra safety: if we somehow got a trailing summary label via tooltip, stop.
         if nm in TRAILING_IGNORE_HEADERS:
@@ -213,6 +215,7 @@ def _find_locality_td_index(tr) -> Optional[int]:
     Supports multiple layouts:
       - Many states: locality is in a <td> containing <a class="label">...</a>
       - CO-style:    locality is in a <th scope="row"> containing <span class="label">...</span>
+      - Idaho-style: locality is in a plain first <td> with no .label wrapper
 
     Returns an index relative to the row's "data cells" list used by callers.
     For <td>-based rows, that's index in ./td.
@@ -239,6 +242,13 @@ def _find_locality_td_index(tr) -> Optional[int]:
                 # Return 0 to indicate "locality is present before vote <td>s".
                 return 0
 
+    # --- Final fallback: plain first <td> (Idaho/Civera-style, no .label wrapper) ---
+    # Only reached when no .label element is found anywhere in the row.  Safe because
+    # this function is only called for rows already identified as locality rows
+    # (division-id-* / locality-id-*), so the first <td> is the locality name.
+    if tds:
+        return 0
+
     return None
 
 
@@ -247,10 +257,11 @@ def _extract_county_name_from_row(tr) -> Optional[str]:
     Extract locality name (County/City/etc.) from a row.
 
     Supports:
-      - <a class="label">Name</a>
-      - <span class="label">Name</span>
+      - <a class="label">Name</a>              (VA/MA/NH classic style)
+      - <span class="label">Name</span>        (CO-style)
+      - plain first <td> text content          (Idaho/Civera-style: no .label wrapper)
     """
-    # Original pattern
+    # Original pattern (VA/MA/NH)
     txt = tr.xpath(".//a[contains(@class,'label')]/text()")
     if txt:
         name = txt[0].strip()
@@ -260,6 +271,15 @@ def _extract_county_name_from_row(tr) -> Optional[str]:
     txt = tr.xpath(".//span[contains(@class,'label')]/text()")
     if txt:
         name = txt[0].strip()
+        return name or None
+
+    # Fallback: plain text in the first <td> (Idaho/Civera-style).
+    # Only reached when the above patterns both fail.  These rows are already
+    # identified as locality rows (division-id-* / locality-id-*), so the
+    # first cell is virtually always the locality name.
+    tds = tr.xpath("./td")
+    if tds:
+        name = " ".join(tds[0].xpath(".//text()")).strip()
         return name or None
 
     return None
@@ -432,7 +452,7 @@ def parse_county_votes_from_detail_html(
                     election_id=election_id,
                     county_or_city=county,
                     candidate_id=cand_id,
-                    candidate_name=cand_name,
+                    candidate=cand_name,
                     votes=votes,
                 )
             )
@@ -483,217 +503,212 @@ def _build_candidate_id_map_from_state_df(state_df: pd.DataFrame) -> Dict[str, i
 
 
 # =============================
-# V2-specific county parsing (SC/NM)
+# V2 CSV-based county + precinct parsing (SC/NM/VA)
 # =============================
-def _extract_candidate_names_v2(table) -> List[str]:
-    """
-    Extract candidate names from v2 table headers (plain text, no tooltips).
 
-    V2 structure:
-      Header row: County | Candidate1 | Candidate2 | Total Votes Cast | Total Ballots Cast
-
-    Parameters
-    ----------
-    table : lxml element
-        The county results table
-
-    Returns
-    -------
-    List[str]
-        Candidate names in order
-    """
-    ths = table.xpath(".//thead//tr[1]//th | .//tr[1]//th")
-    names: List[str] = []
-
-    for th in ths:
-        label = " ".join(th.xpath(".//text()")).strip()
-
-        # Skip locality columns
-        if label in LEADING_IGNORE_HEADERS:
-            continue
-
-        # Stop at trailing summary columns
-        if label in TRAILING_IGNORE_HEADERS or "Total" in label:
-            break
-
-        if label:
-            names.append(label)
-
-    return names
+_COUNTY_COLS_V2 = ["state", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
 
 
-def parse_county_votes_v2(
-    detail_html: str,
+def _parse_contest_csv_v2(
+    csv_text: str,
     election_id: int,
     state: str,
     candidate_id_map: Optional[Dict[str, int]] = None,
-) -> pd.DataFrame:
+) -> "tuple[pd.DataFrame, pd.DataFrame]":
     """
-    Parse county votes from v2 state detail pages (SC/NM).
+    Parse the flat contest CSV returned by /api/download_contest/{id}_table.csv.
 
-    V2 table structure is simpler than classic:
-    - Plain text headers (no tooltips)
-    - Header: County | Candidate1 | Candidate2 | Total Votes Cast | ...
-    - Data rows: County name | vote count | vote count | total | ...
-
-    Parameters
+    CSV format
     ----------
-    detail_html : str
-        Rendered HTML from Playwright
-    election_id : int
-        Election ID
-    state : str
-        State identifier
-    candidate_id_map : Optional[Dict[str, int]]
-        Mapping from candidate name to ID
+    Row 0 : ``,,Candidate1,Candidate2,...,Total Votes Cast,Total Ballots Cast``
+    Row 1 : ``,,Party1,Party2,...``  (skipped)
+    Row 2+: ``RowType,Name,votes1,votes2,...,total,total_ballots``
+
+    RowType values
+    --------------
+    ``"County"``   → county-level aggregate row
+    ``"Precinct"`` → precinct-level row; county context tracked from the last
+                     County row seen above it in the file
+    anything else  → district-level totals (skipped)
 
     Returns
     -------
-    pd.DataFrame
-        Long-form county votes
+    (county_df, precinct_df)
+        county_df   columns: state, election_id, candidate_id, county_or_city, candidate, votes
+        precinct_df columns: state, election_id, candidate_id, county, precinct, candidate, votes
     """
-    doc = html.fromstring(detail_html)
+    import csv as _csv
+    import io as _io
 
-    # Find any table (v2 typically has just one main table)
-    tables = doc.xpath("//table")
-    if not tables:
-        raise ValueError("No table found in detail page")
+    rows = list(_csv.reader(_io.StringIO(csv_text)))
+    if len(rows) < 3:
+        return (
+            pd.DataFrame(columns=_COUNTY_COLS_V2),
+            pd.DataFrame(columns=_PRECINCT_COLS),
+        )
 
-    table = tables[0]
+    # ── Candidate columns from header row ─────────────────────────────────────
+    header = rows[0]
+    cand_indices: List[tuple[int, str]] = []
+    for i, col in enumerate(header):
+        if i < 2:
+            continue
+        col_clean = col.strip()
+        if not col_clean or col_clean.lower().startswith("total"):
+            break
+        cand_indices.append((i, col_clean))
 
-    # Extract candidate names from header
-    candidate_names = _extract_candidate_names_v2(table)
-    if not candidate_names:
-        raise ValueError("Could not extract candidate names from v2 table header")
+    if not cand_indices:
+        return (
+            pd.DataFrame(columns=_COUNTY_COLS_V2),
+            pd.DataFrame(columns=_PRECINCT_COLS),
+        )
 
-    # Build candidate ID map if not provided
     if candidate_id_map is None:
-        candidate_id_map = {name: i + 1 for i, name in enumerate(candidate_names)}
+        candidate_id_map = {name: idx + 1 for idx, (_, name) in enumerate(cand_indices)}
 
-    # Parse data rows
-    data_rows = table.xpath(".//tbody/tr | .//tr[position()>1]")
-    records: List[Dict] = []
+    county_records: List[Dict] = []
+    precinct_records: List[Dict] = []
+    current_county: Optional[str] = None
 
-    for tr in data_rows:
-        cells = tr.xpath("./td | ./th")
-        if len(cells) < 2:
+    for row in rows[1:]:   # skip only the header; party row (if any) is ignored via row_type check
+        if len(row) < 3:
             continue
+        row_type = row[0].strip()
+        name     = row[1].strip()
 
-        # First cell is county/locality name
-        county = " ".join(cells[0].xpath(".//text()")).strip()
-        if not county or county in LEADING_IGNORE_HEADERS:
-            continue
+        if row_type == "County":
+            current_county = name
+            for col_idx, cand_name in cand_indices:
+                if col_idx >= len(row):
+                    continue
+                try:
+                    votes = int(row[col_idx].strip().replace(",", ""))
+                except ValueError:
+                    continue
+                county_records.append({
+                    "state":         state,
+                    "election_id":   election_id,
+                    "candidate_id":  candidate_id_map.get(cand_name, 0),
+                    "county_or_city": name,
+                    "candidate":     cand_name,
+                    "votes":         votes,
+                })
 
-        # Remaining cells are vote counts for each candidate
-        for i, candidate_name in enumerate(candidate_names):
-            if i + 1 >= len(cells):
-                break
+        elif row_type == "Precinct":
+            precinct_label = f"Precinct {name}"
+            for col_idx, cand_name in cand_indices:
+                if col_idx >= len(row):
+                    continue
+                try:
+                    votes = int(row[col_idx].strip().replace(",", ""))
+                except ValueError:
+                    continue
+                precinct_records.append({
+                    "state":        state,
+                    "election_id":  election_id,
+                    "candidate_id": candidate_id_map.get(cand_name, 0),
+                    "county":       current_county or "",
+                    "precinct":     precinct_label,
+                    "candidate":    cand_name,
+                    "votes":        votes,
+                })
+        # else: district-level totals row — skip
 
-            vote_text = " ".join(cells[i + 1].xpath(".//text()")).strip()
-            vote_text = vote_text.replace(",", "")
-
-            try:
-                votes = int(vote_text) if vote_text.isdigit() else 0
-            except ValueError:
-                votes = 0
-
-            records.append({
-                "state": state,
-                "election_id": election_id,
-                "county_or_city": county,
-                "candidate_id": candidate_id_map.get(candidate_name, i + 1),
-                "candidate_name": candidate_name,
-                "votes": votes,
-            })
-
-    return pd.DataFrame(records)
+    county_df   = pd.DataFrame(county_records)   if county_records   else pd.DataFrame(columns=_COUNTY_COLS_V2)
+    precinct_df = pd.DataFrame(precinct_records) if precinct_records else pd.DataFrame(columns=_PRECINCT_COLS)
+    return county_df, precinct_df
 
 
-def build_county_dataframe_v2(
+def build_county_and_precinct_dataframe_v2(
     state_df: pd.DataFrame,
-    playwright_client,
-) -> pd.DataFrame:
+    base_url: str,
+    max_workers: int = 6,
+) -> "tuple[pd.DataFrame, pd.DataFrame]":
     """
-    Fetch and parse county votes for v2 states using Playwright.
+    Download and parse county + precinct votes for v2 states (SC, NM, VA)
+    using the CSV download API — no Playwright interaction required.
+
+    For each unique election_id in *state_df* the function calls::
+
+        GET {base_url}/api/download_contest/{election_id}_table.csv?split_party=false
+
+    and parses county rows (first column == ``"County"``) and precinct rows
+    (first column == ``"Precinct"``) from the flat CSV.
 
     Parameters
     ----------
     state_df : pd.DataFrame
-        Must include ['state', 'election_id', 'detail_url']
-        If 'candidate_id' exists, used to create stable candidate_id_map
-    playwright_client : PlaywrightClient
-        Playwright client in context manager
+        Must include columns ``['state', 'election_id']``.
+        If ``'candidate_id'`` and ``'candidate'`` are present, a stable
+        candidate-ID map is built from them.
+    base_url : str
+        Public base URL for the state (e.g. ``'https://electionstats.sos.nm.gov'``).
+    max_workers : int
+        Number of parallel download threads (default 6).
 
     Returns
     -------
-    pd.DataFrame
-        Concatenated county vote data
+    (county_df, precinct_df)
     """
-    required = {"state", "election_id", "detail_url"}
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
+
+    required = {"state", "election_id"}
     missing = required - set(state_df.columns)
     if missing:
         raise ValueError(f"state_df missing columns: {sorted(missing)}")
 
-    # Build candidate ID map from state_df if available
-    candidate_id_map = None
+    candidate_id_map: Optional[Dict[str, int]] = None
     if "candidate_id" in state_df.columns and "candidate" in state_df.columns:
         candidate_id_map = {}
-        for _, row in state_df.iterrows():
-            name = str(row.get("candidate", "")).strip()
-            cid = int(row["candidate_id"])
+        for _, row in state_df[["candidate", "candidate_id"]].dropna().iterrows():
+            name = str(row["candidate"]).strip()
+            cid  = int(row["candidate_id"])
             if name and name not in candidate_id_map:
                 candidate_id_map[name] = cid
 
-    frames: List[pd.DataFrame] = []
+    import requests as _requests
 
-    for _, row in state_df.iterrows():
-        election_id = int(row["election_id"])
-        state = str(row["state"])
-        detail_url = str(row["detail_url"])
+    def _fetch(u: str) -> str:
+        return _requests.get(u, timeout=30).text
 
-        try:
-            # Navigate to detail page
-            for attempt in range(1, 4):
-                try:
-                    playwright_client.page.goto(detail_url, wait_until="domcontentloaded", timeout=60000)
-                    break
-                except Exception:
-                    if attempt == 3:
-                        raise
-                    import time as _time
-                    print(f"  [WARN] goto timeout for election_id={election_id}, retry {attempt}/3")
-                    _time.sleep(5 * attempt)
+    def _fetch_one(election_id: int, state: str) -> "tuple[pd.DataFrame, pd.DataFrame]":
+        url = f"{base}/api/download_contest/{election_id}_table.csv?split_party=false"
+        csv_text = fetch_with_retry(_fetch, url)
+        return _parse_contest_csv_v2(csv_text, election_id, state, candidate_id_map)
 
-            # Wait for the county results table to render
+    base = base_url.rstrip("/")
+    county_frames:   List[pd.DataFrame] = []
+    precinct_frames: List[pd.DataFrame] = []
+
+    unique = state_df[["state", "election_id"]].drop_duplicates()
+    unique_rows = [(int(row["election_id"]), str(row["state"])) for _, row in unique.iterrows()]
+    n_elections = len(unique_rows)
+
+    print(f"  [ElectionStats] Downloading {n_elections} CSV(s) ({max_workers} parallel)...", flush=True)
+    done_count = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_fetch_one, eid, state): eid
+            for eid, state in unique_rows
+        }
+        for future in _as_completed(futures):
+            eid = futures[future]
+            done_count += 1
             try:
-                playwright_client.page.wait_for_selector(
-                    "#content table, table.MuiTable-root",
-                    timeout=45000,
-                )
-            except Exception:
-                pass
+                c_df, p_df = future.result()
+                if not c_df.empty:
+                    county_frames.append(c_df)
+                if not p_df.empty:
+                    precinct_frames.append(p_df)
+                print(f"  [ElectionStats] CSV {done_count}/{n_elections} done (election_id={eid}).", flush=True)
+            except Exception as exc:
+                print(f"  [ElectionStats] WARN: CSV download failed for election_id={eid}: {exc}", flush=True)
 
-            detail_html = playwright_client.page.content()
-
-            # Parse county votes
-            df = parse_county_votes_v2(
-                detail_html,
-                election_id,
-                state,
-                candidate_id_map,
-            )
-
-            if not df.empty:
-                frames.append(df)
-
-        except Exception as e:
-            print(f"Warning: Failed to parse county votes for election_id={election_id}: {e}")
-            continue
-
-    if not frames:
-        return pd.DataFrame(columns=["state", "election_id", "candidate_id", "county_or_city", "candidate_name", "votes"])
-
-    return pd.concat(frames, ignore_index=True)
+    county_df   = pd.concat(county_frames,   ignore_index=True) if county_frames   else pd.DataFrame(columns=_COUNTY_COLS_V2)
+    precinct_df = pd.concat(precinct_frames, ignore_index=True) if precinct_frames else pd.DataFrame(columns=_PRECINCT_COLS)
+    return county_df, precinct_df
 
 
 def build_county_dataframe(state_df: pd.DataFrame, client) -> pd.DataFrame:
@@ -725,9 +740,9 @@ def build_county_dataframe(state_df: pd.DataFrame, client) -> pd.DataFrame:
 
     # Define output schema based on whether state exists.
     out_cols = (
-        ["state", "election_id", "candidate_id", "county_or_city", "candidate_name", "votes"]
+        ["state", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
         if has_state
-        else ["election_id", "candidate_id", "county_or_city", "candidate_name", "votes"]
+        else ["election_id", "candidate_id", "county_or_city", "candidate", "votes"]
     )
 
     # Build a list of jobs (state, election_id, url) to run.
@@ -820,6 +835,308 @@ def _fetch_and_parse_one_parallel(
         return None
 
 
+# =============================================================================
+# Precinct parsing
+# =============================================================================
+
+def _build_locality_id_map(table) -> Dict[str, str]:
+    """Map {locality/division id string → county name} from the county rows."""
+    mapping: Dict[str, str] = {}
+    for tr in table.xpath(".//tbody/tr[starts-with(@id,'locality-id-')]"):
+        loc_id = tr.get("id", "").replace("locality-id-", "").strip()
+        name = _extract_county_name_from_row(tr)
+        if loc_id and name:
+            mapping[loc_id] = name
+    for tr in table.xpath(".//tbody/tr[starts-with(@id,'division-id-')]"):
+        div_id = tr.get("id", "").replace("division-id-", "").strip()
+        name = _extract_county_name_from_row(tr)
+        if div_id and name:
+            mapping[div_id] = name
+    return mapping
+
+
+def _get_all_header_labels(table) -> List[str]:
+    """Return all <th> labels in order from the first header row."""
+    ths = table.xpath(".//thead//tr[1]//th")
+    return [" ".join(th.xpath(".//text()")).strip() for th in ths]
+
+
+def _iter_precinct_row_pairs(table) -> List[Tuple]:
+    """
+    Return list of (tr, style) for all precinct-level rows in the table.
+
+    ``style`` is one of:
+      ``'precinct_id'``    — rows have ``id="precinct-id-*"`` and
+                             ``class="precinct-for-{parent_id}"``
+                             (NH / MA / VT style)
+      ``'child_division'`` — rows have ``class`` containing
+                             ``"child-division-of-{parent_id}"``
+                             (Idaho / CO / VA style)
+    """
+    rows = table.xpath(".//tbody/tr[starts-with(@id,'precinct-id-')]")
+    if rows:
+        return [(tr, "precinct_id") for tr in rows]
+    rows = table.xpath(".//tbody/tr[contains(@class,'child-division-of-')]")
+    if rows:
+        return [(tr, "child_division") for tr in rows]
+    return []
+
+
+def _parent_county_for_precinct(
+    tr, locality_id_map: Dict[str, str], style: str
+) -> Optional[str]:
+    """Resolve the parent county name for a precinct row via CSS class."""
+    cls = tr.get("class") or ""
+    prefix = "precinct-for-" if style == "precinct_id" else "child-division-of-"
+    for part in cls.split():
+        if part.startswith(prefix):
+            parent_id = part[len(prefix):]
+            return locality_id_map.get(parent_id)
+    return None
+
+
+def _extract_precinct_label(
+    tr, all_headers: List[str], style: str
+) -> Optional[str]:
+    """
+    Build a human-readable precinct name from a precinct row.
+
+    ``child_division`` style (ID/CO/VA):
+      The first <td> holds the precinct name directly.
+
+    ``precinct_id`` style (NH/MA/VT):
+      Ward and Pct columns are combined into e.g. ``"Ward 1 Pct 3"``
+      or just ``"3"`` when no Ward is present.
+    """
+    tds = tr.xpath("./td")
+    if not tds:
+        return None
+
+    if style == "child_division":
+        text = " ".join(tds[0].xpath(".//text()")).strip()
+        return text or None
+
+    # precinct_id style — use Ward / Pct column indices from the header
+    ward_idx = next((i for i, h in enumerate(all_headers) if h == "Ward"), None)
+    pct_idx  = next(
+        (i for i, h in enumerate(all_headers) if h in ("Pct", "Precinct")), None
+    )
+
+    parts: List[str] = []
+    if ward_idx is not None and ward_idx < len(tds):
+        ward = " ".join(tds[ward_idx].xpath(".//text()")).strip()
+        if ward and ward not in ("-", "—"):
+            parts.append(f"Ward {ward}")
+    if pct_idx is not None and pct_idx < len(tds):
+        pct = " ".join(tds[pct_idx].xpath(".//text()")).strip()
+        if pct and pct not in ("-", "—"):
+            parts.append(pct)
+
+    if parts:
+        return " ".join(parts)
+
+    # fallback: first non-empty td
+    for td in tds:
+        text = " ".join(td.xpath(".//text()")).strip()
+        if text and text not in ("-", "—"):
+            return text
+    return None
+
+
+def _extract_precinct_vote_tds(
+    tr,
+    all_headers: List[str],
+    candidate_count: int,
+    trailing_ignore_n: int,
+    style: str,
+) -> Optional[List]:
+    """
+    Slice the <td>s that contain candidate votes from a precinct row.
+
+    ``child_division``: first td is the precinct name; votes start at td[1].
+    ``precinct_id``:    leading locality columns (City/Town, Ward, Pct …)
+                        are counted from the header and skipped.
+    """
+    tds = tr.xpath("./td")
+    if not tds:
+        return None
+
+    if style == "child_division":
+        data_tds = tds[1:]
+    else:
+        leading_count = sum(1 for h in all_headers if h in LEADING_IGNORE_HEADERS)
+        data_tds = tds[leading_count:]
+
+    if trailing_ignore_n > 0 and len(data_tds) >= trailing_ignore_n:
+        data_tds = data_tds[:-trailing_ignore_n]
+
+    if len(data_tds) < candidate_count:
+        return None
+
+    return data_tds[-candidate_count:]
+
+
+_PRECINCT_COLS = [
+    "state", "election_id", "candidate_id", "county", "precinct", "candidate", "votes"
+]
+
+
+def parse_precinct_votes_from_detail_html(
+    detail_html: str,
+    election_id: int,
+    state: str,
+    candidate_id_map: Optional[Dict[str, int]] = None,
+) -> pd.DataFrame:
+    """
+    Parse precinct-level vote totals from an election detail HTML page.
+
+    Works for both layout styles:
+      * ``precinct_id``    — NH / MA / VT (rows ``id="precinct-id-*"``)
+      * ``child_division`` — ID / CO / VA (rows with ``class="child-division-of-*"``)
+
+    Returns an empty DataFrame (with correct columns) if the page has no
+    precinct rows.
+
+    Parameters
+    ----------
+    detail_html : str
+        Raw HTML of the election detail page.
+    election_id : int
+        Election identifier to attach to every row.
+    state : str
+        State key to attach to every row.
+    candidate_id_map : dict | None
+        ``{candidate_name: candidate_id}``.  Built positionally if not provided.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: state, election_id, candidate_id, county, precinct, candidate, votes
+    """
+    EMPTY = pd.DataFrame(columns=_PRECINCT_COLS)
+
+    doc = html.fromstring(detail_html)
+
+    tables = doc.xpath(
+        "//table[.//th["
+        "normalize-space()='County/City' "
+        "or normalize-space()='City/Town' "
+        "or normalize-space()='County'"
+        "]] | //table[@id='precinct_data']"
+    )
+    if not tables:
+        return EMPTY
+
+    table = tables[0]
+
+    precinct_pairs = _iter_precinct_row_pairs(table)
+    if not precinct_pairs:
+        return EMPTY
+
+    candidate_names = _extract_candidate_names_from_thead(table)
+    if not candidate_names:
+        return EMPTY
+
+    trailing_ignore_n = _count_trailing_ignored_columns_from_thead(table)
+    all_headers       = _get_all_header_labels(table)
+
+    if candidate_id_map is None:
+        candidate_id_map = {name: i + 1 for i, name in enumerate(candidate_names)}
+
+    locality_id_map = _build_locality_id_map(table)
+
+    records: List[Dict] = []
+
+    for tr, style in precinct_pairs:
+        county = _parent_county_for_precinct(tr, locality_id_map, style)
+
+        # fallback: read county from City/Town / County header column
+        if not county:
+            for hdr in ("City/Town", "County/City", "County"):
+                idx = next((i for i, h in enumerate(all_headers) if h == hdr), None)
+                if idx is not None:
+                    tds = tr.xpath("./td")
+                    if idx < len(tds):
+                        county = " ".join(tds[idx].xpath(".//text()")).strip() or None
+                    break
+
+        precinct = _extract_precinct_label(tr, all_headers, style)
+
+        if not county or not precinct:
+            continue
+        if precinct.lower() in ("totals", "total"):
+            continue
+
+        vote_tds = _extract_precinct_vote_tds(
+            tr, all_headers, len(candidate_names), trailing_ignore_n, style
+        )
+        if vote_tds is None:
+            continue
+
+        for cand_name, td in zip(candidate_names, vote_tds):
+            votes = _parse_int(_extract_vote_text_from_td(td))
+            if votes is None:
+                continue
+            cand_id = candidate_id_map.get(cand_name)
+            if cand_id is None:
+                continue
+            records.append({
+                "state":        state,
+                "election_id":  election_id,
+                "candidate_id": cand_id,
+                "county":       county,
+                "precinct":     precinct,
+                "candidate":    cand_name,
+                "votes":        votes,
+            })
+
+    return pd.DataFrame(records) if records else EMPTY
+
+
+# =============================================================================
+# Combined county + precinct builder (single fetch per detail page)
+# =============================================================================
+
+def _fetch_and_parse_county_and_precinct(
+    st: Optional[str],
+    election_id: int,
+    url: str,
+    candidate_id_map: Optional[Dict[str, int]],
+    client_factory,
+) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+    """
+    Worker: fetch one detail page and return ``(county_df, precinct_df)``.
+    Creates its own client via ``client_factory()`` for thread-safety.
+    """
+    try:
+        client = client_factory()
+        detail_html = fetch_with_retry(client.get_html, url)
+
+        county_df = parse_county_votes_from_detail_html(
+            detail_html, election_id=election_id, state=st
+        )
+        if candidate_id_map and "candidate" in county_df.columns:
+            # Re-map candidate_ids to match statewide IDs
+            county_df["candidate_id"] = county_df["candidate"].map(candidate_id_map)
+
+        precinct_df = parse_precinct_votes_from_detail_html(
+            detail_html,
+            election_id=election_id,
+            state=st,
+            candidate_id_map=candidate_id_map,
+        )
+        return county_df, precinct_df
+
+    except Exception as e:
+        print(
+            f"[ERROR] Failed to parse detail "
+            f"(state={st}, election_id={election_id})\n"
+            f"URL: {url}\n"
+            f"Error: {type(e).__name__}: {e}\n"
+        )
+        return None, None
+
+
 def build_county_dataframe_parallel(
     state_df: pd.DataFrame,
     client_factory,
@@ -856,9 +1173,9 @@ def build_county_dataframe_parallel(
 
     # Define output schema based on whether state exists.
     out_cols = (
-        ["state", "election_id", "candidate_id", "county_or_city", "candidate_name", "votes"]
+        ["state", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
         if has_state
-        else ["election_id", "candidate_id", "county_or_city", "candidate_name", "votes"]
+        else ["election_id", "candidate_id", "county_or_city", "candidate", "votes"]
     )
 
     # Build a list of jobs (state, election_id, url).
@@ -897,3 +1214,84 @@ def build_county_dataframe_parallel(
 
     # Combine successful results, preserving schema on empty.
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=out_cols)
+
+
+def build_county_and_precinct_dataframe_parallel(
+    state_df: pd.DataFrame,
+    client_factory,
+    max_workers: int = 6,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Parallel version that fetches each detail page **once** and returns both
+    ``(county_df, precinct_df)``.
+
+    Parameters
+    ----------
+    state_df : pd.DataFrame
+        Must include ``['election_id', 'detail_url']``.
+        ``'state'`` and ``'candidate_id'`` columns are used when present.
+    client_factory : callable
+        Returns a new client instance per thread.
+    max_workers : int
+        Thread pool size.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        ``(county_df, precinct_df)`` — either may be empty.
+    """
+    required = {"election_id", "detail_url"}
+    missing = required - set(state_df.columns)
+    if missing:
+        raise ValueError(f"state_df missing columns: {sorted(missing)}")
+
+    has_state = "state" in state_df.columns
+    county_cols = (
+        ["state", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
+        if has_state
+        else ["election_id", "candidate_id", "county_or_city", "candidate", "votes"]
+    )
+
+    jobs: List[Tuple[Optional[str], int, str]] = []
+    for _, r in state_df.iterrows():
+        url = str(r["detail_url"]).strip()
+        if not url:
+            continue
+        st = str(r["state"]) if has_state else None
+        jobs.append((st, int(r["election_id"]), url))
+
+    if not jobs:
+        return pd.DataFrame(columns=county_cols), pd.DataFrame(columns=_PRECINCT_COLS)
+
+    candidate_id_map = (
+        _build_candidate_id_map_from_state_df(state_df)
+        if "candidate_id" in state_df.columns
+        else None
+    )
+
+    county_frames: List[pd.DataFrame] = []
+    precinct_frames: List[pd.DataFrame] = []
+
+    n_jobs = len(jobs)
+    done_count = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {
+            ex.submit(
+                _fetch_and_parse_county_and_precinct,
+                st, election_id, url, candidate_id_map, client_factory,
+            ): election_id
+            for st, election_id, url in jobs
+        }
+        for fut in as_completed(futures):
+            done_count += 1
+            eid = futures[fut]
+            c_df, p_df = fut.result()
+            if c_df is not None and not c_df.empty:
+                county_frames.append(c_df)
+            if p_df is not None and not p_df.empty:
+                precinct_frames.append(p_df)
+            print(f"  [ElectionStats] County/precinct: {done_count}/{n_jobs} elections done (id={eid})", flush=True)
+
+    county_df   = pd.concat(county_frames,   ignore_index=True) if county_frames   else pd.DataFrame(columns=county_cols)
+    precinct_df = pd.concat(precinct_frames, ignore_index=True) if precinct_frames else pd.DataFrame(columns=_PRECINCT_COLS)
+    return county_df, precinct_df

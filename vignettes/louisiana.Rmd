@@ -1,0 +1,185 @@
+---
+title: "Louisiana elections"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Louisiana elections}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(
+  purl     = FALSE,
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+## What it covers
+
+The Louisiana scraper returns election results from the Louisiana Secretary of
+State Graphical results site at `voterportal.sos.la.gov`. It covers all
+elections listed in the site's dropdown — primaries, runoffs, generals, and
+special elections — from 1982 to the present.
+
+Results are scraped from non-Parish tabs (Congressional, Statewide, Legislative,
+Multiparish) for statewide totals, and from the Parish tab for parish-level
+breakdowns. Voter turnout percentages are captured at the page level when
+published by the site.
+
+> **Note:** The Louisiana SOS site is a JavaScript-rendered AngularJS
+> application. All scraping uses a headless Chromium browser via Playwright.
+> Parish scraping is parallelised across up to `max_workers` browsers
+> (default 2). Louisiana has 64 parishes.
+
+---
+
+## Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | — | `"LA"`, `"louisiana"`, or `"Louisiana"` |
+| `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound (data goes back to 1982) |
+| `year_to` | `NULL` | End year, inclusive; `NULL` = current calendar year |
+| `level` | `"all"` | `"all"` — statewide + parish; `"state"` — statewide only (much faster); `"parish"` — parish-level only |
+| `max_workers` | `4L` | Parallel Chromium browsers for parish scraping (capped at 2 internally for LA) |
+
+---
+
+## Examples
+
+### Statewide + parish results for a single year
+
+```{r, purl=FALSE}
+res <- scrape_elections(state = "LA", year_from = 2024, year_to = 2024)
+
+# Statewide candidate totals
+res$state %>%
+  filter(office_level == "Federal") %>%
+  select(election_name, office, candidate, party, votes, vote_pct, winner)
+
+# Parish-level breakdown
+res$parish %>%
+  filter(office == "President of the United States") %>%
+  select(parish, candidate, party, votes, vote_pct) %>%
+  arrange(parish, desc(votes))
+```
+
+### Statewide totals only (faster — skips parish scraping)
+
+```{r, purl=FALSE}
+state_df <- scrape_elections(
+  state     = "LA",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "state"
+)
+
+state_df %>%
+  select(election_name, office_level, office, candidate, party, votes, vote_pct, winner)
+```
+
+### Multi-year scrape
+
+```{r, purl=FALSE}
+res <- scrape_elections(
+  state     = "LA",
+  year_from = 2020,
+  year_to   = 2024,
+  level     = "state"
+)
+
+res %>%
+  filter(office == "President of the United States") %>%
+  select(election_name, election_year, candidate, party, votes, vote_pct, winner)
+```
+
+### Filter to a specific parish
+
+```{r, purl=FALSE}
+res <- scrape_elections(state = "LA", year_from = 2023, year_to = 2023)
+
+res$parish %>%
+  filter(parish == "Orleans Parish") %>%
+  select(election_name, office, candidate, party, votes, vote_pct) %>%
+  arrange(office, desc(votes))
+```
+
+### Filter by office level
+
+```{r, purl=FALSE}
+res <- scrape_elections(state = "LA", year_from = 2024, year_to = 2024)
+
+# Federal races only
+res$state %>%
+  filter(office_level == "Federal") %>%
+  select(election_name, office, candidate, party, votes, vote_pct, winner)
+
+# State-level races
+res$state %>%
+  filter(office_level == "State") %>%
+  select(election_name, office, candidate, party, votes, vote_pct, winner)
+```
+
+---
+
+## Output columns
+
+### `$state` (when `level = "all"` or `"state"`)
+
+| Column | Description |
+|---|---|
+| `state` | State abbreviation (`"LA"`) |
+| `election_name` | Human-readable election name (e.g. `"November 5, 2024 General Election"`) |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date of the election |
+| `tab` | Source tab from the SOS site (e.g. `"Congressional"`, `"Statewide"`) |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name (e.g. `"President of the United States"`) |
+| `candidate` | Candidate name |
+| `party` | Full party name (e.g. `"Republican"`, `"Democratic"`) |
+| `votes` | Vote total |
+| `vote_pct` | Percentage of votes within the contest |
+| `winner` | `TRUE` if the candidate won |
+| `precincts_reporting` | Precincts reporting for the contest |
+| `precincts_expected` | Total precincts expected for the contest |
+| `voter_turnout_pct` | Page-level voter turnout percentage; `NA` when not published |
+
+### `$parish` (when `level = "all"` or `"parish"`)
+
+| Column | Description |
+|---|---|
+| `state` | State abbreviation (`"LA"`) |
+| `election_name` | Human-readable election name |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date of the election |
+| `parish` | Parish name (e.g. `"Orleans Parish"`) |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `candidate` | Candidate name |
+| `party` | Full party name |
+| `votes` | Parish-level vote total |
+| `vote_pct` | Percentage of votes within the contest for this parish |
+| `winner` | `TRUE` if the candidate won |
+| `precincts_reporting` | Precincts reporting in this parish |
+| `precincts_expected` | Total precincts expected in this parish |
+| `parish_voter_turnout_pct` | Parish-level voter turnout percentage; `NA` when not published |
+
+---
+
+## Performance notes
+
+- **`level = "state"` is much faster.** Parish scraping opens up to
+  `max_workers` parallel Chromium browsers across Louisiana's 64 parishes.
+  A full state + parish scrape for one year typically takes 15–40 minutes.
+  Use `level = "state"` when parish breakdowns are not needed.
+- **Multiple elections per year.** The Louisiana SOS site lists all elections
+  for a given year (primaries, runoffs, generals, specials). All are scraped
+  and combined in the output.
+- **Cross-tab deduplication.** Some races (e.g. Multiparish offices) appear
+  in multiple tabs. The scraper automatically deduplicates these, keeping the
+  highest-priority tab's data.
+- **Long history.** The dropdown goes back to 1982; however, older elections
+  may have sparser data or slightly different page layouts.
+- **Turnout data.** The `voter_turnout_pct` and `parish_voter_turnout_pct`
+  columns are `NA` for elections where the site does not publish turnout.

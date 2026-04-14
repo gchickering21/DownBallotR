@@ -13,13 +13,34 @@ db_list_sources <- function() {
 }
 
 
-#' List states supported by a scraper source
+#' List states supported by DownBallotR scrapers
 #'
-#' @param source One of the sources returned by \code{db_list_sources()}.
-#' @return Character vector of state names or codes.
+#' @param source One of the sources returned by \code{db_list_sources()}, or
+#'   \code{NULL} (default) to return all states with dedicated scrapers across
+#'   all sources (Ballotpedia sources, which accept any US state via a
+#'   \code{state=} filter, are excluded from this aggregation).
+#' @return Named character vector of canonical state names. When
+#'   \code{source = NULL} each element is named by its source; when a single
+#'   source is given the names are omitted.
 #' @export
-db_list_states <- function(source) {
-  unlist(.db_registry()$list_states(source))
+db_list_states <- function(source = NULL) {
+  reg <- .db_registry()
+  if (!is.null(source)) {
+    states <- unlist(reg$list_states(source))
+    return(vapply(states, .normalize_state, character(1L), USE.NAMES = FALSE))
+  }
+
+  # Aggregate across all sources, skipping sources with no state list
+  # (Ballotpedia sources accept any US state via a state= parameter and do not
+  # enumerate individual states).
+  all_sources <- unlist(reg$list_sources())
+  result <- unlist(lapply(all_sources, function(src) {
+    states <- unlist(reg$list_states(src))
+    if (length(states) == 0L) return(NULL)
+    normalized <- vapply(states, .normalize_state, character(1L), USE.NAMES = FALSE)
+    stats::setNames(normalized, rep(src, length(normalized)))
+  }))
+  result[!duplicated(result)]
 }
 
 
@@ -29,7 +50,7 @@ db_list_states <- function(source) {
 #' scraper source tracked by DownBallotR. All sources include data through the
 #' current calendar year.
 #'
-#' @param state Optional state name to filter results (e.g. \code{"virginia"}).
+#' @param state Optional state name to filter results (e.g. \code{"Virginia"}).
 #'   Pass \code{NULL} (default) to return all states for the chosen source(s).
 #' @param office Type of election, matching \code{scrape_elections()}.
 #'   \code{"general"} (default) returns availability for ElectionStats states,
@@ -56,7 +77,7 @@ db_list_states <- function(source) {
 #' db_available_years(office = "municipal_elections")
 #'
 #' # Filter to one state
-#' db_available_years(state = "virginia")
+#' db_available_years(state = "Virginia")
 #' }
 #'
 #' @export
@@ -105,7 +126,7 @@ db_available_years <- function(state = NULL,
     avail <- reg$get_available_years("election_stats", state = s)
     data.frame(
       source     = "election_stats",
-      state      = s,
+      state      = .normalize_state(s),
       start_year = avail$start_year,
       end_year   = avail$end_year,
       stringsAsFactors = FALSE
@@ -116,7 +137,7 @@ db_available_years <- function(state = NULL,
   nc_avail <- reg$get_available_years("northcarolina_results")
   nc_row <- data.frame(
     source     = "northcarolina_results",
-    state      = "NC",
+    state      = "North Carolina",
     start_year = nc_avail$start_year,
     end_year   = nc_avail$end_year,
     stringsAsFactors = FALSE
@@ -125,7 +146,7 @@ db_available_years <- function(state = NULL,
   ct_avail <- reg$get_available_years("connecticut_results")
   ct_row <- data.frame(
     source     = "connecticut_results",
-    state      = "CT",
+    state      = "Connecticut",
     start_year = ct_avail$start_year,
     end_year   = ct_avail$end_year,
     stringsAsFactors = FALSE
@@ -134,7 +155,7 @@ db_available_years <- function(state = NULL,
   ga_avail <- reg$get_available_years("georgia_results")
   ga_row <- data.frame(
     source     = "georgia_results",
-    state      = "GA",
+    state      = "Georgia",
     start_year = ga_avail$start_year,
     end_year   = ga_avail$end_year,
     stringsAsFactors = FALSE
@@ -143,7 +164,7 @@ db_available_years <- function(state = NULL,
   ut_avail <- reg$get_available_years("utah_results")
   ut_row <- data.frame(
     source     = "utah_results",
-    state      = "UT",
+    state      = "Utah",
     start_year = ut_avail$start_year,
     end_year   = ut_avail$end_year,
     stringsAsFactors = FALSE
@@ -152,7 +173,7 @@ db_available_years <- function(state = NULL,
   la_avail <- reg$get_available_years("louisiana_results")
   la_row <- data.frame(
     source     = "louisiana_results",
-    state      = "LA",
+    state      = "Louisiana",
     start_year = la_avail$start_year,
     end_year   = la_avail$end_year,
     stringsAsFactors = FALSE
@@ -161,7 +182,7 @@ db_available_years <- function(state = NULL,
   in_avail <- reg$get_available_years("indiana_results")
   in_row <- data.frame(
     source     = "indiana_results",
-    state      = "IN",
+    state      = "Indiana",
     start_year = in_avail$start_year,
     end_year   = in_avail$end_year,
     stringsAsFactors = FALSE

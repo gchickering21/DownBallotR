@@ -65,6 +65,7 @@ def get_ut_election_results(
     result = get_clarity_election_results(
         base_url=UT_BASE_URL,
         county_suffix=UT_COUNTY_SUFFIX,
+        state_abbrev="UT",
         log_prefix=UT_LOG_PREFIX,
         year_from=year_from,
         year_to=year_to,

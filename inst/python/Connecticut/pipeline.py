@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
+import warnings
 
 import pandas as pd
 
@@ -42,7 +43,7 @@ from .models import CtElectionInfo
 from .parser import (
     parse_statewide_results, parse_town_results,
     _STATE_COLS, _TOWN_COLS,
-    _add_contest_outcome, _CONTEST_STATE_COLS,
+    _add_winner, _CONTEST_STATE_COLS,
 )
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
@@ -52,7 +53,7 @@ _AGG_GROUP_COLS = [
     "election_name",
     "election_year",
     "election_date",
-    "election_level",
+    "office_level",
     "office",
     "candidate",
     "party",
@@ -93,8 +94,8 @@ def _aggregate_towns_to_state(town_df: pd.DataFrame) -> pd.DataFrame:
     contest_totals = agg.groupby(_CONTEST_COLS, dropna=False)["votes"].transform("sum")
     agg["vote_pct"] = (agg["votes"] / contest_totals * 100).round(2)
 
-    # contest_outcome is added later by _build_state_df after all parts are combined.
-    base_cols = [c for c in _STATE_COLS if c != "contest_outcome"]
+    # winner is added later by _build_state_df after all parts are combined.
+    base_cols = [c for c in _STATE_COLS if c != "winner"]
     return agg[base_cols]
 
 
@@ -242,11 +243,11 @@ class CtElectionPipeline:
             else:
                 # Summary had federal data — only aggregate non-federal from towns
                 # to avoid double-counting.
-                non_federal = town_df[town_df["election_level"] != "Federal"]
+                non_federal = town_df[town_df["office_level"] != "Federal"]
                 if not non_federal.empty:
                     parts.append(_aggregate_towns_to_state(non_federal))
 
-        return _add_contest_outcome(concat_or_empty(parts), _CONTEST_STATE_COLS)
+        return _add_winner(concat_or_empty(parts), _CONTEST_STATE_COLS)
 
     # ── Orchestrator ───────────────────────────────────────────────────────────
 
@@ -266,6 +267,19 @@ class CtElectionPipeline:
                                Reticulate converts this to a named R list.
         """
         all_elections = self.discover()
+
+        if not all_elections:
+            warnings.warn(
+                "[CT] Discovery returned 0 elections from the CTEMS home page. "
+                "The site structure may have changed — inspect the rendered HTML "
+                "to verify the election dropdown selector assumptions.",
+                stacklevel=2,
+            )
+            empty = pd.DataFrame()
+            if self.level == "all":
+                return {"state": empty, "town": empty}
+            return empty
+
         elections = self._filter(all_elections, start_date, end_date)
 
         if not elections:
@@ -280,9 +294,12 @@ class CtElectionPipeline:
         print(f"[CT] Scraping {len(elections)} election(s)...")
         state_frames: list[pd.DataFrame] = []
         town_frames:  list[pd.DataFrame] = []
+        failed = 0
 
         for election in elections:
             print(f"[CT]   {election.year}: {election.name}")
+            state_frames_before = len(state_frames)
+            town_frames_before  = len(town_frames)
 
             # --- Statewide Summary (federal races; empty is normal) ---
             summary_df = pd.DataFrame()
@@ -350,8 +367,28 @@ class CtElectionPipeline:
             if not election_town_df.empty:
                 town_frames.append(election_town_df)
 
+            # Count elections that produced no output at all
+            if len(state_frames) == state_frames_before and len(town_frames) == town_frames_before:
+                failed += 1
+
+        if not state_frames and not town_frames:
+            if failed == len(elections):
+                raise RuntimeError(
+                    f"[CT] All {len(elections)} election(s) failed to return any results. "
+                    f"This usually means the site is unreachable or its structure has changed. "
+                    f"See the warning messages printed above for details."
+                )
+
         final_state_df = concat_or_empty(state_frames)
         final_town_df  = concat_or_empty(town_frames)
+
+        for _df in [final_state_df, final_town_df]:
+            if not _df.empty:
+                _df.insert(0, "state", "CT")
+
+        print(
+            f"[CT] Done. {len(final_state_df):,} total state rows, {len(final_town_df):,} total town rows."
+        )
 
         if self.level == "state":
             return final_state_df

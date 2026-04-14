@@ -17,15 +17,132 @@
 }
 
 
+# ── Source metadata ───────────────────────────────────────────────────────────
+
+# Valid 'level' values per source; NULL = source ignores 'level' entirely
+.SOURCE_LEVELS <- list(
+  election_stats        = c("all", "state", "county", "precinct"),
+  northcarolina_results = c("all", "precinct", "county", "state"),
+  connecticut_results   = c("all", "state", "town"),
+  georgia_results       = c("all", "state", "county"),
+  utah_results          = c("all", "state", "county"),
+  indiana_results       = c("all", "state", "county"),
+  louisiana_results     = c("all", "state", "parish"),
+  ballotpedia           = NULL,
+  ballotpedia_elections = NULL,
+  ballotpedia_municipal = NULL
+)
+
+# Sources that use max_workers for sub-unit parallelism (county/town/parish)
+.USES_MAX_WORKERS <- c("georgia_results", "utah_results",
+                        "connecticut_results", "louisiana_results")
+
+# Maps canonical state names to their dedicated source (checked before ElectionStats)
+.STATE_ROUTES <- c(
+  "North Carolina" = "northcarolina_results",
+  "Connecticut"    = "connecticut_results",
+  "Georgia"        = "georgia_results",
+  "Utah"           = "utah_results",
+  "Indiana"        = "indiana_results",
+  "Louisiana"      = "louisiana_results"
+)
+
+
+#' Human-readable label for a source, used in messages and errors
+#' @keywords internal
+.source_label <- function(source, state = NULL, race_type = "all") {
+  switch(source,
+    election_stats        = paste0(state, " (ElectionStats)"),
+    northcarolina_results = "North Carolina (NC State Board of Elections)",
+    connecticut_results   = "Connecticut (CTEMS)",
+    georgia_results       = "Georgia (GA Secretary of State)",
+    utah_results          = "Utah (electionresults.utah.gov)",
+    indiana_results       = "Indiana (enr.indianavoters.in.gov)",
+    louisiana_results     = "Louisiana (voterportal.sos.la.gov)",
+    ballotpedia           = "school district elections (Ballotpedia)",
+    ballotpedia_elections = paste0(state, " state elections (Ballotpedia)"),
+    ballotpedia_municipal = paste0(
+      "municipal/mayoral elections (Ballotpedia, race_type='", race_type, "')"
+    ),
+    source
+  )
+}
+
+
+#' Route office + normalised state to a registry source name
+#' @keywords internal
+.route_to_source <- function(office, state) {
+  if (office == "school_district")     return("ballotpedia")
+  if (office == "state_elections")     return("ballotpedia_elections")
+  if (office == "municipal_elections") return("ballotpedia_municipal")
+  if (!is.null(state) && state %in% names(.STATE_ROUTES))
+    return(unname(.STATE_ROUTES[state]))
+  "election_stats"
+}
+
+
+#' Emit source availability and unconfirmed-year notice
+#' @keywords internal
+.emit_availability <- function(source, state, race_type, year_to, year, end_year) {
+  label <- .source_label(source, state, race_type)
+  avail <- tryCatch(
+    .db_registry()$get_available_years(
+      source = source,
+      state  = if (source == "election_stats") .state_to_es_key(state) else NULL
+    ),
+    error = function(e) NULL
+  )
+  if (is.null(avail)) return(invisible(NULL))
+
+  message("Available years for ", label, ": ",
+          avail$start_year, "\u2013", avail$end_year)
+
+  requested_to <- year_to
+  if (is.null(requested_to)) requested_to <- year
+  if (is.null(requested_to)) requested_to <- end_year
+
+  if (!is.null(requested_to) && requested_to > avail$end_year) {
+    message(
+      "\nNote: ", requested_to, " is beyond the last confirmed year (",
+      avail$end_year, ") for ", label, ".\n",
+      "  This year has not been verified. DownBallotR will attempt the scrape,\n",
+      "  but results are not guaranteed.\n",
+      "  If you encounter problems, please file a report at:\n",
+      "  https://github.com/gchickering21/DownBallotR/issues"
+    )
+  }
+  invisible(avail)
+}
+
+
+#' Assign each element of a list result into the caller's environment
+#'
+#' When level = "all" returns a named list of data frames, this assigns each
+#' frame into the caller's environment with a state-prefixed name
+#' (e.g. \code{ga_state}, \code{ga_county}).
+#' @keywords internal
+.assign_list_result <- function(result, state, caller_env) {
+  prefix    <- .state_to_abbrev(state)
+  var_names <- paste0(prefix, "_", names(result))
+  for (i in seq_along(result)) {
+    assign(var_names[[i]], result[[i]], envir = caller_env)
+  }
+  message("Created: ", paste(var_names, collapse = ", "))
+  invisible(result)
+}
+
+
 # ── Per-source scraper helpers ────────────────────────────────────────────────
 
 #' Call the NC results scraper
 #' @keywords internal
-.scrape_nc <- function(year_from = NULL, year_to = NULL) {
+.scrape_nc <- function(year_from = NULL, year_to = NULL, level = "all") {
+  level <- match.arg(level, c("all", "precinct", "county", "state"))
   .db_registry()$scrape(
     "northcarolina_results",
     year_from = year_from,
-    year_to   = year_to
+    year_to   = year_to,
+    level     = level
   )
 }
 
@@ -39,7 +156,7 @@
     level     = "all",
     parallel  = TRUE) {
 
-  level <- match.arg(level, c("all", "state", "county", "joined"))
+  level <- match.arg(level, c("all", "state", "county", "precinct"))
   .db_registry()$scrape(
     "election_stats",
     state     = state,

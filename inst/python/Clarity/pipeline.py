@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
+import warnings
 
 import pandas as pd
 
@@ -67,6 +68,7 @@ class ClarityPipeline:
         self,
         base_url: str,
         county_suffix: str,
+        state_abbrev: str,
         log_prefix: str = "",
         headless: bool = True,
         sleep_s: float = 3.0,
@@ -78,6 +80,7 @@ class ClarityPipeline:
             raise ValueError(f"level must be 'all', 'state', or 'county'; got {level!r}")
         self.base_url = base_url
         self.county_suffix = county_suffix
+        self.state_abbrev = state_abbrev
         self.log_prefix = log_prefix
         self.headless = headless
         self.sleep_s = sleep_s
@@ -169,6 +172,23 @@ class ClarityPipeline:
                                ``'vote_method_county'``.
         """
         all_elections = self.discover()
+
+        if not all_elections:
+            warnings.warn(
+                f"{self.log_prefix} Discovery returned 0 elections from the landing "
+                "page. The site structure may have changed — run the inspect script "
+                "to save the rendered HTML and verify selector assumptions.",
+                stacklevel=2,
+            )
+            empty = pd.DataFrame()
+            if self.level == "all":
+                result = {"state": empty, "county": empty}
+                if self.include_vote_methods:
+                    result["vote_method_state"] = empty
+                    result["vote_method_county"] = empty
+                return result
+            return empty
+
         elections = self._filter(all_elections, start_date, end_date)
 
         if not elections:
@@ -212,6 +232,7 @@ class ClarityPipeline:
                 w = self.max_county_workers
                 self._p(f"    Scraping {n} counties ({w} parallel workers)...")
                 county_failed = 0
+                county_done = 0
 
                 with ThreadPoolExecutor(max_workers=w) as pool:
                     futures = {
@@ -221,12 +242,14 @@ class ClarityPipeline:
                     for future in as_completed(futures):
                         url = futures[future]
                         county = county_name_from_url(url, self.county_suffix)
+                        county_done += 1
                         try:
                             cdf, vm_cdf = future.result()
                             if not cdf.empty:
                                 county_frames.append(cdf)
                             if not vm_cdf.empty:
                                 vm_county_frames.append(vm_cdf)
+                            self._p(f"    County {county_done}/{n}: {county} done.")
                         except Exception as exc:
                             county_failed += 1
                             self._p(f"    WARNING: county scrape failed for {county}: {exc}")
@@ -235,6 +258,16 @@ class ClarityPipeline:
                     self._p(f"    NOTE: {county_failed}/{n} county scrape(s) failed.")
 
         if failed:
+            if len(failed) == len(elections):
+                names = ", ".join(f"'{e.name}'" for e, _ in failed[:3])
+                if len(failed) > 3:
+                    names += f", ... ({len(failed) - 3} more)"
+                raise RuntimeError(
+                    f"{self.log_prefix} All {len(failed)} election(s) failed to scrape. "
+                    f"This usually means the site is unreachable or its structure has changed. "
+                    f"Elections attempted: {names}. "
+                    f"See the warning messages printed above for details."
+                )
             self._p(
                 f"NOTE: {len(failed)} election(s) failed; "
                 f"returning {len(state_frames)} successful result(s)."
@@ -244,6 +277,14 @@ class ClarityPipeline:
         county_df    = concat_or_empty(county_frames)
         vm_state_df  = concat_or_empty(vm_state_frames)
         vm_county_df = concat_or_empty(vm_county_frames)
+
+        for _df in [state_df, county_df, vm_state_df, vm_county_df]:
+            if not _df.empty:
+                _df.insert(0, "state", self.state_abbrev)
+
+        self._p(
+            f"Done. {len(state_df):,} total state rows, {len(county_df):,} total county rows."
+        )
 
         if self.level == "state":
             if self.include_vote_methods:
@@ -268,6 +309,7 @@ class ClarityPipeline:
 def get_clarity_election_results(
     base_url: str,
     county_suffix: str,
+    state_abbrev: str,
     log_prefix: str = "",
     year_from: "int | None" = None,
     year_to: "int | None" = None,
@@ -303,6 +345,7 @@ def get_clarity_election_results(
     pipeline = ClarityPipeline(
         base_url=base_url,
         county_suffix=county_suffix,
+        state_abbrev=state_abbrev,
         log_prefix=log_prefix,
         level=level,
         max_county_workers=max_county_workers,

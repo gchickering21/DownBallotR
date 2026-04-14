@@ -2,16 +2,21 @@
 % Please edit documentation in R/db_query.R
 \name{db_list_states}
 \alias{db_list_states}
-\title{List states supported by a scraper source}
+\title{List states supported by DownBallotR scrapers}
 \usage{
-db_list_states(source)
+db_list_states(source = NULL)
 }
 \arguments{
-\item{source}{One of the sources returned by \code{db_list_sources()}.}
+\item{source}{One of the sources returned by \code{db_list_sources()}, or
+\code{NULL} (default) to return all states with dedicated scrapers across
+all sources (Ballotpedia sources, which accept any US state via a
+\code{state=} filter, are excluded from this aggregation).}
 }
 \value{
-Character vector of state names or codes.
+Named character vector of canonical state names. When
+\code{source = NULL} each element is named by its source; when a single
+source is given the names are omitted.
 }
 \description{
-List states supported by a scraper source
+List states supported by DownBallotR scrapers
 }

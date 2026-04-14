@@ -11,6 +11,7 @@ import pandas as pd
 
 from .election_type_rules import ElectionTypeRules, add_election_type
 from .canonicalize import extract_jurisdiction_office_and_district
+from office_level_utils import classify_office_level
 
 # =========================================================
 # Config model + loader
@@ -262,34 +263,36 @@ def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) 
     else:
         df["election_year"] = pd.NA
 
-    if "contest_type" in df.columns:
-        mapping = {"S": "State", "C": "County"}
-        df["contest_type"] = df["contest_type"].map(mapping).fillna(df["contest_type"])
-
     if "state" not in df.columns:
         df.insert(0, "state", "NC")
 
-    df[["jurisdiction", "office", "district"]] = (
+    # Extract jurisdiction and district from contest_name.
+    # office is discarded — office_level replaces both it and the old contest_type column.
+    extracted = (
         df["contest_name"]
         .apply(extract_jurisdiction_office_and_district)
         .apply(pd.Series)
     )
+    df["jurisdiction"] = extracted[0]
+    # extracted[1] is the parsed office label — not exposed; office_level is used instead
+    df["district"] = extracted[2]
 
-    cols = df.columns.tolist()
-
-    i = cols.index("contest_name") + 1
-    new_order = (
-        cols[:i]
-        + ["jurisdiction", "office"]
-        + [c for c in cols[i:] if c not in {"jurisdiction", "office"}]
-    )
-
-    df = df[new_order]
-
+    # office_level: classify from the full contest_name for maximum context.
+    df["office_level"] = df["contest_name"].apply(classify_office_level)
 
     df["choice_party"] = df["choice_party"].fillna(
         df["contest_name"].str.extract(r"\(([^)]+)\)$", expand=False)
     )
+
+    # Reorder: state … contest_name | jurisdiction office_level district | vote cols …
+    cols = df.columns.tolist()
+    i = cols.index("contest_name") + 1
+    new_order = (
+        cols[:i]
+        + ["jurisdiction", "office_level", "district"]
+        + [c for c in cols[i:] if c not in {"jurisdiction", "office_level", "district"}]
+    )
+    df = df[new_order]
 
     return df
 
@@ -298,7 +301,7 @@ def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) 
 # Public API
 # =========================================================
 def get_config() -> NcResultsConfig:
-    _DEFAULT_CONFIG_PATH = Path(__file__).with_name("northcarolina_results_pct_config.json")
+    _DEFAULT_CONFIG_PATH = Path(__file__).with_name("nc_results_pct_config.json")
     _CONFIG: NcResultsConfig = load_northcarolina_results_config(_DEFAULT_CONFIG_PATH)
 
     return _CONFIG

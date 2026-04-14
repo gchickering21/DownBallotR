@@ -40,7 +40,7 @@ def test_discovery_returns_elections():
         with LaPlaywrightClient(headless=True, sleep_s=3.0) as client:
             html = client.get_landing_page()
     except Exception as exc:
-        pytest.skip(f"Could not reach Louisiana SOS site: {exc}")
+        pytest.skip(f"Could not reach Louisiana site: {exc}")
 
     elections = parse_election_options(html)
 

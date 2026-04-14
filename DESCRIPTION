@@ -24,13 +24,13 @@ Description: Provides an R interface for downloading and standardizing
     to dynamic content while exposing consistent R functions for querying
     election availability and results across jurisdictions.The package is intended 
     for responsible use and relies on publicly accessible election result pages.
-License: Apache License (>= 2)
+License: Apache License (>= 2.0)
 URL: https://gchickering21.github.io/DownBallotR/,
     https://github.com/gchickering21/DownBallotR
 BugReports: https://github.com/gchickering21/DownBallotR/issues
 Encoding: UTF-8
 Language: en-US
-SystemRequirements: Python (>= 3.9), pip
+SystemRequirements: Python (>= 3.10), pip
 Depends:
     R (>= 4.1.0)
 Imports:

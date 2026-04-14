@@ -11,6 +11,7 @@ from lxml import html
 from .electionStats_client import StateHttpClient
 from .electionStats_models import ElectionSearchRow
 from .state_config import get_scraper_type
+from .office_registry import lookup_office_level
 from text_utils import clean_text as _clean_ws, parse_int as _parse_int, parse_percentage as _parse_percentage
 
 # Accept both VA/MA: election-id-#### and CO: contest-id-####
@@ -348,7 +349,7 @@ def _parse_v2_results_text(results_text: str) -> List[Tuple[str, Optional[str], 
 
 def _parse_search_row_v2(tr) -> Optional[Tuple[int, int, str, str, str, str]]:
     """
-    V2 states (SC/NM) row structure after React rendering.
+    V2 states (SC/NM/NY/VA) row structure after React rendering.
 
     Table: contestCollectionTable
     Row structure: 5 cells without ID attributes
@@ -400,13 +401,13 @@ def _choose_row_parser(state_key: str):
     """
     scraper_type = get_scraper_type(state_key)
 
-    # V2 states (SC/NM): different table structure
+    # V2 states (SC/NM/NY/VA): different table structure
     if scraper_type == "v2":
         return _parse_search_row_v2
 
     # Classic states with special handling
     s = (state_key or "").strip().lower()
-    if s == "colorado":
+    if s in ("colorado", "idaho"):
         return _parse_search_row_colorado
 
     # Default classic (VA/MA)
@@ -420,8 +421,8 @@ def parse_search_results(page_html: str, client, state_name: str, url:str) -> Li
     """
     Parse search results HTML for both classic and v2 states.
 
-    Classic states (VA/MA/CO): table#search_results_table with rows having ID attributes
-    V2 states (SC/NM): table#contestCollectionTable without row IDs
+    Classic states (MA/CO/NH/ID/VT): table#search_results_table with rows having ID attributes
+    V2 states (SC/NM/NY/VA): table#contestCollectionTable without row IDs
     """
     doc = html.fromstring(page_html)
 
@@ -476,14 +477,15 @@ def parse_search_results(page_html: str, client, state_name: str, url:str) -> Li
                     election_id=election_id,
                     year=year,
                     office=office,
+                    office_level=lookup_office_level(office, state_name),
                     district=district,
                     stage=stage,
                     candidate_id=candidate_id,
                     candidate=candidate_name,
                     party=_normalize_party(party, stage),
-                    total_vote_count=total_vote_count,
-                    vote_percentage=(vote_percentage or "").strip(),
-                    contest_outcome=contest_outcome,
+                    votes=total_vote_count,
+                    vote_pct=(vote_percentage or "").strip(),
+                    winner=(contest_outcome == "Winner"),
                 )
             )
 
@@ -609,7 +611,7 @@ def fetch_all_search_results_v2(
     state_name: str
 ) -> List[ElectionSearchRow]:
     """
-    Fetch search results using Playwright for v2 states (SC/NM).
+    Fetch search results using Playwright for v2 states (SC/NM/NY/VA).
 
     V2 states use React apps with dynamic loading, so we render with Playwright
     and then parse the resulting HTML.
@@ -660,12 +662,12 @@ def rows_to_dataframe(rows: list[ElectionSearchRow], client) -> pd.DataFrame:
         DataFrame with election results and detail_url column
     """
     # Check for build_detail_url method to distinguish client types
-    # StateHttpClient has this method (uses /view/ URLs for VA/MA/CO)
-    # PlaywrightClient does not (uses /contest/ URLs for SC/NM)
+    # StateHttpClient has this method (uses /view/ URLs for MA/CO/NH/ID/VT)
+    # PlaywrightClient does not (uses /contest/ URLs for SC/NM/NY/VA)
     if hasattr(client, 'build_detail_url'):
-        # StateHttpClient (classic states: VA/MA/CO)
+        # StateHttpClient (classic states: MA/CO/NH/ID/VT)
         records = [asdict(r) | {"detail_url": client.build_detail_url(r.election_id)} for r in rows]
     else:
-        # PlaywrightClient (v2 states: SC/NM)
+        # PlaywrightClient (v2 states: SC/NM/NY/VA)
         records = [asdict(r) | {"detail_url": f"{client.base_url}/contest/{r.election_id}"} for r in rows]
     return pd.DataFrame.from_records(records)

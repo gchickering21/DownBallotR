@@ -10,7 +10,7 @@ db_available_years(
 )
 }
 \arguments{
-\item{state}{Optional state name to filter results (e.g. \code{"virginia"}).
+\item{state}{Optional state name to filter results (e.g. \code{"Virginia"}).
 Pass \code{NULL} (default) to return all states for the chosen source(s).}
 
 \item{office}{Type of election, matching \code{scrape_elections()}.
@@ -44,7 +44,7 @@ db_available_years(office = "state_elections")
 db_available_years(office = "municipal_elections")
 
 # Filter to one state
-db_available_years(state = "virginia")
+db_available_years(state = "Virginia")
 }
 
 }

@@ -60,6 +60,15 @@
 }
 
 
+#' Convert canonical title-case state name to 2-letter abbreviation (lowercase)
+#' @keywords internal
+.state_to_abbrev <- function(state) {
+  if (is.null(state)) return(NULL)
+  idx <- match(state, .STATE_ABBREV)
+  if (!is.na(idx)) tolower(names(.STATE_ABBREV)[idx]) else NULL
+}
+
+
 #' Coerce a year value to integer, accepting numeric, string, or NULL
 #' @keywords internal
 .to_year <- function(x, arg = deparse(substitute(x))) {

@@ -47,6 +47,7 @@ downballot_use_python <- function(envname = "downballotR") {
       )
     }
     
+    message("Python is ready to be used (environment '", envname, "' is active).")
     return(invisible(TRUE))
   }
   
@@ -64,6 +65,8 @@ downballot_use_python <- function(envname = "downballotR") {
   
   # Now initialize Python (should pick the venv)
   tryCatch(reticulate::py_config(), error = function(e) NULL)
+  
+  message("Python is ready to be used (environment '", envname, "' is active).")
   
   invisible(TRUE)
 }

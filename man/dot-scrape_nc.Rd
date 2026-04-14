@@ -4,7 +4,7 @@
 \alias{.scrape_nc}
 \title{Call the NC results scraper}
 \usage{
-.scrape_nc(year_from = NULL, year_to = NULL)
+.scrape_nc(year_from = NULL, year_to = NULL, level = "all")
 }
 \description{
 Call the NC results scraper

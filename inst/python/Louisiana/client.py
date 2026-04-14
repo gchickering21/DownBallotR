@@ -102,7 +102,7 @@ class LaPlaywrightClient(BasePlaywrightClient):
         assert self.page is not None
         return self.page.content()
 
-    def get_available_tabs(self, election_option_value: str) -> list[str]:
+    def get_available_tabs(self, election_option_value: str) -> "list[str] | None":
         """Select an election and return the text labels of all available tabs.
 
         Parameters
@@ -112,13 +112,17 @@ class LaPlaywrightClient(BasePlaywrightClient):
 
         Returns
         -------
-        list[str]
+        list[str] or None
             Tab labels as they appear on the page (e.g. ['Statewide', 'Parish']).
+            Returns None if the results container never loaded (site has no data
+            for this election). Returns an empty list if results loaded but no
+            tabs were found.
         """
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
         self._select_election(election_option_value)
-        self._wait_for_results()
+        if not self._wait_for_results():
+            return None
         assert self.page is not None
         return self._read_tab_labels()
 
@@ -140,7 +144,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
         self._select_election(election_option_value)
-        self._wait_for_results()
+        if not self._wait_for_results():
+            return ""
         self._click_tab(tab_label)
         assert self.page is not None
         return self.page.content()
@@ -164,7 +169,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
         self._select_election(election_option_value)
-        self._wait_for_results()
+        if not self._wait_for_results():
+            return None  # site has no results for this election
         self._click_tab(_PARISH_TAB_LABEL)
         self._wait_for_parish_dropdown()
         assert self.page is not None
@@ -227,7 +233,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
         self._select_election(election_option_value)
-        self._wait_for_results()
+        if not self._wait_for_results():
+            return []
 
         assert self.page is not None
         results: list[tuple[str, str]] = []
@@ -262,7 +269,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
         self._select_election(election_option_value)
-        self._wait_for_results()
+        if not self._wait_for_results():
+            return []
         self._click_tab(_PARISH_TAB_LABEL)
         self._wait_for_parish_dropdown()
 
@@ -306,19 +314,20 @@ class LaPlaywrightClient(BasePlaywrightClient):
         selects[0].select_option(value=option_value)
         time.sleep(self.sleep_s)
 
-    def _wait_for_results(self) -> None:
-        """Wait for result content to appear after selecting an election."""
+    def _wait_for_results(self) -> bool:
+        """Wait for result content to appear after selecting an election.
+
+        Returns True if results loaded, False if the container never appeared
+        (e.g. the site has no results for this election date).
+        """
         assert self.page is not None
         try:
             self.page.wait_for_selector(_RESULTS_CONTAINER_SEL, timeout=_RESULTS_TIMEOUT_MS)
+            if self.sleep_s:
+                time.sleep(self.sleep_s)
+            return True
         except PlaywrightTimeoutError:
-            print(
-                f"[LA] WARNING: Results container ({_RESULTS_CONTAINER_SEL!r}) did not "
-                "appear — update _RESULTS_CONTAINER_SEL in client.py after inspecting "
-                "the live page with inspect_landing.py."
-            )
-        if self.sleep_s:
-            time.sleep(self.sleep_s)
+            return False
 
     def _read_tab_labels(self) -> list[str]:
         """Return the visible text labels of all tab elements currently on the page."""
@@ -459,15 +468,9 @@ class LaPlaywrightClient(BasePlaywrightClient):
         change_link = self.page.query_selector(_CHANGE_PARISH_SEL)
         if change_link and change_link.is_visible():
             change_link.click()
-            time.sleep(0.5)
-
-        # Wait for the dropdown to be visible again before selecting.
-        try:
-            self.page.wait_for_selector(
-                _PARISH_SELECT_SEL + ":visible", timeout=5_000
-            )
-        except PlaywrightTimeoutError:
-            pass  # May already be visible on the first parish
+            # Wait for options to re-populate, not just for the element to be visible.
+            # AngularJS re-binds options asynchronously after clicking "change parish".
+            self._wait_for_parish_dropdown()
 
         sel = self.page.query_selector(_PARISH_SELECT_SEL)
         if not sel:

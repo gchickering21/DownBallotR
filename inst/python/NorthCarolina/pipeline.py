@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date
 from typing import Iterable
+import warnings
 
 import pandas as pd
 
@@ -42,8 +43,22 @@ class NcElectionPipeline:
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         cfg = get_config()
 
+        all_elections = self.discover()
+
+        if not all_elections:
+            warnings.warn(
+                "[NC] Discovery returned 0 election zip files from the NCSBE page. "
+                "The site structure may have changed — verify the zip URL pattern "
+                "and XPath selector in discovery.py.",
+                stacklevel=2,
+            )
+            precinct_empty = pd.DataFrame(columns=cfg.schema.join_cols + ["election_year"])
+            county_empty   = pd.DataFrame(columns=cfg.schema.county_cols + ["election_year"])
+            state_empty    = pd.DataFrame(columns=cfg.schema.state_cols + ["election_year"])
+            return precinct_empty, county_empty, state_empty
+
         elections = self._filter_elections(
-            self.discover(),
+            all_elections,
             start_date=start_date,
             end_date=end_date,
         )
@@ -73,7 +88,10 @@ class NcElectionPipeline:
         state_frames : list[pd.DataFrame] = []
         failed: list[tuple[object, Exception]] = []
 
+        print(f"[NC] Scraping {len(supported)} election(s)...")
         for e in supported:
+            election_date = _get_attr(e, "election_date")
+            print(f"[NC]   {election_date}: downloading ZIP...", flush=True)
             try:
                 precinct_df, county_df, state_df = self._scrape_one(e)
                 precinct_frames.append(precinct_df)
@@ -83,7 +101,7 @@ class NcElectionPipeline:
                 failed.append((e, ex))
                 print(
                     "[NC] WARNING: failed to scrape "
-                    f"{_get_attr(e,'election_date')} ({_get_attr(e,'zip_url')}): {ex}"
+                    f"{election_date} ({_get_attr(e,'zip_url')}): {ex}"
                 )
 
         if failed:
@@ -94,16 +112,25 @@ class NcElectionPipeline:
 
         # If nothing succeeded, return empty DFs with expected schemas
         if not precinct_frames:
+            if failed:
+                raise RuntimeError(
+                    f"[NC] All {len(failed)} election(s) failed to scrape. "
+                    f"This usually means the site is unreachable or its structure has changed. "
+                    f"See the warning messages printed above for details."
+                )
             precinct_empty = pd.DataFrame(columns=cfg.schema.join_cols + ["election_year"])
             county_empty = pd.DataFrame(columns=cfg.schema.county_cols + ["election_year"])
             state_empty = pd.DataFrame(columns=cfg.schema.state_cols + ["election_year"])
-
             return precinct_empty, county_empty, state_empty
 
         precinct_final = pd.concat(precinct_frames, ignore_index=True)
         county_final = concat_or_empty(county_frames)
         state_final  = concat_or_empty(state_frames)
 
+        print(
+            f"[NC] Done. {len(precinct_final):,} total precinct rows, "
+            f"{len(county_final):,} county rows, {len(state_final):,} state rows."
+        )
         return precinct_final, county_final, state_final
 
     def _scrape_one(self, election) -> pd.DataFrame:
@@ -118,7 +145,7 @@ class NcElectionPipeline:
         county_df = aggregate_to_county_level(norm)
         state_df = aggregate_county_to_state(county_df)
 
-        print(f"[NC SCRAPE] Finished scraping election results for {election_date}")
+        print(f"[NC]   Done: {len(norm):,} precinct rows, {len(county_df):,} county rows.")
         return norm, county_df, state_df
 
 
@@ -127,8 +154,8 @@ def get_nc_election_results(
     year_to: "int | None" = None,
     min_supported_date: "date | None" = None,
     max_supported_date: "date | None" = None,
-) -> pd.DataFrame:
-    """Return precinct-level NC election results.
+) -> dict:
+    """Return NC election results at precinct, county, and state levels.
 
     Parameters
     ----------
@@ -144,14 +171,19 @@ def get_nc_election_results(
     max_supported_date : date | None
         Pipeline upper-bound guard.  Elections after this date are skipped.
         ``None`` (default) attempts all elections in the requested range.
+
+    Returns
+    -------
+    dict with keys ``'precinct'``, ``'county'``, and ``'state'``.
+    Reticulate converts this to a named R list.
     """
     start, end = year_to_date_range(year_from, year_to)
 
     pipeline = NcElectionPipeline()
-    precinct_df, _county_df, _state_df = pipeline.run(
+    precinct_df, county_df, state_df = pipeline.run(
         start_date=start,
         end_date=end,
         min_supported_date=min_supported_date,
         max_supported_date=max_supported_date,
     )
-    return precinct_df
+    return {"precinct": precinct_df, "county": county_df, "state": state_df}

@@ -23,10 +23,10 @@ class StateConfig(TypedDict):
 
 STATE_CONFIGS: dict[str, StateConfig] = {
     "virginia": {
-        "base_url": "https://historical.elections.virginia.gov/elections",
+        "base_url": "https://historical.elections.virginia.gov",
         "search_path": "/search",
-        "scraper_type": "classic",
-        "scraping_method": "requests",
+        "scraper_type": "v2",
+        "scraping_method": "playwright",
         "url_style": "path_params",
     },
     "massachusetts": {
@@ -70,6 +70,20 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
+        "url_style": "path_params",
+    },
+    "idaho": {
+        "base_url": "https://canvass.sos.idaho.gov/eng/contests",
+        "search_path": "/search",
+        "scraper_type": "classic",
+        "scraping_method": "requests",
+        "url_style": "path_params",
+    },
+    "vermont": {
+        "base_url": "https://electionarchive.vermont.gov/elections",
+        "search_path": "/search",
+        "scraper_type": "classic",
+        "scraping_method": "requests",
         "url_style": "path_params",
     },
 }

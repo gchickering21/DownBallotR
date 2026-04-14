@@ -33,12 +33,12 @@
       "runoff_status","recount_status","winner_status","real_precinct","precinct_abbrv","ftp_date"
     ],
     "county_cols":[
-      "state","county","election_date","contest_name", "jurisdiction", "office","district", "choice", "choice_party",
-      "election_day", "early_voting", "absentee_by_mail", "absentee_or_early", "provisional","total_votes"
+      "state","county","election_date","contest_name", "jurisdiction", "office_level","district", "candidate", "party",
+      "election_day", "early_voting", "absentee_by_mail", "absentee_or_early", "provisional","votes"
     ],
     "state_cols":[
-      "state","election_date","contest_name", "jurisdiction", "office","district", "choice", "choice_party",
-      "election_day", "early_voting", "absentee_by_mail", "absentee_or_early", "provisional","total_votes", "vote_share","contest_outcome"
+      "state","election_date","contest_name", "jurisdiction", "office_level","district", "candidate", "party",
+      "election_day", "early_voting", "absentee_by_mail", "absentee_or_early", "provisional","votes", "vote_pct","winner"
     ]
   },
   "col_map": {

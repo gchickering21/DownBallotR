@@ -27,6 +27,7 @@ results from state-hosted ElectionStats sites.
 | Colorado | Classic (requests) | 1902 | 2024 |
 | Massachusetts | Classic (requests) | 1970 | 2026 |
 | New Hampshire | Classic (requests) | 1970 | 2024 |
+| Idaho | Classic (requests) | 1990 | 2024 |
 | New York | v2 (Playwright) | 1994 | 2024 |
 | New Mexico | v2 (Playwright) | 2000 | 2024 |
 | South Carolina | v2 (Playwright) | 2008 | 2025 |
@@ -51,10 +52,10 @@ they are slower but fully automated.
 
 | Value | Returns |
 |---|---|
-| `"all"` (default) | Named list with `$state` and `$county` data frames |
+| `"all"` (default) | Named list with `$state`, `$county`, and (where available) `$precinct` data frames |
 | `"state"` | Candidate-level results data frame |
 | `"county"` | County vote breakdown data frame |
-| `"joined"` | County rows merged with candidate metadata |
+| `"precinct"` | Precinct-level vote breakdown data frame (CO, MA, ID, SC, NM, VA) |
 
 ---
 
@@ -93,7 +94,7 @@ county_df %>%
 
 ### Both levels at once (default)
 
-`level = "all"` returns a named list with `$state` and `$county` elements:
+`level = "all"` returns a named list with `$state`, `$county`, and (for precinct-capable states) `$precinct` elements:
 
 ```{r, purl=FALSE}
 res <- scrape_elections(
@@ -136,18 +137,45 @@ sc_results %>%
   select(office, district, candidate, party, vote_percentage)
 ```
 
-### Joined data (county + candidate metadata)
+### Precinct-level results
+
+Available for CO, MA, ID (classic/requests-based) and SC, NM, VA (v2 — fetched
+via CSV download API).  Not available for NH, VT, or NY.
 
 ```{r, purl=FALSE}
-joined <- scrape_elections(
-  state     = "virginia",
-  year_from = 2023,
-  year_to   = 2023,
-  level     = "joined"
+# Classic state
+precinct_df <- scrape_elections(
+  state     = "colorado",
+  year_from = 2022,
+  year_to   = 2022,
+  level     = "precinct"
 )
 
-joined %>%
-  select(county_or_city, office, candidate, party, votes)
+precinct_df %>%
+  arrange(county, precinct) %>%
+  select(county, precinct, candidate, votes)
+```
+
+```{r, purl=FALSE}
+# v2 state — same interface, data fetched via CSV API
+precinct_df <- scrape_elections(
+  state     = "new_mexico",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "precinct"
+)
+```
+
+Or retrieve all levels at once and access `$precinct`:
+
+```{r, purl=FALSE}
+res <- scrape_elections(
+  state     = "south_carolina",
+  year_from = 2024,
+  year_to   = 2024
+)
+
+res$precinct  # precinct-level data frame (NULL for NH, VT, NY)
 ```
 
 ### Disable parallel scraping
@@ -157,7 +185,6 @@ res_seq <- scrape_elections(
   state     = "virginia",
   year_from = 2023,
   year_to   = 2023,
-  level     = "joined",
   parallel  = FALSE
 )
 ```
@@ -178,3 +205,8 @@ res_seq <- scrape_elections(
 
 - `state`, `year`, `election_id`, `candidate_id`
 - `county_or_city`, `candidate_name`, `votes`
+
+### `level = "precinct"` (CO, MA, ID, SC, NM, VA)
+
+- `state`, `election_id`, `candidate_id`
+- `county`, `precinct`, `candidate`, `votes`

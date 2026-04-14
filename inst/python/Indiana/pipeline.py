@@ -17,6 +17,27 @@ Public entry point
 from __future__ import annotations
 
 import pandas as pd
+from office_level_utils import classify_office_level as _classify_office_level
+
+
+def _normalize_in_heading(heading: str, category_name: str) -> str:
+    """Map Indiana API category heading to standard Federal/State/Local.
+
+    The Indiana election results API groups categories under headings like
+    "Federal", "State", "County", "Local", "Statewide", etc.  This function
+    normalises those to the three-tier standard.  When the heading is
+    unrecognised, falls back to classifying by category_name using the shared
+    office_level_utils classifier.
+    """
+    h = (heading or "").strip().lower()
+    if "federal" in h:
+        return "Federal"
+    if h in ("state", "statewide"):
+        return "State"
+    if h in ("county", "local", "municipal", "township", "school"):
+        return "Local"
+    # Unrecognised heading — use the office name as the signal
+    return _classify_office_level(category_name)
 
 from .client import InElectionClient
 from .discovery import discover_general_elections
@@ -81,7 +102,9 @@ class InElectionPipeline:
                 print(f"[IN]     WARNING: failed to fetch OffCatC_{cat_id}: {exc}")
                 continue
 
-            office_level = cat.get("_heading", "Local")
+            office_level = _normalize_in_heading(
+                cat.get("_heading", ""), cat_name
+            )
 
             if self.level in ("all", "state"):
                 df = parse_state_results(
@@ -126,6 +149,7 @@ class InElectionPipeline:
         print(f"[IN] Scraping {len(elections)} election(s)...")
         all_state:  list[pd.DataFrame] = []
         all_county: list[pd.DataFrame] = []
+        failed = 0
 
         for election in elections:
             print(f"[IN] Scraping {election.year}General ({election.election_date})...")
@@ -140,10 +164,28 @@ class InElectionPipeline:
                 if not county_df.empty:
                     all_county.append(county_df)
             except Exception as exc:
+                failed += 1
                 print(f"[IN]   ERROR scraping {election.year}General: {exc}")
+
+        if not all_state and not all_county:
+            if failed == len(elections):
+                raise RuntimeError(
+                    f"[IN] All {len(elections)} election(s) failed to scrape. "
+                    f"This usually means the site is unreachable or its structure has changed. "
+                    f"Years attempted: {[e.year for e in elections]}. "
+                    f"See the error messages printed above for details."
+                )
 
         state_df  = concat_or_empty(all_state)
         county_df = concat_or_empty(all_county)
+
+        for _df in [state_df, county_df]:
+            if not _df.empty:
+                _df.insert(0, "state", "IN")
+
+        print(
+            f"[IN] Done. {len(state_df):,} total state rows, {len(county_df):,} total county rows."
+        )
 
         if self.level == "state":
             return state_df

@@ -32,9 +32,9 @@ print(
 )
 
 print("\nVote share summary:")
-print(df["vote_share"].describe())
+print(df["vote_pct"].describe())
 
 print("\nWinner flag summary:")
-print(df["won"].value_counts(dropna=False))
+print(df["winner"].value_counts(dropna=False))
 
 print("\n✅ FULL NC PIPELINE RAN WITHOUT CRASHING")

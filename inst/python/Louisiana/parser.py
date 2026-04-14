@@ -16,6 +16,20 @@ HTML structure (confirmed from live site inspection):
       div.choice-name                  ← "Candidate Name Party" (name + party combined)
       span.choice-percent              ← e.g. "60%"
 
+Voter turnout
+-------------
+Turnout percentage is a page-level stat (not per-race).  The site typically
+renders it in an element whose class contains "turnout", e.g.:
+
+  <div class="voter-turnout ...">
+    <span class="ng-binding">Voter Turnout - 42.50%</span>
+  </div>
+
+``_parse_turnout_pct(doc)`` tries multiple strategies and returns None when the
+page does not publish turnout data.  The value is broadcast to every candidate
+row from that page.  At the state-tab level the column is ``voter_turnout_pct``;
+at the parish level it is ``parish_voter_turnout_pct``.
+
 Winner detection
 ----------------
 Winners are marked by AngularJS adding ``glyphicon-ok-sign`` to ``span.visible-trans``.
@@ -65,22 +79,7 @@ _KNOWN_PARTIES: list[str] = sorted(
     reverse=True,
 )
 
-# ── Election-level classification ──────────────────────────────────────────────
-
-# Offices matching these patterns are Federal regardless of which tab they appear on.
-_FEDERAL_OFFICE_RE = re.compile(
-    r"presidential\s+elector|u\.?s\.?\s+senate|u\.?s\.?\s+rep(resentative)?|"
-    r"united\s+states|congress",
-    re.IGNORECASE,
-)
-
-# Offices matching these patterns are Local.
-_LOCAL_OFFICE_RE = re.compile(
-    r"mayor|alderman|sheriff|clerk\s+of\s+court|assessor|school\s+board|"
-    r"city\s+council|district\s+attorney|coroner|ward\s+|police\s+jury|"
-    r"tax\s+collector|registrar",
-    re.IGNORECASE,
-)
+from office_level_utils import classify_office_level as _classify_office_level_by_name
 
 
 def _classify_election_level(tab_label: Optional[str], office: str) -> str:
@@ -88,26 +87,20 @@ def _classify_election_level(tab_label: Optional[str], office: str) -> str:
 
     Tab-based rules (fast path):
       Congressional, Presidential → Federal
-      Multiparish                 → Local
+      Multiparish, Parish         → Local (parish = county-level)
 
-    Office-name rules (applied for Statewide, Parish tabs, and unknown tabs):
-      Known federal keywords      → Federal
-      Known local keywords        → Local
-      Otherwise                   → State
+    Office-name fallback (applied for Statewide and unknown tabs):
+      Uses the shared classify_office_level from office_level_utils.
     """
     if tab_label:
         t = tab_label.lower().strip()
         if t.startswith("congressional") or t.startswith("presidential"):
             return "Federal"
-        if t.startswith("multiparish"):
+        if t.startswith("multiparish") or t.startswith("parish"):
             return "Local"
-        # "Statewide" and "Parish" fall through to office-name check below.
+        # "Statewide" and other tabs fall through to office-name check below.
 
-    if _FEDERAL_OFFICE_RE.search(office):
-        return "Federal"
-    if _LOCAL_OFFICE_RE.search(office):
-        return "Local"
-    return "State"
+    return _classify_office_level_by_name(office)
 
 
 # ── Output column schemas ──────────────────────────────────────────────────────
@@ -117,7 +110,7 @@ _STATE_COLS = [
     "election_year",
     "election_date",
     "tab",
-    "election_level",
+    "office_level",
     "office",
     "candidate",
     "party",
@@ -126,6 +119,7 @@ _STATE_COLS = [
     "winner",
     "precincts_reporting",
     "precincts_expected",
+    "voter_turnout_pct",
 ]
 
 _PARISH_COLS = [
@@ -133,7 +127,7 @@ _PARISH_COLS = [
     "election_year",
     "election_date",
     "parish",
-    "election_level",
+    "office_level",
     "office",
     "candidate",
     "party",
@@ -142,6 +136,7 @@ _PARISH_COLS = [
     "winner",
     "precincts_reporting",
     "precincts_expected",
+    "parish_voter_turnout_pct",
 ]
 
 # ── Party normalization ────────────────────────────────────────────────────────
@@ -180,6 +175,30 @@ def _normalize_party(party: Optional[str]) -> Optional[str]:
         stripped = stripped[1:-1].strip()
     # Look up the normalised form (case-insensitive key check).
     return _PARTY_ABBREV_MAP.get(stripped.upper(), stripped) if stripped else None
+
+
+# ── Voter turnout ──────────────────────────────────────────────────────────────
+
+# Matches the exact site pattern: "Turnout: 42.5%"
+# The colon and space are fixed; the percentage may have 1–2 decimal places.
+_TURNOUT_RE = re.compile(r"Turnout:\s*(\d+(?:\.\d+)?)\s*%")
+
+
+def _parse_turnout_pct(doc: "lhtml.HtmlElement") -> Optional[float]:
+    """Return the voter-turnout percentage from a rendered LA SOS page, or None.
+
+    The site renders turnout as ``"Turnout: XX.X%"`` somewhere on the page.
+    We do a single full-page text sweep for that pattern; returns None when
+    not found (column will be null for that page).
+    """
+    full_text = " ".join(doc.text_content().split())
+    m = _TURNOUT_RE.search(full_text)
+    if m:
+        try:
+            return round(float(m.group(1)), 4)
+        except ValueError:
+            pass
+    return None
 
 
 # ── Low-level helpers ──────────────────────────────────────────────────────────
@@ -328,16 +347,16 @@ def _parse_results_from_doc(
                 continue
 
             row: dict = {
-                "election_name": election.name,
-                "election_year": election.year,
-                "election_date": election.election_date,
-                "election_level": election_level,
-                "office": office,
-                "candidate": candidate,
-                "party": party,
-                "votes": votes,
-                "vote_pct": vote_pct,
-                "_has_winner_icon": has_winner_icon,
+                "election_name":      election.name,
+                "election_year":      election.year,
+                "election_date":      election.election_date,
+                "office_level":       election_level,
+                "office":             office,
+                "candidate":          candidate,
+                "party":              party,
+                "votes":              votes,
+                "vote_pct":           vote_pct,
+                "_has_winner_icon":   has_winner_icon,
                 "precincts_reporting": precincts_reporting,
                 "precincts_expected": precincts_expected,
             }
@@ -387,15 +406,21 @@ def parse_tab_results(html_str: str, tab_label: str, election: LaElectionInfo) -
     Returns
     -------
     pd.DataFrame with columns matching ``_STATE_COLS``.
+    ``voter_turnout_pct`` is the same value for every row from this page
+    (it is a page-level stat).  Null when not published by the site.
     """
     if not html_str:
         return pd.DataFrame(columns=_STATE_COLS)
 
     doc = lhtml.fromstring(html_str)
+    turnout_pct = _parse_turnout_pct(doc)
     rows = _parse_results_from_doc(doc, election, tab=tab_label, parish=None)
 
     if not rows:
         return pd.DataFrame(columns=_STATE_COLS)
+
+    for row in rows:
+        row["voter_turnout_pct"] = turnout_pct
 
     df = pd.DataFrame(rows)
     for col in _STATE_COLS:
@@ -421,15 +446,22 @@ def parse_parish_results(
     Returns
     -------
     pd.DataFrame with columns matching ``_PARISH_COLS``.
+    ``parish_voter_turnout_pct`` is the turnout for this specific parish page.
+    It is the same value for every row from the page (page-level stat).
+    Null when not published by the site.
     """
     if not html_str:
         return pd.DataFrame(columns=_PARISH_COLS)
 
     doc = lhtml.fromstring(html_str)
+    turnout_pct = _parse_turnout_pct(doc)
     rows = _parse_results_from_doc(doc, election, tab=None, parish=parish_name)
 
     if not rows:
         return pd.DataFrame(columns=_PARISH_COLS)
+
+    for row in rows:
+        row["parish_voter_turnout_pct"] = turnout_pct
 
     df = pd.DataFrame(rows)
     for col in _PARISH_COLS:

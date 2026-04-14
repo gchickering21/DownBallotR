@@ -74,7 +74,7 @@ _SOURCES: dict = {
     "election_stats": {
         "description": (
             "Multi-state ElectionStats scraper "
-            "(VA, MA, CO, NH, SC, NM, NY)"
+            "(MA, CO, NH, ID, VT, SC, NM, NY, VA)"
         ),
         "scrape_fn": _scrape_election_stats,
         # Stored as a callable so deps are not imported at registry load time

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
+import warnings
 
 import pandas as pd
 
@@ -98,8 +99,12 @@ class LaElectionPipeline:
 
     # ── Phase 2a: statewide tabs ───────────────────────────────────────────────
 
-    def _scrape_state_tabs(self, election: LaElectionInfo) -> pd.DataFrame:
+    def _scrape_state_tabs(self, election: LaElectionInfo) -> "pd.DataFrame | None":
         """Render each non-Parish tab for one election; return combined DataFrame.
+
+        Returns None if the site has no results published for this election
+        (results container never loaded). Returns an empty DataFrame if results
+        loaded but no parseable rows were found.
 
         Navigates to the landing page once, selects the election, then clicks
         through each tab in the same browser session — no redundant page loads.
@@ -109,6 +114,8 @@ class LaElectionPipeline:
         with LaPlaywrightClient(headless=self.headless, sleep_s=self.sleep_s) as client:
             # Discover available tabs (single navigation).
             available_tabs = client.get_available_tabs(election.option_value)
+            if available_tabs is None:
+                return None  # site has no results for this election
             print(f"[LA]   Available tabs: {available_tabs}")
 
             # Filter to recognised non-Parish tabs.
@@ -174,7 +181,7 @@ class LaElectionPipeline:
 
     # ── Phase 2b: parish tab ───────────────────────────────────────────────────
 
-    def _scrape_parish_tab(self, election: LaElectionInfo) -> pd.DataFrame:
+    def _scrape_parish_tab(self, election: LaElectionInfo) -> "pd.DataFrame | None":
         """Scrape all parishes from the Parish tab; return combined DataFrame.
 
         Parishes are enumerated once, filtered to > 0 reporting, then scraped
@@ -186,6 +193,8 @@ class LaElectionPipeline:
         with LaPlaywrightClient(headless=self.headless, sleep_s=self.sleep_s) as client:
             parishes = client.get_parish_options(election.option_value)
 
+        if parishes is None:
+            return None  # site has no results for this election
         if not parishes:
             print(f"[LA]   No parishes with > 0 reporting found.")
             return pd.DataFrame(columns=_PARISH_COLS)
@@ -254,6 +263,19 @@ class LaElectionPipeline:
                                 Reticulate converts this to a named R list.
         """
         all_elections = self.discover()
+
+        if not all_elections:
+            warnings.warn(
+                "[LA] Discovery returned 0 elections from the Louisiana landing page. "
+                "The site structure may have changed — run inspect_landing.py to save "
+                "the rendered HTML and verify the election dropdown selector assumptions.",
+                stacklevel=2,
+            )
+            empty = pd.DataFrame()
+            if self.level == "all":
+                return {"state": empty, "parish": empty}
+            return empty
+
         elections = self._filter(all_elections, start_date, end_date)
 
         if not elections:
@@ -268,31 +290,69 @@ class LaElectionPipeline:
         print(f"[LA] Scraping {len(elections)} election(s)...")
         state_frames:  list[pd.DataFrame] = []
         parish_frames: list[pd.DataFrame] = []
+        failed = 0
 
         for election in elections:
             date_str = election.election_date.isoformat() if election.election_date else str(election.year)
             print(f"[LA]   {date_str}: {election.name}")
 
+            no_results = False
+            election_failed = True
+
             if self.level in ("all", "state"):
                 try:
                     state_df = self._scrape_state_tabs(election)
-                    if not state_df.empty:
+                    if state_df is None:
+                        no_results = True
+                        print(f"[LA]   No results published on the site for this election — skipping.")
+                    elif not state_df.empty:
                         state_frames.append(state_df)
+                        election_failed = False
                         print(f"[LA]   State tabs done: {len(state_df):,} row(s).")
+                    else:
+                        election_failed = False
                 except Exception as exc:
                     print(f"[LA]   ERROR scraping state tabs for {election.name!r}: {exc}")
+
+            if no_results:
+                failed += 1
+                continue
 
             if self.level in ("all", "parish"):
                 try:
                     parish_df = self._scrape_parish_tab(election)
-                    if not parish_df.empty:
+                    if parish_df is None:
+                        print(f"[LA]   No results published on the site for this election — skipping.")
+                    elif not parish_df.empty:
                         parish_frames.append(parish_df)
+                        election_failed = False
                         print(f"[LA]   Parish tab done: {len(parish_df):,} row(s).")
+                    else:
+                        election_failed = False
                 except Exception as exc:
                     print(f"[LA]   ERROR scraping parish tab for {election.name!r}: {exc}")
 
+            if election_failed:
+                failed += 1
+
+        if not state_frames and not parish_frames:
+            if failed == len(elections):
+                raise RuntimeError(
+                    f"[LA] All {len(elections)} election(s) failed to scrape. "
+                    f"This usually means the site is unreachable or its structure has changed. "
+                    f"See the error messages printed above for details."
+                )
+
         state_all  = concat_or_empty(state_frames)
         parish_all = concat_or_empty(parish_frames)
+
+        for _df in [state_all, parish_all]:
+            if not _df.empty:
+                _df.insert(0, "state", "LA")
+
+        print(
+            f"[LA] Done. {len(state_all):,} total state rows, {len(parish_all):,} total parish rows."
+        )
 
         if self.level == "state":
             return state_all

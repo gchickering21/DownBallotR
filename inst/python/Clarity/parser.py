@@ -76,49 +76,7 @@ import pandas as pd
 from lxml import html as lhtml
 
 from .models import ClarityElectionInfo
-
-# ---------------------------------------------------------------------------
-# Office-level classification
-# ---------------------------------------------------------------------------
-
-_FEDERAL_RE = re.compile(
-    r"presidential\s+elector"
-    r"|president\s+of\s+the\s+united\s+states"
-    r"|united\s+states\s+senator"
-    r"|u\.?\s*s\.?\s+senator"
-    r"|senator\s+in\s+congress"
-    r"|representative\s+in\s+congress"
-    r"|u\.?\s*s\.?\s+representative"
-    r"|congressman|congresswoman"
-    r"|u\.?\s*s\.?\s+house",
-    re.IGNORECASE,
-)
-
-_STATE_RE = re.compile(
-    r"\bgovernor\b"
-    r"|lieutenant\s+governor|lt\.?\s+governor"
-    r"|attorney\s+general"
-    r"|secretary\s+of\s+state"
-    r"|state\s+treasurer|\btreasurer\b"
-    r"|state\s+comptroller|\bcomptroller\b"
-    r"|state\s+auditor|\bauditor\b"
-    r"|superintendent\s+of\s+(public\s+)?instruction"
-    r"|commissioner\s+of\s+(agriculture|insurance|labor)"
-    r"|state\s+senator|state\s+senate"
-    r"|state\s+representative|state\s+house"
-    r"|general\s+assembly"
-    r"|state\s+school\s+board",
-    re.IGNORECASE,
-)
-
-
-def classify_office_level(office: str) -> str:
-    """Classify an office name as ``'Federal'``, ``'State'``, or ``'Local'``."""
-    if _FEDERAL_RE.search(office):
-        return "Federal"
-    if _STATE_RE.search(office):
-        return "State"
-    return "Local"
+from office_level_utils import classify_office_level
 
 
 # ---------------------------------------------------------------------------
@@ -127,19 +85,22 @@ def classify_office_level(office: str) -> str:
 _STATE_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
     "result_status", "office_level", "office", "localities_reporting",
-    "candidate", "party", "is_winner", "is_incumbent", "votes", "pct", "url",
+    "candidate", "party", "winner", "votes", "vote_pct", "url",
+    # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _COUNTY_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
     "result_status", "county", "office_level", "office", "localities_reporting",
-    "candidate", "party", "is_winner", "is_incumbent", "votes", "pct", "url",
+    "candidate", "party", "winner", "votes", "vote_pct", "url",
+    # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _VM_STATE_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
     "result_status", "office_level", "office", "localities_reporting",
-    "candidate", "party", "is_incumbent",
+    "candidate", "party",
+    # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total", "url",
 ]
@@ -147,7 +108,8 @@ _VM_STATE_COLS = [
 _VM_COUNTY_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
     "result_status", "county", "office_level", "office", "localities_reporting",
-    "candidate", "party", "is_incumbent",
+    "candidate", "party",
+    # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total", "url",
 ]
@@ -220,9 +182,12 @@ def _panel_localities_reporting(panel) -> str | None:
     return None
 
 
-def _parse_candidate_name(raw_name: str) -> tuple[str, str, bool]:
-    """Return (clean_candidate_name, inline_party, is_incumbent)."""
-    is_incumbent = "(I)" in raw_name
+def _parse_candidate_name(raw_name: str) -> tuple[str, str]:
+    """Return (clean_candidate_name, inline_party).
+
+    # is_incumbent detection commented out — not yet used downstream:
+    # is_incumbent = "(I)" in raw_name
+    """
     inline_party = ""
 
     m_paren = _PARTY_SUFFIX_RE.search(raw_name)
@@ -237,7 +202,7 @@ def _parse_candidate_name(raw_name: str) -> tuple[str, str, bool]:
             candidate = raw_name
 
     candidate = re.sub(r"\s*\(I\)\s*$", "", candidate).strip()
-    return candidate, inline_party, is_incumbent
+    return candidate, inline_party
 
 
 def _parse_ballot_options(panel) -> list[dict]:
@@ -248,7 +213,8 @@ def _parse_ballot_options(panel) -> list[dict]:
             ".//*[contains(@class,'me-2') and not(contains(@class,'party-marker'))]"
         )
         raw_name = _clean(name_divs[0].text_content()) if name_divs else ""
-        candidate, inline_party, is_incumbent = _parse_candidate_name(raw_name)
+        candidate, inline_party = _parse_candidate_name(raw_name)
+        # is_incumbent = ... # commented out — not yet used downstream
         if not candidate:
             continue
 
@@ -263,7 +229,7 @@ def _parse_ballot_options(panel) -> list[dict]:
             ".//*[contains(@class,'percentage')]"
             "/span[not(contains(@class,'visually-hidden'))]"
         )
-        pct = _parse_pct(_clean(pct_spans[0].text_content())) if pct_spans else None
+        vote_pct = _parse_pct(_clean(pct_spans[0].text_content())) if pct_spans else None
 
         vote_spans = opt.xpath(
             ".//*[contains(@class,'vote-total')]"
@@ -272,12 +238,12 @@ def _parse_ballot_options(panel) -> list[dict]:
         votes = _parse_votes(_clean(vote_spans[0].text_content())) if vote_spans else None
 
         results.append({
-            "candidate":    candidate,
-            "party":        party,
-            "is_winner":    None,
-            "is_incumbent": is_incumbent,
-            "votes":        votes,
-            "pct":          pct,
+            "candidate": candidate,
+            "party":     party,
+            "winner":    None,
+            # "is_incumbent": is_incumbent,  # commented out — not yet used downstream
+            "votes":     votes,
+            "vote_pct":  vote_pct,
         })
     return results
 
@@ -311,7 +277,8 @@ def _parse_contest_table(panel) -> list[dict]:
             ".//*[contains(concat(' ',normalize-space(@class),' '),' candidate ')]"
         )
         raw_name = _clean(name_div[0].text_content()) if name_div else first_cell_text
-        candidate, inline_party, is_incumbent = _parse_candidate_name(raw_name)
+        candidate, inline_party = _parse_candidate_name(raw_name)
+        # is_incumbent = ... # commented out — not yet used downstream
         if not candidate:
             continue
 
@@ -323,9 +290,9 @@ def _parse_contest_table(panel) -> list[dict]:
             party = inline_party
 
         results.append({
-            "candidate":               candidate,
-            "party":                   party,
-            "is_incumbent":            is_incumbent,
+            "candidate": candidate,
+            "party":     party,
+            # "is_incumbent": is_incumbent,  # commented out — not yet used downstream
             "votes_advance_in_person": _get_col(cells, "Advance in Person"),
             "votes_election_day":      _get_col(cells, "Election Day"),
             "votes_absentee":          _get_col(cells, "Absentee by Mail"),
@@ -336,7 +303,7 @@ def _parse_contest_table(panel) -> list[dict]:
 
 
 def _fix_clarity_winners(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
-    """Derive is_winner: mark the top-voted candidate per contest as True.
+    """Derive winner: mark the top-voted candidate per contest as True.
 
     Clarity HTML does not expose a winner flag or num_seats, so we default to
     1 winner per contest (the candidate with the most votes).  Ties share the
@@ -350,28 +317,28 @@ def _fix_clarity_winners(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFram
     df = df.copy()
     # Use pandas nullable boolean so rows with no vote data stay NA (not False).
     # reticulate converts this to R logical, which supports NA natively.
-    df["is_winner"] = pd.NA
-    df["is_winner"] = df["is_winner"].astype("boolean")
+    df["winner"] = pd.NA
+    df["winner"] = df["winner"].astype("boolean")
     ranked = (
         df.loc[valid]
         .groupby(group_cols, dropna=False)["votes"]
         .rank(method="min", ascending=False)
     )
-    df.loc[valid, "is_winner"] = (ranked <= 1).astype("boolean")
+    df.loc[valid, "winner"] = (ranked <= 1).astype("boolean")
     return df
 
 
 def _fill_pct(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute ``pct`` from votes where the HTML did not provide it.
+    """Compute ``vote_pct`` from votes where the HTML did not provide it.
 
     Some candidates (write-ins, uncontested races) have votes but no
-    percentage in the rendered HTML.  When ``pct`` is null we compute it as
-    ``votes / contest_total_votes * 100``, rounded to two decimal places.
-    Rows where both ``pct`` and ``votes`` are null are left as-is.
+    percentage in the rendered HTML.  When ``vote_pct`` is null we compute it
+    as ``votes / contest_total_votes * 100``, rounded to two decimal places.
+    Rows where both ``vote_pct`` and ``votes`` are null are left as-is.
     """
-    if df.empty or "pct" not in df.columns or "votes" not in df.columns:
+    if df.empty or "vote_pct" not in df.columns or "votes" not in df.columns:
         return df
-    missing = df["pct"].isna() & df["votes"].notna()
+    missing = df["vote_pct"].isna() & df["votes"].notna()
     if not missing.any():
         return df
     contest_cols = [c for c in ("election_name", "election_year", "office") if c in df.columns]
@@ -379,7 +346,7 @@ def _fill_pct(df: pd.DataFrame) -> pd.DataFrame:
         totals = df.groupby(contest_cols, dropna=False)["votes"].transform("sum")
         computed = (df["votes"] / totals * 100).round(2)
         df = df.copy()
-        df.loc[missing, "pct"] = computed[missing]
+        df.loc[missing, "vote_pct"] = computed[missing]
     return df
 
 

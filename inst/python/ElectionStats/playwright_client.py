@@ -1,12 +1,15 @@
 """
-Playwright-based browser automation client for v2 ElectionStats states (SC, NM, NY).
+Playwright-based browser automation client for ElectionStats states that require
+browser rendering (SC, NM, NY, VA, ID).
 
-These states use React/Material-UI apps with client-side JavaScript rendering,
-requiring browser automation instead of simple HTTP requests.
+SC/NM/NY/VA use React/Material-UI apps with client-side JavaScript rendering.
+ID (Idaho) uses a classic v1 table layout but the search page is AJAX-rendered
+via DataTables, so Playwright is needed to capture the populated table HTML.
+County detail pages for Idaho are server-rendered and fetched separately via requests.
 
 NY additionally sits behind Cloudflare bot protection, so a realistic browser
 context (user-agent, no-automation flags, webdriver patch) is used for all
-v2 states to ensure compatibility.
+Playwright states to ensure compatibility.
 
 Inherits browser lifecycle from BasePlaywrightClient (playwright_base.py).
 """
@@ -19,19 +22,19 @@ from typing import Optional
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from playwright_base import BasePlaywrightClient
+from ElectionStats.state_config import get_state_config
 
 
 class PlaywrightClient(BasePlaywrightClient):
-    """Browser automation client for v2 states (SC, NM, NY) that use React/JS.
+    """Browser automation client for states that need JS rendering.
 
-    Launches a headless browser to render JavaScript and extract election data
-    from dynamically-loaded React applications.  Uses realistic browser
-    fingerprinting to bypass Cloudflare bot protection (required for NY).
+    Supports both v2 states (SC, NM, NY, VA — React apps) and classic states that
+    use AJAX-rendered tables (Idaho — DataTables on a classic v1 layout).
 
     Parameters
     ----------
     state_key : str
-        State identifier (e.g., 'south_carolina', 'new_mexico', 'new_york')
+        State identifier (e.g., 'south_carolina', 'idaho')
     base_url : str
         Base URL for the state's ElectionStats site
     headless : bool, optional
@@ -56,24 +59,59 @@ class PlaywrightClient(BasePlaywrightClient):
         super().__init__(headless=headless, sleep_s=sleep_s)
         self.state_key = state_key
         self.base_url = base_url.rstrip("/")
+        config = get_state_config(state_key)
+        self._url_style = config.get("url_style", "path_params")
+        self._search_path = config.get("search_path", "/search").lstrip("/")
+
+    def _build_search_url(
+        self, year_from: Optional[int], year_to: Optional[int]
+    ) -> str:
+        """Build the search URL for this state.
+
+        Classic/path-params states (e.g. Idaho):
+            {base_url}/search/year_from:{year_from}/year_to:{year_to}
+
+        v2/query-params states (SC, NM, NY, VA):
+            {base_url}/search?df={year_from}&dt={year_to}&t=table
+        """
+        search_base = f"{self.base_url}/{self._search_path}".rstrip("/")
+
+        if self._url_style == "path_params":
+            # Classic path-params style (same as requests-based states like NH/VA).
+            # Build the full path regardless of whether years are None.
+            yf = year_from if year_from is not None else 1789
+            yt = year_to if year_to is not None else 9999
+            return f"{search_base}/year_from:{yf}/year_to:{yt}"
+
+        # query_params / v2 style (SC, NM, NY, VA)
+        params = ["t=table"]
+        if year_from is not None:
+            params.append(f"df={year_from}")
+        if year_to is not None:
+            params.append(f"dt={year_to}")
+        return f"{search_base}?{'&'.join(params)}"
 
     def get_search_page(
         self, year_from: Optional[int] = None, year_to: Optional[int] = None
     ) -> str:
         """Navigate to search page, wait for table to load, return rendered HTML.
 
-        URL patterns for SC/NM/NY:
-        - Single year: /search?df=2009&dt=2009&t=table
-        - From year to present: /search?df=2024&t=table (no dt)
-        - From beginning to year: /search?dt=2000&t=table (no df)
-        - All years: /search?t=table (no df or dt)
+        Supports two URL styles automatically based on state configuration:
+
+        path_params (Idaho/classic):
+            /search/year_from:{year_from}/year_to:{year_to}
+            Waits for #search_results_table to be populated.
+
+        query_params (SC/NM/NY/VA):
+            /search?df={year_from}&dt={year_to}&t=table
+            Waits for #contestCollectionTable or MuiTable.
 
         Parameters
         ----------
         year_from : int, optional
-            Start year for date range (df parameter). If None, search from beginning.
+            Start year. If None, defaults to 1789 (path-params) or omitted (query-params).
         year_to : int, optional
-            End year for date range (dt parameter). If None, search to present.
+            End year. If None, defaults to 9999 (path-params) or omitted (query-params).
 
         Returns
         -------
@@ -88,33 +126,38 @@ class PlaywrightClient(BasePlaywrightClient):
         if self.page is None:
             raise RuntimeError("Browser not initialized. Use context manager (with statement).")
 
-        # Build URL with optional year parameters
-        params = ["t=table"]
-        if year_from is not None:
-            params.append(f"df={year_from}")
-        if year_to is not None:
-            params.append(f"dt={year_to}")
-
-        url = f"{self.base_url}/search?{'&'.join(params)}"
+        url = self._build_search_url(year_from, year_to)
         self._navigate(url)
 
-        # Wait for either a results table or a "No Results Found" message.
-        # This prevents a 45-second timeout on years with no elections.
-        try:
-            self.page.wait_for_selector(
-                "table#contestCollectionTable, table.MuiTable-root, "
-                "span.MuiTypography-root.MuiTypography-body1",
-                timeout=45000,
-            )
-        except PlaywrightTimeoutError:
-            raise
+        if self._url_style == "path_params":
+            # Classic states (e.g. Idaho): wait for the DataTables-managed classic
+            # table to be populated.  DataTables fires its draw callback once rows
+            # are injected — we wait for the first contest row to appear.
+            try:
+                self.page.wait_for_selector(
+                    "table#search_results_table tbody tr[id]",
+                    timeout=45000,
+                )
+            except PlaywrightTimeoutError:
+                # No rows appeared — could be a genuinely empty year.
+                pass
+        else:
+            # v2 states (SC, NM, NY, VA): React/MUI table or "No Results" span.
+            try:
+                self.page.wait_for_selector(
+                    "table#contestCollectionTable, table.MuiTable-root, "
+                    "span.MuiTypography-root.MuiTypography-body1",
+                    timeout=45000,
+                )
+            except PlaywrightTimeoutError:
+                raise
 
-        # If the page loaded a "No Results Found" span rather than a table, return early.
-        no_results = self.page.locator(
-            "span.MuiTypography-root.MuiTypography-body1"
-        ).filter(has_text="No Results Found")
-        if no_results.count() > 0:
-            return self.page.content()
+            # If the page loaded a "No Results Found" span rather than a table, return early.
+            no_results = self.page.locator(
+                "span.MuiTypography-root.MuiTypography-body1"
+            ).filter(has_text="No Results Found")
+            if no_results.count() > 0:
+                return self.page.content()
 
         if self.sleep_s:
             time.sleep(self.sleep_s)

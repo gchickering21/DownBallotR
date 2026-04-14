@@ -47,7 +47,7 @@ from .discovery import parse_election_options
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Inspect the Louisiana SOS Graphical elections page."
+        description="Inspect the Louisiana Graphical elections page."
     )
     parser.add_argument("--year", type=int, default=None,
                         help="Filter election list to a single year.")

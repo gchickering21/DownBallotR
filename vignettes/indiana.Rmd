@@ -1,0 +1,166 @@
+---
+title: "Indiana elections"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Indiana elections}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(
+  purl     = FALSE,
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+## What it covers
+
+The Indiana scraper returns General Election results from the Indiana Election
+Division at `enr.indianavoters.in.gov`. It covers General Elections only
+(not primaries or special elections) from 2019 to the present.
+
+Results are fetched from the FirstTuesday archive JSON API and include
+statewide candidate totals and county-level breakdowns for all Federal,
+State, and Local office categories.
+
+> **Note:** The Indiana site is a JSON API (no browser required). Scraping
+> is fast relative to Playwright-based states. County-level data covers all
+> 92 Indiana counties.
+
+---
+
+## Arguments
+
+| Argument | Default | Description |
+|---|---|---|
+| `state` | — | `"IN"`, `"indiana"`, or `"Indiana"` |
+| `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound (clamped to 2019) |
+| `year_to` | `NULL` | End year, inclusive; `NULL` = current calendar year |
+| `level` | `"all"` | `"all"` — statewide + county; `"state"` — statewide only; `"county"` — county-level only |
+
+---
+
+## Examples
+
+### Statewide + county results for a single year
+
+```{r, purl=FALSE}
+res <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
+
+# Statewide candidate totals
+res$state %>%
+  filter(office_level == "Federal") %>%
+  select(election_year, office_title, candidate, party, votes, vote_pct, winner)
+
+# County-level breakdown
+res$county %>%
+  filter(office_title == "President of the United States") %>%
+  select(county_name, candidate, party, votes, vote_pct) %>%
+  arrange(county_name, desc(votes))
+```
+
+### Statewide totals only (faster — skips county scraping)
+
+```{r, purl=FALSE}
+state_df <- scrape_elections(
+  state     = "IN",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "state"
+)
+
+state_df %>%
+  select(election_year, office_level, office_title, candidate, party, votes, vote_pct, winner)
+```
+
+### Multi-year scrape
+
+```{r, purl=FALSE}
+res <- scrape_elections(
+  state     = "IN",
+  year_from = 2020,
+  year_to   = 2024,
+  level     = "state"
+)
+
+res %>%
+  filter(office_title == "President of the United States") %>%
+  select(election_year, candidate, party, votes, vote_pct, winner)
+```
+
+### Filter to a specific county
+
+```{r, purl=FALSE}
+res <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
+
+res$county %>%
+  filter(county_name == "Marion") %>%
+  select(office_title, candidate, party, votes, vote_pct) %>%
+  arrange(office_title, desc(votes))
+```
+
+### Filter by office level
+
+```{r, purl=FALSE}
+res <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
+
+# Federal races only
+res$state %>%
+  filter(office_level == "Federal") %>%
+  select(office_title, candidate, party, votes, vote_pct, winner)
+
+# State races only
+res$state %>%
+  filter(office_level == "State") %>%
+  select(office_title, candidate, party, votes, vote_pct, winner)
+```
+
+---
+
+## Output columns
+
+### `$state` (when `level = "all"` or `"state"`)
+
+| Column | Description |
+|---|---|
+| `state` | State abbreviation (`"IN"`) |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date of the election |
+| `election_type` | Always `"General"` |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office_category` | Broad category name (e.g. `"County Offices"`) |
+| `office_title` | Specific office name (e.g. `"President of the United States"`) |
+| `office_id` | Internal office identifier |
+| `candidate` | Candidate name |
+| `candidate_name_on_ballot` | Name as printed on the ballot |
+| `party` | Full party name (e.g. `"Republican"`, `"Democrat"`) |
+| `votes` | Statewide vote total |
+| `vote_pct` | Percentage of votes within the contest |
+| `winner` | `TRUE` if the candidate won |
+| `num_seats` | Number of seats available in the contest |
+| `precincts_reporting` | Total precincts reporting statewide |
+| `total_precincts` | Total precincts statewide |
+
+### `$county` (when `level = "all"` or `"county"`)
+
+Same columns as `$state`, except `precincts_reporting` and `total_precincts`
+are absent, and two county-specific columns are added:
+
+| Column | Description |
+|---|---|
+| `county_name` | County name |
+| `county_fips` | County FIPS code |
+
+---
+
+## Performance notes
+
+- **Fast scraper.** Indiana uses a JSON API — no headless browser is required.
+  A full statewide + county scrape for one year typically completes in under a
+  minute.
+- **General Elections only.** The scraper covers General Elections only.
+  Primary and special election results are not available through this source.
+- **Local races.** County-level data includes Local office races (county
+  treasurer, clerk, etc.) in addition to Federal and State races.

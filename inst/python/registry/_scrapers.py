@@ -266,8 +266,9 @@ def _scrape_in(
 def _scrape_nc(
     year_from: "int | None" = None,
     year_to: "int | None" = None,
+    level: str = "all",
     **_,
-) -> pd.DataFrame:
+) -> "pd.DataFrame | dict":
     """Scrape North Carolina local election results.
 
     Parameters
@@ -276,6 +277,12 @@ def _scrape_nc(
         Start year, inclusive.  Elections on or after Jan 1 of this year.
     year_to : int | None
         End year, inclusive.  Elections on or before Dec 31 of this year.
+    level : str
+        ``'all'`` (default) — dict with keys ``'precinct'``, ``'county'``,
+        and ``'state'``; reticulate converts this to a named R list.
+        ``'precinct'`` — precinct-level DataFrame only.
+        ``'county'``   — county-level DataFrame only.
+        ``'state'``    — statewide totals DataFrame only.
     """
     year_from = _to_year(year_from)
     year_to   = _to_year(year_to)
@@ -286,17 +293,21 @@ def _scrape_nc(
         else f"–{year_to}" if year_to
         else "all years"
     )
-    print(f"[NC] Starting scrape | {label}")
+    print(f"[NC] Starting scrape | {label} | level={level!r}")
 
     min_date, max_date = year_to_date_range(year_from, year_to)
 
     from NorthCarolina.pipeline import get_nc_election_results
-    return get_nc_election_results(
+    result = get_nc_election_results(
         year_from=year_from,
         year_to=year_to,
         min_supported_date=min_date,
         max_supported_date=max_date,
     )
+
+    if level == "all":
+        return result
+    return result[level]
 
 
 def _scrape_election_stats(
@@ -320,10 +331,11 @@ def _scrape_election_stats(
         End year, inclusive (default: current calendar year).
     level : str
         What to return:
-          - 'all'    (default) dict with keys 'state' and 'county'
-          - 'state'  candidate/state-level DataFrame
-          - 'county' county vote breakdown DataFrame
-          - 'joined' county rows merged with statewide metadata
+          - 'all'      (default) dict with keys 'state', 'county', and (when
+                       available) 'precinct'
+          - 'state'    candidate/state-level DataFrame
+          - 'county'   county vote breakdown DataFrame
+          - 'precinct' precinct-level vote breakdown DataFrame
     parallel : bool
         Enable parallel county scraping for classic (requests-based) states.
     """
@@ -334,7 +346,6 @@ def _scrape_election_stats(
     from ElectionStats.run_scrape_yearly import (
         scrape_one_year,
         _normalize_state,
-        _join_county_with_state,
     )
 
     state_key = _normalize_state(state)
@@ -359,12 +370,13 @@ def _scrape_election_stats(
 
     state_frames: list[pd.DataFrame] = []
     county_frames: list[pd.DataFrame] = []
+    precinct_frames: list[pd.DataFrame] = []
     failed_years: list[int] = []
 
     for year in range(year_from, year_to + 1):
         print(f"[ElectionStats] Scraping {state_key} {year}...", flush=True)
         try:
-            s_df, c_df = scrape_one_year(
+            s_df, c_df, p_df = scrape_one_year(
                 state_key=state_key,
                 state_name=state_key,
                 base_url=config["base_url"],
@@ -380,33 +392,48 @@ def _scrape_election_stats(
             continue
         print(
             f"[ElectionStats] {year}: "
-            f"{len(s_df):,} election rows, {len(c_df):,} county rows"
+            f"{len(s_df):,} election rows, {len(c_df):,} county rows, "
+            f"{len(p_df):,} precinct rows"
         )
         if not s_df.empty:
             state_frames.append(s_df)
         if not c_df.empty:
             county_frames.append(c_df)
+        if not p_df.empty:
+            precinct_frames.append(p_df)
 
     if failed_years:
-        print(f"[ElectionStats] WARNING: {len(failed_years)} year(s) failed for {state_key}: {failed_years}")
+        if len(failed_years) == n_years:
+            raise RuntimeError(
+                f"All {n_years} requested year(s) failed to scrape for '{state_key}'. "
+                f"This usually means the site is unreachable or its structure has changed. "
+                f"Years attempted: {failed_years}. "
+                f"See the error messages printed above for details."
+            )
+        print(f"[ElectionStats] WARNING: {len(failed_years)}/{n_years} year(s) failed for {state_key}: {failed_years}")
 
-    state_all  = _concat_or_empty(state_frames)
-    county_all = _concat_or_empty(county_frames)
+    state_all   = _concat_or_empty(state_frames)
+    county_all  = _concat_or_empty(county_frames)
+    precinct_all = _concat_or_empty(precinct_frames)
 
     print(
         f"[ElectionStats] Done. "
         f"{len(state_all):,} total election rows, "
-        f"{len(county_all):,} total county rows."
+        f"{len(county_all):,} total county rows, "
+        f"{len(precinct_all):,} total precinct rows."
     )
 
     if level == "state":
         return state_all
     if level == "county":
         return county_all
-    if level == "joined":
-        return _join_county_with_state(county_all=county_all, state_all=state_all)
-    # "all" — return both as a dict; reticulate converts to a named R list
-    return {"state": state_all, "county": county_all}
+    if level == "precinct":
+        return precinct_all
+    # "all" — return all three as a dict; reticulate converts to a named R list
+    result = {"state": state_all, "county": county_all}
+    if not precinct_all.empty:
+        result["precinct"] = precinct_all
+    return result
 
 
 # ── Ballotpedia scrapers ──────────────────────────────────────────────────────

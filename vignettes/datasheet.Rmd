@@ -1,0 +1,421 @@
+---
+title: "Datasheet for DownBallotR Election Results Data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Datasheet for DownBallotR Election Results Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, eval = FALSE)
+```
+
+> This document follows the spirit of the *Datasheets for Datasets* framework
+> (Gebru et al., 2021) adapted for a data-retrieval package rather than a static
+> dataset. Because `DownBallotR` fetches data live from external websites, some
+> properties — such as exact record counts and precise coverage dates — are
+> inherently dynamic and cannot be stated with finality.
+
+---
+
+## 1. Motivation
+
+### Why was this package created?
+
+Sub-national election data in the United States is fragmented across hundreds of
+state, county, and municipal reporting systems. Each jurisdiction publishes results
+in a different format, on a different website, and with a different update cadence.
+Existing aggregators cover federal and some statewide races well, but consistent
+machine-readable access to **local, down-ballot races** — school board, municipal,
+judicial, and county-level contests — remains a significant gap for researchers.
+
+`DownBallotR` was created to reduce the friction of accessing this data for
+academic research, journalism, and civic technology. It wraps a set of
+state-specific scrapers into a single, consistent R interface so that a
+researcher can retrieve precinct-level school board results with the same call
+structure they use for statewide general election results.
+
+### Who created it?
+
+`DownBallotR` was developed by Graham Chickering in collaboration with
+Chris Warshaw. It is intended primarily as a research tool and is not affiliated
+with any government entity, election authority, or political organization.
+
+### Is there funding or sponsorship?
+
+There is no commercial sponsorship. The package is open-source under the
+Apache License 2.0.
+
+---
+
+## 2. Data Composition
+
+### What does the package retrieve?
+
+`DownBallotR` retrieves **election results** — vote totals by candidate and
+contest — from official and semi-official sources. Depending on the source and
+the `level` argument, results may be available at the **statewide**,
+**county/parish/town**, or **precinct** level.
+
+### What sources are covered?
+
+| Source | States covered | Approx. start year | Sub-unit level |
+|--------|----------------|-------------------|----------------|
+| ElectionStats | CO, ID, MA, NH, NM, NY, SC, VA, VT | 1789–2008 (varies) | County; precinct for CO, ID, MA, SC, NM, VA |
+| NC State Board of Elections | North Carolina | 2000 | Precinct |
+| Connecticut CTEMS | Connecticut | 2016 | Town |
+| Georgia Secretary of State | Georgia | 2000 | County |
+| Utah elections portal | Utah | 2023 | County |
+| Indiana voters portal | Indiana | 2019 | County |
+| Louisiana Secretary of State | Louisiana | 1982 | Parish |
+| Ballotpedia (school board) | All US states | 2013 | District metadata |
+| Ballotpedia (state elections) | All US states | 2024 | Candidate listings |
+| Ballotpedia (municipal) | All US states | 2014 | Location metadata |
+
+> **Start years are approximate.** Each source has a confirmed range documented
+> in `db_available_years()`. Data quality and completeness for the earliest years
+> of each source has not been systematically validated.
+
+### What types of races are included?
+
+Coverage depends on the source:
+
+- **ElectionStats**: general elections across a wide range of offices; exact
+  offices vary by state and year.
+- **State-portal scrapers** (NC, CT, GA, UT, IN, LA): general elections as
+  published by the respective state authority.
+- **Ballotpedia school board**: school board elections only.
+- **Ballotpedia state elections**: federal, state-level, and local candidates as
+  listed on Ballotpedia state election pages.
+- **Ballotpedia municipal**: city, county, and mayoral election index data.
+
+Primary elections, runoffs, special elections, and referenda are **not
+systematically included** across all sources.
+
+### What fields are returned?
+
+The exact columns returned vary by source. Common fields include:
+
+- Contest or office name
+- Candidate name
+- Party affiliation (where available)
+- Vote total
+- Geographic unit (state, county, precinct, parish, or town)
+- Election year and/or date
+
+There is no single guaranteed schema across all sources. Users should inspect
+the data frame returned for each source before combining results across sources.
+
+### Are there known gaps in coverage?
+
+Yes. Coverage is limited to the states and years listed above. Many US states,
+territories, and local jurisdictions are not yet covered. Within covered states,
+individual contests may be missing, mislabeled, or structured differently across
+years if the underlying source changed its reporting format.
+
+---
+
+## 3. Data Collection Process
+
+### How is data collected?
+
+The package uses two retrieval mechanisms:
+
+1. **HTTP requests (static HTML / JSON / CSV)**: Used for sources that serve
+   data in a machine-readable form without JavaScript rendering. Requests are
+   made from the user's machine to the source website at scrape time.
+
+2. **Browser automation (Playwright via Python)**: Used for sources that require
+   JavaScript rendering to populate results tables. A headless Chromium browser
+   is launched locally on the user's machine. This browser is managed by the
+   Python `playwright` library, which is installed into an isolated virtual
+   environment by `downballot_install_python()`.
+
+Both mechanisms retrieve data directly from the source websites at the time
+`scrape_elections()` is called. **No data is cached or pre-fetched by the
+package maintainers.** The data the user receives reflects the state of the
+source website at the moment of retrieval.
+
+### Is the data collected with the knowledge of the source websites?
+
+The package makes standard HTTP/browser requests using publicly accessible URLs.
+No authentication is required for any source, and no terms of service are known
+to be violated. However, the package does not have formal data-sharing agreements
+with any source. Users are responsible for reviewing the terms of use of each
+source website before using the package in a production or high-volume context.
+
+### Are there rate limits or scraping constraints?
+
+`max_workers` is capped at 4 parallel browser instances by default to reduce
+load on source servers. Users should not attempt to override this limit in a way
+that could overwhelm public infrastructure. For sources with long historical
+ranges (e.g., Louisiana 1982–present), full historical scrapes may take
+significant time and generate substantial request volume.
+
+### How are years and election cycles determined?
+
+For most sources, year ranges are specified by the caller via `year_from` and
+`year_to`. The package validates requested years against a known confirmed range
+documented in `db_available_years()`. Years beyond the confirmed end are
+attempted but results are not guaranteed.
+
+---
+
+## 4. Preprocessing and Standardization
+
+### What preprocessing does the package apply?
+
+The level of preprocessing varies substantially by source. In general:
+
+- **Vote totals** are extracted as integers and not aggregated or modified.
+- **Candidate names** are returned as they appear in the source.
+- **Office/contest names** are returned as they appear in the source and are
+  not normalized to a common taxonomy across sources.
+- **Geographic units** (county, precinct, town, parish) are returned as they
+  appear in the source. No crosswalk to FIPS codes or standardized place names
+  is applied automatically.
+- **Party labels** may involve heuristic parsing when the source does not
+  provide a distinct party field. Where heuristics are used, common
+  abbreviations (e.g., "Dem", "Rep", "D", "R") are mapped to full party names,
+  but edge cases may be mislabeled.
+- **Write-in candidates** may appear as a single aggregated row, individual
+  rows, or may be absent, depending on the source.
+- **Election stages** (primary, general, runoff) are not consistently
+  distinguished across sources.
+
+### Are results deduplicated?
+
+For multi-year scrapes, the package concatenates results across years. No
+deduplication is applied. If a source re-publishes or corrects results for a
+prior year, a second scrape will return the corrected version, which may differ
+from a prior retrieval.
+
+### Is any imputation or gap-filling done?
+
+No. The package does not impute missing values, fill in absent contests, or
+estimate results for precincts or jurisdictions that did not report.
+
+### Is the output validated?
+
+The package does not validate the substantive correctness of retrieved data
+against any external reference. It checks that scraping operations succeeded
+and returns what the source provided.
+
+---
+
+## 5. Intended Uses
+
+### What is this package designed for?
+
+`DownBallotR` is designed for:
+
+- **Academic research** on electoral behavior, candidate emergence, and
+  down-ballot political dynamics.
+- **Exploratory data analysis** and hypothesis generation using election results.
+- **Journalism** requiring historical context or cross-jurisdictional
+  comparison of election results.
+- **Civic technology** applications that need programmatic access to historical
+  results for visualization or analysis.
+
+### Who is the intended user?
+
+Researchers and analysts who are comfortable with R, who understand the
+limitations of scraped data, and who can evaluate data quality relative to
+their specific analytical needs.
+
+---
+
+## 6. Out-of-Scope Uses
+
+The following uses are explicitly **not** supported and should not be pursued
+with data retrieved from this package:
+
+- **Official election certification or canvassing.** Results from this package
+  reflect what was published on source websites at the time of retrieval and
+  are not certified, audited, or guaranteed to be final.
+- **Legal proceedings** relying on election result accuracy.
+- **Real-time election night reporting.** The package is not designed for
+  live or near-live data retrieval. Source sites may be under heavy load or
+  update continuously on election night.
+- **High-stakes automated decision-making** based on election results without
+  human review.
+- **High-volume automated scraping** that could disrupt access to public
+  election reporting infrastructure.
+
+---
+
+## 7. Distribution and Access
+
+### How is the package distributed?
+
+`DownBallotR` is distributed as an open-source R package on GitHub. It is
+intended for CRAN submission; see the package `DESCRIPTION` for the current
+status.
+
+### Does the package cache or redistribute data?
+
+No. The package does not include any election data or database. All data is
+retrieved live from the source websites by the user. The package maintainers
+do not host, mirror, or redistribute election result data.
+
+### What does a user need to use the package?
+
+- R (>= 4.1.0)
+- An internet connection at scrape time
+- Python (>= 3.10), installable automatically via `downballot_install_python()`
+- ~100–200 MB of disk space for the Playwright Chromium browser (first-time setup)
+
+---
+
+## 8. Maintenance
+
+### Who maintains the package?
+
+The package is maintained by Graham Chickering. Bug reports and feature requests
+can be filed at <https://github.com/gchickering21/DownBallotR/issues>.
+
+### How are source website changes handled?
+
+State election websites change structure periodically without notice. When a
+source changes in a way that breaks scraping, the package will either return an
+error or may return malformed data. Users who observe unexpected results or
+errors are encouraged to file a bug report with the output they received so that
+the relevant scraper can be updated.
+
+### How frequently is the package updated?
+
+There is no fixed release cadence. Updates are driven by source website changes,
+newly supported states, and user-reported issues.
+
+### Is there a versioning or changelog policy?
+
+The package follows semantic versioning. Breaking changes to the public API
+will be reflected in the major or minor version number.
+
+---
+
+## 9. Ethical and Legal Considerations
+
+### Are there legal restrictions on the underlying data?
+
+Election results published by government entities are generally in the public
+domain in the United States, but users should verify this for their specific
+jurisdiction and use case. Ballotpedia content is subject to its own terms of
+use and licensing; users relying on Ballotpedia data should review those terms
+independently.
+
+### Does the package collect or transmit user data?
+
+No. The package does not collect, log, or transmit any information about the
+user, their queries, or the data they retrieve.
+
+### Are there privacy concerns with the data?
+
+Election results as typically published aggregate votes by contest and geographic
+unit, and do not contain voter-level information. However, some sources publish
+candidate information that may include personal details (names, party affiliation)
+which are part of the public record.
+
+### Could this package be used to suppress or manipulate election information?
+
+The package retrieves and presents data as published by official sources. It
+does not have any capability to alter, suppress, or submit election information
+to any authority. Misrepresentation of data retrieved by this package as
+official results would be a misuse of the tool by the user, not a property
+of the package itself.
+
+---
+
+## 10. Known Limitations
+
+The following limitations are known and should be considered by users:
+
+1. **Coverage is incomplete.** Only the states listed in Section 2 are
+   supported. Most states and all US territories are not currently covered.
+
+2. **Historical data quality is uneven.** Earlier years (particularly pre-2000
+   for ElectionStats sources) have not been systematically validated. Missing
+   contests, inconsistent formatting, and partial results are more likely for
+   older elections.
+
+3. **Source websites can and do change.** A scraper that worked at package
+   release may break if the source website updates its structure. There is no
+   guarantee of continued availability for any source.
+
+4. **Party labels are heuristic.** Where the source does not provide a
+   structured party field, party labels are parsed from candidate metadata
+   using pattern matching. Third-party, independent, and write-in candidates
+   are especially likely to have inconsistent or absent party labels.
+
+5. **Contest names are not normalized.** "City Council District 4" and
+   "City Council, Ward 4" may refer to the same or different races depending on
+   the source and year. No ontology is applied to race names.
+
+6. **Sub-unit geographic names are not standardized.** County names, precinct
+   IDs, and town names are returned as they appear in the source. These may not
+   match standard geographic reference files without additional cleaning.
+
+7. **Results may not be final.** A scrape performed immediately after an
+   election may retrieve unofficial or preliminary totals. Even well after
+   election day, some sources may not clearly distinguish certified from
+   uncertified results.
+
+8. **Ballotpedia data is not official.** Ballotpedia is a secondary source that
+   aggregates information from official sources, press releases, and other
+   inputs. It may contain errors or omissions not present in primary sources.
+
+9. **The package has no guaranteed uptime.** Because it depends on live
+   external websites, it may fail at any time due to website downtime, bot
+   mitigation, or network issues outside the maintainer's control.
+
+---
+
+## 11. Responsible Use Recommendations
+
+Users working with data from this package should:
+
+- **Verify critical results against official sources** before publication or
+  high-stakes decisions. Official certified results are available from the
+  relevant state or county election authority and should be used as the
+  authoritative reference.
+- **Record the date and time of each scrape** so that results can be
+  reproduced or explained if the source is later updated.
+- **Cite the original source**, not `DownBallotR`, when reporting specific
+  election results. The package is a retrieval tool; the data originates from
+  the source websites listed in Section 2.
+- **Inspect output for anomalies** before analysis — unexpected zeros, missing
+  candidates, or duplicate rows may indicate a parsing issue rather than a
+  true feature of the data.
+- **Use `db_available_years()` to check confirmed coverage** before specifying
+  a year range, and treat results for years beyond the confirmed end date as
+  experimental.
+- **Respect the source infrastructure.** Avoid automated loops that issue
+  hundreds of requests in quick succession. Use the `max_workers` default (4)
+  rather than pushing toward the maximum.
+
+---
+
+## 12. Citation
+
+If you use data retrieved through `DownBallotR` in published work, please cite
+both the package and the original data source:
+
+**Package citation:**
+
+```r
+citation("DownBallotR")
+```
+
+**Original sources** should be cited individually. Official state election
+results are typically citeable by state, office, and year from the relevant
+Secretary of State or State Board of Elections website. Ballotpedia content
+should be cited per Ballotpedia's citation guidelines.
+
+---
+
+## References
+
+Gebru, T., Morgenstern, J., Vecchione, B., Vaughan, J. W., Wallach, H.,
+Daumé III, H., & Crawford, K. (2021). Datasheets for datasets. *Communications
+of the ACM*, 64(12), 86–92. <https://doi.org/10.1145/3458723>

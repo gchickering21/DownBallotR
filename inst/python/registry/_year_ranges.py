@@ -18,6 +18,7 @@ _YEAR_RANGES: dict = {
         "colorado":       (1902, 2024),
         "massachusetts":  (1970, 2026),
         "new_hampshire":  (1970, 2024),
+        "idaho":          (1990, 2024),
         "new_york":       (1994, 2024),
         "new_mexico":     (2000, 2024),
         "south_carolina": (2008, 2025),

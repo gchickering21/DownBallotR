@@ -54,11 +54,13 @@ you never need to specify a backend by name:
 | 1 | `office = "school_district"` | Ballotpedia school board scraper (all US states) |
 | 2 | `office = "state_elections"` | Ballotpedia state elections (2024–present) |
 | 3 | `office = "municipal_elections"` | Ballotpedia municipal + mayoral elections (2014–present) |
-| 4 | `state` is North Carolina | NC State Board of Elections scraper |
+| 4 | `state` is North Carolina | NC State Board of Elections scraper (2000–present) |
 | 5 | `state` is Connecticut | Connecticut CTEMS scraper (2016–present) |
 | 6 | `state` is Georgia | Georgia Secretary of State scraper (2000–present) |
-| 7 | `state` is Utah | Utah election results scraper (2023–2025) |
-| 8 | All other states | ElectionStats multi-state scraper |
+| 7 | `state` is Utah | Utah election results scraper (2023–present) |
+| 8 | `state` is Indiana | Indiana voters portal scraper (2019–present) |
+| 9 | `state` is Louisiana | Louisiana SOS scraper (1982–present) |
+| 10 | All other states | ElectionStats multi-state scraper |
 
 ---
 
@@ -76,7 +78,7 @@ db_available_years(office = "state_elections")
 db_available_years(office = "municipal_elections")
 
 # Filter to one state
-db_available_years(state = "virginia")
+db_available_years(state = "Virginia")
 ```
 
 | Source | State | Start year | End year |
@@ -86,13 +88,16 @@ db_available_years(state = "virginia")
 | ElectionStats | Colorado | 1902 | 2024 |
 | ElectionStats | Massachusetts | 1970 | 2026 |
 | ElectionStats | New Hampshire | 1970 | 2024 |
+| ElectionStats | Idaho | 1990 | 2024 |
 | ElectionStats | New York | 1994 | 2024 |
 | ElectionStats | New Mexico | 2000 | 2024 |
 | ElectionStats | South Carolina | 2008 | 2025 |
-| NC State Board | North Carolina | 2025 | 2025 |
+| NC State Board | North Carolina | 2000 | present |
 | CT CTEMS | Connecticut | 2016 | present |
 | GA Secretary of State | Georgia | 2000 | present |
-| Utah elections site | Utah | 2023 | 2025 |
+| Utah elections site | Utah | 2023 | present |
+| Indiana voters portal | Indiana | 2019 | present |
+| Louisiana SOS | Louisiana | 1982 | present |
 | Ballotpedia (school boards) | All US states | 2013 | present |
 | Ballotpedia (state elections) | All US states\* | 2024 | present |
 | Ballotpedia (municipal elections) | All US states | 2014 (`"all"`) / 2020 (`"mayoral"`) | present |
@@ -101,8 +106,9 @@ To see which states are supported by the ElectionStats scraper:
 
 ```{r, purl=FALSE}
 db_list_states("election_stats")
-#> [1] "colorado"       "massachusetts"  "new_hampshire"  "new_mexico"
-#> [5] "new_york"       "south_carolina" "vermont"        "virginia"
+#> [1] "colorado"       "idaho"          "massachusetts"  "new_hampshire"
+#> [5] "new_mexico"     "new_york"       "south_carolina" "vermont"
+#> [9] "virginia"
 ```
 
 ---
@@ -111,8 +117,10 @@ db_list_states("election_stats")
 
 | Goal | Call |
 |---|---|
-| Candidate + vote totals for VA, MA, CO, NH, VT | `scrape_elections(state = "virginia", ...)` |
-| Candidate + vote totals for SC, NM, NY (Playwright) | `scrape_elections(state = "south_carolina", ...)` |
+| Candidate + vote totals for CO, MA, NH, ID, VT (classic) | `scrape_elections(state = "virginia", ...)` |
+| Precinct-level results for CO, MA, ID (classic) | `scrape_elections(state = "colorado", year_from = 2022, year_to = 2022, level = "precinct")` |
+| Candidate + vote totals for SC, NM, VA, NY (Playwright) | `scrape_elections(state = "south_carolina", ...)` |
+| Precinct-level results for SC, NM, VA (v2 CSV API) | `scrape_elections(state = "new_mexico", year_from = 2024, year_to = 2024, level = "precinct")` |
 | NC precinct-level local results | `scrape_elections(state = "NC", year_from = 2025, year_to = 2025)` |
 | CT statewide + town results | `scrape_elections(state = "CT", year_from = 2024, year_to = 2024)` |
 | CT statewide totals only (faster) | `scrape_elections(state = "CT", year_from = 2024, year_to = 2024, level = "state")` |
@@ -120,6 +128,10 @@ db_list_states("election_stats")
 | GA with vote-method breakdown | `scrape_elections(state = "GA", year_from = 2024, year_to = 2024, include_vote_methods = TRUE)` |
 | UT statewide + county results | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024)` |
 | UT statewide only (faster) | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024, level = "state")` |
+| IN statewide + county General Election results | `scrape_elections(state = "IN", year_from = 2024, year_to = 2024)` |
+| IN statewide only (faster) | `scrape_elections(state = "IN", year_from = 2022, year_to = 2022, level = "state")` |
+| LA statewide + parish results | `scrape_elections(state = "LA", year_from = 2024, year_to = 2024)` |
+| LA statewide only (faster; skips parish scraping) | `scrape_elections(state = "LA", year_from = 2023, year_to = 2023, level = "state")` |
 | School board district schedules, any state | `scrape_elections(office = "school_district", mode = "districts", ...)` |
 | School board candidates + results | `scrape_elections(office = "school_district", mode = "results", ...)` |
 | All candidates for a state (federal + state + local), 2024+ | `scrape_elections(state = "Maine", office = "state_elections", year = 2024)` |
@@ -136,7 +148,7 @@ Each scraper has its own vignette with full argument documentation,
 worked examples, and column descriptions:
 
 - [ElectionStats states](election-stats.html) —
-  VA, MA, CO, NH, SC, NM, NY, VT; candidate + county results
+  VA, MA, CO, NH, ID, VT (classic) + SC, NM, NY (Playwright); candidate + county + precinct results
 - [North Carolina](north-carolina.html) —
   NC State Board of Elections; precinct-level results
 - [Connecticut](connecticut.html) —
@@ -144,7 +156,11 @@ worked examples, and column descriptions:
 - [Georgia](georgia.html) —
   GA Secretary of State; statewide + county results, 2000–present
 - [Utah](utah.html) —
-  Utah elections site; statewide + county results, 2023–2025
+  Utah elections site; statewide + county results, 2023–present
+- [Indiana](indiana.html) —
+  Indiana voters portal; statewide + county General Election results, 2019–present
+- [Louisiana](louisiana.html) —
+  Louisiana Secretary of State; statewide + parish results, 1982–present
 - [School district elections](school-district-elections.html) —
   Ballotpedia school board elections, all US states, 2013–present
 - [State elections](state-elections.html) —

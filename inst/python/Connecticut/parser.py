@@ -55,42 +55,7 @@ from lxml import html as lhtml
 
 from .models import CtElectionInfo
 
-# ── Election-level classification ─────────────────────────────────────────────
-
-_FEDERAL_RE = re.compile(
-    r"presidential\s+elector"
-    r"|united\s+states\s+senator"
-    r"|u\.?\s*s\.?\s+senator"
-    r"|senator\s+in\s+congress"
-    r"|representative\s+in\s+congress"
-    r"|u\.?\s*s\.?\s+representative"
-    r"|congressman|congresswoman",
-    re.IGNORECASE,
-)
-
-_STATE_RE = re.compile(
-    r"\bgovernor\b"
-    r"|lieutenant\s+governor|lt\.?\s+governor"
-    r"|attorney\s+general"
-    r"|secretary\s+of\s+(the\s+)?state"
-    r"|state\s+treasurer|\btreasurer\b"
-    r"|state\s+comptroller|\bcomptroller\b"
-    r"|state\s+senator|senator\s+in\s+(the\s+)?general\s+assembly"
-    r"|state\s+representative"
-    r"|representative\s+to\s+(the\s+)?general\s+assembly"
-    r"|general\s+assembly"
-    r"|judge\s+of\s+probate",
-    re.IGNORECASE,
-)
-
-
-def classify_election_level(office: str) -> str:
-    """Classify an office name as ``'Federal'``, ``'State'``, or ``'Local'``."""
-    if _FEDERAL_RE.search(office):
-        return "Federal"
-    if _STATE_RE.search(office):
-        return "State"
-    return "Local"
+from office_level_utils import classify_office_level as classify_election_level
 
 
 # ── Output column definitions ─────────────────────────────────────────────────
@@ -99,13 +64,13 @@ _STATE_COLS = [
     "election_name",
     "election_year",
     "election_date",
-    "election_level",
+    "office_level",
     "office",
     "candidate",
     "party",
     "votes",
     "vote_pct",
-    "contest_outcome",
+    "winner",
 ]
 
 _TOWN_COLS = [
@@ -114,7 +79,7 @@ _TOWN_COLS = [
     "election_date",
     "county",
     "town",
-    "election_level",
+    "office_level",
     "office",
     "candidate",
     "party",
@@ -168,10 +133,10 @@ def _clean_party(img_title: str) -> str:
     return re.sub(r"\s+Party\s*$", "", img_title, flags=re.IGNORECASE).strip()
 
 
-def _add_contest_outcome(df: pd.DataFrame, contest_cols: list[str]) -> pd.DataFrame:
-    """Add ``contest_outcome`` column: ``'Won'`` for the max-votes candidate per
-    contest, ``'Lost'`` for all others.  Ties both receive ``'Won'``.
-    Candidates with no valid vote data receive ``None``.
+def _add_winner(df: pd.DataFrame, contest_cols: list[str]) -> pd.DataFrame:
+    """Add boolean ``winner`` column: ``True`` for the max-votes candidate per
+    contest, ``False`` for all others.  Ties both receive ``True``.
+    Candidates with no valid vote data receive ``pd.NA``.
 
     Parameters
     ----------
@@ -182,16 +147,17 @@ def _add_contest_outcome(df: pd.DataFrame, contest_cols: list[str]) -> pd.DataFr
     """
     if df.empty:
         df = df.copy()
-        df["contest_outcome"] = pd.Series(dtype="object")
+        df["winner"] = pd.Series(dtype="boolean")
         return df
     df = df.copy()
     # transform("max") always returns a Series with the same index as df,
     # so boolean masks derived from it are always index-aligned.
     max_votes = df.groupby(contest_cols, dropna=False)["votes"].transform("max")
     has_votes = df["votes"].notna()
-    df["contest_outcome"] = pd.NA  # Start as NA; fill below only for rows with data
-    df.loc[has_votes, "contest_outcome"] = "Lost"
-    df.loc[has_votes & (df["votes"] == max_votes), "contest_outcome"] = "Won"
+    df["winner"] = pd.NA
+    df["winner"] = df["winner"].astype("boolean")
+    df.loc[has_votes, "winner"] = False
+    df.loc[has_votes & (df["votes"] == max_votes), "winner"] = True
     return df
 
 
@@ -328,21 +294,21 @@ def parse_statewide_results(
         office = f"{race_name} — {cr['district']}" if cr["district"] else race_name
 
         rows.append({
-            "election_name":  election.name,
-            "election_year":  election.year,
-            "election_date":  election_date_str,
-            "election_level": classify_election_level(race_name),
-            "office":         office,
-            "candidate":      cr["candidate"],
-            "party":          cr["party"],
-            "votes":          _parse_votes(cr["votes_raw"]),
-            "vote_pct":       _parse_pct(cr["pct_raw"]),
+            "election_name": election.name,
+            "election_year": election.year,
+            "election_date": election_date_str,
+            "office_level":  classify_election_level(race_name),
+            "office":        office,
+            "candidate":     cr["candidate"],
+            "party":         cr["party"],
+            "votes":         _parse_votes(cr["votes_raw"]),
+            "vote_pct":      _parse_pct(cr["pct_raw"]),
         })
 
     if not rows:
         return pd.DataFrame(columns=_STATE_COLS)
 
-    return _add_contest_outcome(_build_df(rows, _STATE_COLS), _CONTEST_STATE_COLS)
+    return _add_winner(_build_df(rows, _STATE_COLS), _CONTEST_STATE_COLS)
 
 
 def parse_town_results(
@@ -388,17 +354,17 @@ def parse_town_results(
         office = f"{race_name} — {cr['district']}" if cr["district"] else race_name
 
         rows.append({
-            "election_name":  election.name,
-            "election_year":  election.year,
-            "election_date":  election_date_str,
-            "county":         county_name,
-            "town":           town_name,
-            "election_level": classify_election_level(race_name),
-            "office":         office,
-            "candidate":      cr["candidate"],
-            "party":          cr["party"],
-            "votes":          _parse_votes(cr["votes_raw"]),
-            "vote_pct":       _parse_pct(cr["pct_raw"]),
+            "election_name": election.name,
+            "election_year": election.year,
+            "election_date": election_date_str,
+            "county":        county_name,
+            "town":          town_name,
+            "office_level":  classify_election_level(race_name),
+            "office":        office,
+            "candidate":     cr["candidate"],
+            "party":         cr["party"],
+            "votes":         _parse_votes(cr["votes_raw"]),
+            "vote_pct":      _parse_pct(cr["pct_raw"]),
         })
 
     if not rows:

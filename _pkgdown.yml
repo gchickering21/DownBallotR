@@ -30,6 +30,12 @@ articles:
       - connecticut
       - georgia
       - utah
+      - indiana
+      - louisiana
       - school-district-elections
       - state-elections
       - municipal-elections
+  - title: About the data
+    navbar: ~
+    contents:
+      - datasheet

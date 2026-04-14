@@ -54,6 +54,7 @@ def get_ga_election_results(
     return get_clarity_election_results(
         base_url=GA_BASE_URL,
         county_suffix=GA_COUNTY_SUFFIX,
+        state_abbrev="GA",
         log_prefix=GA_LOG_PREFIX,
         year_from=year_from,
         year_to=year_to,

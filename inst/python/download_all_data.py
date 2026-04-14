@@ -8,7 +8,7 @@ Usage (run from inst/python/):
     python download_all_data.py [options]
 
 Sections:
-    election_stats      ElectionStats (VA, MA, CO, NH, SC, NM, NY)
+    election_stats      ElectionStats (VT, VA, CO, MA, NH, ID, NY, NM, SC)
     nc                  North Carolina (NC State Board of Elections, 2000-2025)
     school_board        Ballotpedia school board elections (2013-present)
     state_elections     Ballotpedia state elections (2024-present, per state)
@@ -27,6 +27,10 @@ Options:
                             Much quicker but omits vote counts and candidate detail.
                             (Has no effect on the georgia or utah sections.)
     --dry-run               Print tasks without scraping
+
+ElectionStats-specific options:
+    --es-year-from INT      Override start year for all election_stats states
+    --es-year-to   INT      Override end year for all election_stats states
 
 Georgia-specific options:
     --ga-year-from INT      First year to download (default: 2012)
@@ -58,6 +62,7 @@ Output layout:
       election_stats/
         {state}/{state}_{year_from}_{year_to}_state.csv
         {state}/{state}_{year_from}_{year_to}_county.csv
+        {state}/{state}_{year_from}_{year_to}_precinct.csv  (CO, MA, ID, VA, NH, VT only)
       northcarolina/
         nc_{year_from}_{year_to}_precinct.csv
         nc_{year_from}_{year_to}_county.csv
@@ -113,21 +118,33 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 
 import registry
+from Louisiana.pipeline import get_la_election_results
 
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 CURRENT_YEAR = datetime.date.today().year
 
+# States that produce precinct-level output.
+# Classic (requests-based): CO, MA, ID — precinct rows on HTML detail pages.
+# v2 (Playwright + CSV API): SC, NM, VA — precinct rows from download_contest CSV.
+# NH and VT only have state + county levels; NY has no precinct data at all.
+ELECTION_STATS_PRECINCT_STATES: frozenset[str] = frozenset({
+    "colorado", "massachusetts", "idaho",
+    "south_carolina", "new_mexico", "virginia",
+})
+
 # Year ranges mirror registry._YEAR_RANGES / STATE_CONFIGS
 ELECTION_STATS_STATES: dict[str, tuple[int, int]] = {
+    "vermont":        (1789, 2024),
     "virginia":       (1789, 2025),
-    "massachusetts":  (1970, 2026),
     "colorado":       (1902, 2024),
+    "massachusetts":  (1970, 2026),
     "new_hampshire":  (1970, 2024),
-    "south_carolina": (2008, 2025),
-    "new_mexico":     (2000, 2024),
+    "idaho":          (1990, 2024),
     "new_york":       (1994, 2024),
+    "new_mexico":     (2000, 2024),
+    "south_carolina": (2008, 2025),
 }
 
 NC_YEAR_RANGE              = (2000, 2025)
@@ -140,7 +157,7 @@ GA_YEAR_RANGE              = (2012, CURRENT_YEAR)
 UT_YEAR_RANGE              = (2023, CURRENT_YEAR)
 CT_YEAR_RANGE              = (2016, CURRENT_YEAR)
 # Default to 2024 only until the scraper is validated; full history goes back to 1982.
-LA_YEAR_RANGE              = (2024, 2024)
+LA_YEAR_RANGE              = (1982, 2024)
 
 # All 50 US states + DC (title-case full names expected by Ballotpedia scrapers)
 ALL_STATES: list[str] = [
@@ -254,7 +271,7 @@ def _run_task(
 
     try:
         if isinstance(result, dict):
-            # election_stats level='all' → {"state": df, "county": df}
+            # election_stats level='all' → {"state": df, "county": df[, "precinct": df]}
             for key, df in result.items():
                 suffix_path = path.parent / f"{path.stem}_{key}{path.suffix}"
                 if df.empty:
@@ -288,7 +305,7 @@ def _run_tasks(
     workers=1 (default) runs sequentially.
     workers>1 uses ThreadPoolExecutor.
 
-    Note: Playwright-based scrapers (SC, NM, NY, school_board WAF fallback)
+    Note: Playwright-based scrapers (SC, NM, NY, VA, school_board WAF fallback)
     are not thread-safe — use workers=1 for those sections.
     """
     if workers <= 1:
@@ -313,18 +330,27 @@ def _run_tasks(
 # ── Section downloaders ────────────────────────────────────────────────────────
 
 def download_election_stats(
-    output_dir: Path, *, dry_run: bool, state: "str | None" = None, workers: int = 1, **_
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    state: "str | None" = None,
+    workers: int = 1,
+    es_year_from: "int | None" = None,
+    es_year_to: "int | None" = None,
+    **_,
 ) -> list[bool]:
     """
     ElectionStats: one download per state, full year range, level='all'.
     Each state goes into its own subdirectory:
       data/election_stats/{state}/{state}_{year_from}_{year_to}_state.csv
       data/election_stats/{state}/{state}_{year_from}_{year_to}_county.csv
+      data/election_stats/{state}/{state}_{year_from}_{year_to}_precinct.csv  (CO, MA, ID, VA, NH, VT)
 
     Pass state= to restrict to a single state (e.g. state='new_york').
-    Note: SC, NM, NY use Playwright — set workers=1 for those states.
+    Pass es_year_from/es_year_to to override the default year range.
+    Note: SC, NM, NY, VA use Playwright — set workers=1 for those states.
     """
-    # Normalise the filter to the same slug format used as dict keys
+    # Normalize the filter to the same slug format used as dict keys
     state_filter = _slug(state) if state else None
     if state_filter and state_filter not in ELECTION_STATS_STATES:
         valid = ", ".join(sorted(ELECTION_STATS_STATES))
@@ -336,18 +362,80 @@ def download_election_stats(
         else ELECTION_STATS_STATES
     )
 
-    tasks = []
-    for s, (year_from, year_to) in states_to_run.items():
-        state_dir = output_dir / "election_stats" / s
-        label = f"ElectionStats  {s}  {year_from}–{year_to}"
-        path = state_dir / f"{s}_{year_from}_{year_to}.csv"
-        tasks.append((label, path, lambda s=s, yf=year_from, yt=year_to: registry.scrape(
-            "election_stats",
-            state=s, year_from=yf, year_to=yt,
-            level="all", parallel=True,
-        )))
+    def _scrape_one(s: str, year_from: int, year_to: int) -> bool:
+        state_dir   = output_dir / "election_stats" / s
+        stem        = f"{s}_{year_from}_{year_to}"
+        state_path  = state_dir / f"{stem}_state.csv"
+        county_path = state_dir / f"{stem}_county.csv"
+        label       = f"ElectionStats  {s}  {year_from}–{year_to}"
 
-    return _run_tasks(tasks, dry_run=dry_run, workers=workers)
+        precinct_path = state_dir / f"{stem}_precinct.csv"
+        has_precinct  = s in ELECTION_STATS_PRECINCT_STATES
+
+        print(f"\n[{label}]")
+        base_ok     = _is_valid_csv(state_path) and _is_valid_csv(county_path)
+        precinct_ok = (not has_precinct) or _is_valid_csv(precinct_path)
+        if base_ok and precinct_ok:
+            files = f"{stem}_state.csv, {stem}_county.csv" + (f", {stem}_precinct.csv" if has_precinct else "")
+            print(f"  ↷ already exists, skipping: {files}")
+            return True
+
+        if dry_run:
+            print(f"  (dry-run) → {stem}_state.csv, {stem}_county.csv[, {stem}_precinct.csv]")
+            return True
+
+        try:
+            result = registry.scrape(
+                "election_stats",
+                state=s, year_from=year_from, year_to=year_to,
+                level="all", parallel=True,
+            )
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            return False
+
+        try:
+            if not isinstance(result, dict):
+                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
+                return False
+            for key, df in result.items():
+                out_path = state_dir / f"{stem}_{key}.csv"
+                if df.empty:
+                    print(f"  ⚠ empty result for key '{key}' — skipping write")
+                else:
+                    _save(df, out_path)
+        except Exception:
+            print("  ✗ ERROR while saving result:")
+            traceback.print_exc()
+            return False
+
+        return True
+
+    jobs = [
+        (s,
+         es_year_from if es_year_from is not None else default_from,
+         es_year_to   if es_year_to   is not None else default_to)
+        for s, (default_from, default_to) in states_to_run.items()
+    ]
+
+    if workers <= 1:
+        return [_scrape_one(s, yf, yt) for s, yf, yt in jobs]
+
+    results = [False] * len(jobs)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_idx = {
+            executor.submit(_scrape_one, s, yf, yt): i
+            for i, (s, yf, yt) in enumerate(jobs)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+            except Exception:
+                traceback.print_exc()
+                results[idx] = False
+    return results
 
 
 def download_nc(output_dir: Path, *, dry_run: bool, **_) -> list[bool]:
@@ -942,7 +1030,7 @@ def download_louisiana(
     results: list[bool] = []
 
     for year in range(la_year_from, la_year_to + 1):
-        label = f"Louisiana SOS  {year}  level={la_level}"
+        label = f"Louisiana {year}  level={la_level}"
         print(f"\n[{label}]")
 
         paths: dict[str, Path] = {}
@@ -964,8 +1052,7 @@ def download_louisiana(
             continue
 
         try:
-            result = registry.scrape(
-                "louisiana_results",
+            result = get_la_election_results(
                 year_from=year,
                 year_to=year,
                 level=la_level,
@@ -1075,13 +1162,38 @@ def main() -> None:
         help=(
             "Number of parallel download workers (default: 1 = sequential). "
             "Recommended: 4–8 for HTTP-only sections (state_elections, municipal --fast). "
-            "Keep at 1 for Playwright sections (election_stats SC/NM/NY, school_board full)."
+            "Keep at 1 for Playwright sections (election_stats SC/NM/NY/VA, school_board full)."
         ),
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would be downloaded without actually scraping.",
+    )
+
+    # ElectionStats-specific options
+    es_group = parser.add_argument_group("election_stats options")
+    es_group.add_argument(
+        "--es-year-from",
+        type=int,
+        default=None,
+        metavar="YEAR",
+        help=(
+            "Override the start year for the election_stats section. "
+            "Applies to all states (or the single state set by --state). "
+            "Default: each state's earliest available year."
+        ),
+    )
+    es_group.add_argument(
+        "--es-year-to",
+        type=int,
+        default=None,
+        metavar="YEAR",
+        help=(
+            "Override the end year for the election_stats section. "
+            "Applies to all states (or the single state set by --state). "
+            "Default: each state's latest available year."
+        ),
     )
 
     # Georgia-specific options
@@ -1271,6 +1383,10 @@ def main() -> None:
     print(f"Fast mode        : {args.fast}")
     print(f"Workers          : {args.workers}")
     print(f"Dry run          : {args.dry_run}")
+    if args.section in ("election_stats", "all"):
+        yf = args.es_year_from or "default (per state)"
+        yt = args.es_year_to   or "default (per state)"
+        print(f"ES year range    : {yf}–{yt}")
     if args.section in ("georgia", "all"):
         print(f"GA year range    : {args.ga_year_from}–{args.ga_year_to}")
         print(f"GA level         : {args.ga_level}")
@@ -1307,6 +1423,9 @@ def main() -> None:
             full=not args.fast,
             state=args.state,
             workers=args.workers,
+            # ElectionStats-specific
+            es_year_from=args.es_year_from,
+            es_year_to=args.es_year_to,
             # Georgia-specific
             ga_year_from=args.ga_year_from,
             ga_year_to=args.ga_year_to,

@@ -18,7 +18,9 @@ from ElectionStats.electionStats_search import (
 from ElectionStats.electionStats_county_search import (
     build_county_dataframe_parallel,
     build_county_dataframe,
-    build_county_dataframe_v2,
+    build_county_and_precinct_dataframe_parallel,
+    build_county_and_precinct_dataframe_v2,
+    _PRECINCT_COLS,
 )
 from ElectionStats.state_config import get_state_config
 from ElectionStats.playwright_client import PlaywrightClient
@@ -41,7 +43,7 @@ _MAX_WORKERS = 6
 _SAMPLE_N = 5000
 
 JOIN_KEYS = ["state", "election_id", "candidate_id"]
-COUNTY_COLS = ["state", "year", "election_id", "candidate_id", "county_or_city", "candidate_name", "votes"]
+COUNTY_COLS = ["state", "year", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
 
 
 # ---------------------------
@@ -107,19 +109,26 @@ def scrape_one_year(
     parallel: bool,
     scraping_method: str,
     url_style: str = "path_params",
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Returns (state_df, county_df) for a single year.
+    Returns (state_df, county_df, precinct_df) for a single year.
     Dispatches to requests-based or Playwright-based scraping.
 
-    state_df: candidate-exploded search results (includes detail_url)
-    county_df: long county votes (includes candidate_id)
+    state_df:    candidate-exploded search results (includes detail_url)
+    county_df:   long county votes (includes candidate_id)
+    precinct_df: long precinct votes; empty DataFrame for states/years without
+                 precinct rows on the detail pages.
     """
 
     if scraping_method == "playwright":
         # =============================
-        # V2 states: use Playwright
+        # Playwright states: use browser to render the search page.
+        # V2 states (SC, NM, NY, VA) are React SPAs requiring Playwright.
         # =============================
+        from ElectionStats.state_config import get_state_config as _get_cfg
+        _state_cfg = _get_cfg(state_key)
+        _scraper_type = _state_cfg.get("scraper_type", "v2")
+
         with PlaywrightClient(state_key, base_url) as pw_client:
             rows = fetch_all_search_results_v2(
                 pw_client,
@@ -130,7 +139,7 @@ def scrape_one_year(
             state_df = rows_to_dataframe(rows, client=pw_client)
 
             if state_df.empty:
-                return state_df, pd.DataFrame(columns=COUNTY_COLS)
+                return state_df, pd.DataFrame(columns=COUNTY_COLS), pd.DataFrame(columns=_PRECINCT_COLS)
 
             # Ensure state column
             if "state" not in state_df.columns:
@@ -144,11 +153,24 @@ def scrape_one_year(
             # Only hit each election detail page once
             unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
 
-            # County scraping with Playwright (no parallel support yet for v2)
-            county_df = build_county_dataframe_v2(
-                state_df=unique_elections,
-                playwright_client=pw_client,
-            )
+            if _scraper_type == "classic":
+                county_df, precinct_df = build_county_and_precinct_dataframe_parallel(
+                    state_df=unique_elections,
+                    client_factory=_make_client_factory(
+                        state_key=state_key,
+                        base_url=base_url,
+                        sleep_s=_SLEEP_S_COUNTY,
+                        search_path=search_path,
+                        url_style=url_style,
+                    ),
+                    max_workers=_MAX_WORKERS,
+                )
+            else:
+                county_df, precinct_df = build_county_and_precinct_dataframe_v2(
+                    state_df=unique_elections,
+                    base_url=base_url,
+                    max_workers=_MAX_WORKERS,
+                )
 
     else:
         # =============================
@@ -172,7 +194,7 @@ def scrape_one_year(
         state_df = rows_to_dataframe(rows, client=state_client)
 
         if state_df.empty:
-            return state_df, pd.DataFrame(columns=COUNTY_COLS)
+            return state_df, pd.DataFrame(columns=COUNTY_COLS), pd.DataFrame(columns=_PRECINCT_COLS)
 
         # Ensure the state column is set consistently
         if "state" not in state_df.columns:
@@ -187,8 +209,8 @@ def scrape_one_year(
         # Only hit each election detail page once
         unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
 
-        if parallel == True:
-            county_df = build_county_dataframe_parallel(
+        if parallel:
+            county_df, precinct_df = build_county_and_precinct_dataframe_parallel(
                 state_df=unique_elections,
                 client_factory=_make_client_factory(
                     state_key=state_key,
@@ -207,15 +229,15 @@ def scrape_one_year(
                 search_path=search_path,
                 url_style=url_style,
             )
-
             county_df = build_county_dataframe(
                 state_df=unique_elections,
                 client=county_client,
             )
+            precinct_df = pd.DataFrame(columns=_PRECINCT_COLS)
 
     # Common cleanup for both paths
     if county_df.empty:
-        return state_df, pd.DataFrame(columns=COUNTY_COLS)
+        return state_df, pd.DataFrame(columns=COUNTY_COLS), precinct_df
 
     # Ensure county df also uses the same state label
     if "state" not in county_df.columns:
@@ -232,7 +254,7 @@ def scrape_one_year(
             county_df[c] = pd.NA
     county_df = county_df[COUNTY_COLS]
 
-    return state_df, county_df
+    return state_df, county_df, precinct_df
 
 
 
@@ -306,7 +328,7 @@ def main() -> None:
     for year in range(year_from, year_to + 1):
         print(f"\n=== Scraping {state_key} year {year} ===")
 
-        state_df, county_df = scrape_one_year(
+        state_df, county_df, precinct_df = scrape_one_year(
             state_key=state_key,
             state_name=state,
             base_url=base_url,

@@ -35,4 +35,5 @@ articles:
   - title: About the data
     navbar: ~
     contents:
+      - data-dictionary
       - datasheet

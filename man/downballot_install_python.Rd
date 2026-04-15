@@ -25,7 +25,7 @@ downballot_install_python(
 }
 \description{
 Creates/uses a named virtual environment and installs Python requirements
-(pandas, requests, lxml, playwright), then installs Playwright Chromium.
+(pandas, requests, lxml, bs4, playwright), then installs Playwright Chromium.
 }
 \details{
 \strong{Python must already be installed on your system before calling this

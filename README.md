@@ -119,6 +119,12 @@ responsible use is in the
 - In R (after installing): `vignette("python-setup", package = "DownBallotR")`
 - Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/python-setup.html>
 
+**Data dictionary** — all columns returned across all states and sources, with type, description, and source indicators:
+
+- Source: [vignettes/data-dictionary.Rmd](vignettes/data-dictionary.Rmd)
+- In R (after installing): `vignette("data-dictionary", package = "DownBallotR")`
+- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/data-dictionary.html>
+
 **Scraping data** — entry point overview, routing rules, data availability, and quick-reference table:
 
 - Source: [vignettes/scraping-data.Rmd](vignettes/scraping-data.Rmd)

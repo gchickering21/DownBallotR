@@ -1,0 +1,187 @@
+---
+title: "Data Dictionary"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Data Dictionary}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(
+  purl     = FALSE,
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+This vignette describes every column that `scrape_elections()` can return across
+all supported states and sources. **Not every column is present for every state.**
+Which columns appear depends on the source and the `level` argument used. The
+"Sources" column in each table below indicates which scrapers produce that field.
+
+For source-specific details and worked examples, see the per-state vignettes
+linked at the end of this document.
+
+---
+
+## Source abbreviations
+
+| Abbreviation | Source / States |
+|---|---|
+| **CT** | Connecticut CTEMS |
+| **GA** | Georgia Secretary of State |
+| **IN** | Indiana Election Division |
+| **LA** | Louisiana Secretary of State |
+| **NC** | NC State Board of Elections |
+| **UT** | Utah elections portal |
+| **ES** | ElectionStats (VA, MA, CO, NH, ID, SC, NM, NY, VT) |
+
+---
+
+## Universal identifiers
+
+These columns appear across most sources and identify the election and
+geographic context of each row.
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `state` | character | State abbreviation (e.g. `"NC"`, `"LA"`, `"IN"`) | NC, LA, IN, ES |
+| `election_year` | integer | Calendar year of the election | CT, GA, IN, LA, NC, UT, ES (`year`) |
+| `election_date` | character / Date | Date of the election; format and parseability vary by source | CT, GA, IN, LA, NC, UT |
+| `election_name` | character | Human-readable election name (e.g. `"November General Election"`) | CT, GA, LA, UT |
+| `election_type` | character | Type of election (e.g. `"General"`, `"Primary"`) | IN, NC |
+| `election_id` | integer | Internal ElectionStats election identifier | ES |
+
+---
+
+## Office / contest identification
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `office` | character | Office name as reported by the source | CT, LA, GA, UT, ES |
+| `office_level` | character | Broad jurisdictional level: `"Federal"`, `"State"`, or `"Local"` | CT, IN, LA, NC, UT |
+| `office_category` | character | Broad administrative grouping (e.g. `"County Offices"`) | IN |
+| `office_title` | character | Specific office name used by Indiana (e.g. `"President of the United States"`) | IN |
+| `office_id` | character | Internal office identifier from the Indiana API | IN |
+| `office_detail` | character | Court, district, or seat qualifier appended after ` -- ` in the office title; `NA` when absent | LA |
+| `contest_name` | character | Full contest name as reported by NCSBE | NC |
+| `contest_type` | character | Contest type code from NCSBE | NC |
+| `contest_group_id` | character | Internal contest group identifier from NCSBE | NC |
+| `jurisdiction` | character | Jurisdiction extracted from the contest name | NC |
+| `district` | character | District identifier when applicable | NC, ES |
+| `stage` | character | Election stage (e.g. `"General"`, `"Primary"`) | ES |
+| `vote_for` | integer | Number of seats to fill in the contest | NC |
+| `num_seats` | integer | Number of seats available in the contest | IN |
+| `tab` | character | Source tab from the Louisiana SOS site (e.g. `"Congressional"`, `"Statewide"`) | LA |
+| `election_slug` | character | URL slug identifying the election (e.g. `"2024NovGen"`) | GA, UT |
+| `election_level` | character | Same as `office_level` but named differently by CT (`"Federal"`, `"State"`, `"Local"`) | CT |
+
+---
+
+## Candidate information
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `candidate` | character | Candidate name; cleaned of party suffixes and incumbent markers where applicable | CT, GA, IN, LA, NC, UT, ES |
+| `candidate_id` | integer | Internal ElectionStats candidate identifier | ES |
+| `candidate_name_on_ballot` | character | Name exactly as printed on the ballot | IN |
+| `party` | character | Party affiliation; full name (e.g. `"Republican"`) for IN/LA/CT; abbreviation for NC/GA/UT; as returned by source for ES | CT, GA, IN, LA, NC, UT, ES |
+| `is_incumbent` | logical | `TRUE` if `(I)` appears in the raw candidate name from the source | GA, UT |
+
+---
+
+## Vote totals
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `votes` | integer | Total vote count for the candidate in the row's geographic unit | CT, GA, IN, LA, NC, UT, ES (county/precinct) |
+| `total_vote_count` | integer | Statewide total vote count — ElectionStats state-level name for `votes` | ES (state) |
+| `votes_total` | integer | Sum of all vote methods (when `include_vote_methods = TRUE`) | GA |
+| `votes_election_day` | integer | Election Day ballots | NC, GA |
+| `votes_advance_in_person` | integer | Advance in-person (early voting) ballots | GA |
+| `early_voting` | integer | Early voting ballots | NC |
+| `votes_absentee` | integer | Absentee by mail ballots | GA |
+| `absentee_by_mail` | integer | Absentee by mail ballots (NCSBE column name) | NC |
+| `absentee_or_early` | integer | Combined absentee/early votes — appears in older NC files before the two fields were separated | NC |
+| `provisional` | integer | Provisional ballots | NC, GA (`votes_provisional`) |
+| `election_day` | integer | Election Day votes (NCSBE column name) | NC |
+
+---
+
+## Vote share and results
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `vote_pct` | numeric | Percentage of votes within the contest; computation and precision vary by source | CT, IN, LA, NC, UT |
+| `vote_percentage` | numeric | ElectionStats state-level name for vote share | ES (state) |
+| `pct` | numeric | Percentage of votes — GA/UT column name | GA, UT |
+| `winner` | logical | `TRUE` if the candidate won the contest | CT (state), IN (state), LA (state), NC (state) |
+| `is_winner` | logical | Winner flag from GA/UT; always `NA` — the source HTML does not expose a winner marker | GA, UT |
+| `contest_outcome` | character | `"Won"` / `"Lost"` for CT state level; `"Winner"` for ES | CT (state), ES |
+| `winner_status` | character | Raw winner status string as returned by NCSBE | NC |
+| `runoff_status` | character | Runoff indicator from NCSBE | NC |
+| `recount_status` | character | Recount indicator from NCSBE | NC |
+| `county_winner` | logical | `TRUE` if the candidate won within this county / county-or-city | IN (county), ES (county) |
+| `town_winner` | logical | `TRUE` if the candidate won within this town | CT (town) |
+| `parish_winner` | logical | `TRUE` if the candidate won within this parish | LA (parish) |
+| `precinct_winner` | logical | `TRUE` if the candidate won within this precinct | ES (precinct) |
+
+---
+
+## Geographic sub-units
+
+The column present depends on the geographic level returned. Only one
+sub-unit column typically appears per row.
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `county` | character | County name | CT (town), GA (county), IN (county), NC (county + precinct), UT (county) |
+| `county_name` | character | County name — Indiana's column name at county level | IN (county) |
+| `county_fips` | character | 5-digit county FIPS code | IN (county) |
+| `county_or_city` | character | County or independent city name — ElectionStats county-level | ES (county) |
+| `town` | character | Town name | CT (town) |
+| `parish` | character | Parish name (e.g. `"Orleans Parish"`) | LA (parish) |
+| `precinct` | character | Precinct name or identifier | NC (precinct), ES (precinct) |
+| `precinct_abbrv` | character | Precinct abbreviation from NCSBE | NC (precinct) |
+| `real_precinct` | logical | `FALSE` for pseudo-rows (e.g. absentee-only counters) that NCSBE includes in its files | NC (precinct) |
+
+---
+
+## Reporting status
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `result_status` | character | Reporting status string (e.g. `"OFFICIAL RESULTS"`, `"UNOFFICIAL RESULTS"`) | GA, UT |
+| `localities_reporting` | character | `"X/Y"` string showing how many localities have reported | GA, UT |
+| `precincts_reporting` | integer | Number of precincts reporting | IN (state), LA |
+| `total_precincts` | integer | Total number of precincts statewide | IN (state) |
+| `precincts_expected` | integer | Total number of precincts expected for the contest | LA |
+| `voter_turnout_pct` | numeric | Statewide voter turnout percentage; `NA` when not published by the source | LA (state) |
+| `parish_voter_turnout_pct` | numeric | Parish-level voter turnout percentage; `NA` when not published | LA (parish) |
+
+---
+
+## Metadata and internal identifiers
+
+| Column | Type | Description | Sources |
+|---|---|---|---|
+| `url` | character | URL of the election results page scraped | GA, UT |
+| `detail_url` | character | URL for the candidate detail page on ElectionStats | ES (state) |
+| `ftp_date` | character | Date stamp of the NCSBE FTP file the row originated from | NC (precinct) |
+
+---
+
+## Further reading
+
+Each source has its own vignette with argument reference, worked examples, and
+performance notes:
+
+- `vignette("connecticut", package = "DownBallotR")` — CT CTEMS
+- `vignette("georgia", package = "DownBallotR")` — GA Secretary of State
+- `vignette("indiana", package = "DownBallotR")` — Indiana Election Division
+- `vignette("louisiana", package = "DownBallotR")` — LA Secretary of State
+- `vignette("north-carolina", package = "DownBallotR")` — NC State Board of Elections
+- `vignette("utah", package = "DownBallotR")` — Utah elections portal
+- `vignette("election-stats", package = "DownBallotR")` — ElectionStats (VA, MA, CO, NH, ID, SC, NM, NY, VT)

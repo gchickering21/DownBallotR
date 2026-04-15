@@ -56,9 +56,9 @@ controls county-level parallelism; for Connecticut, controls town-level
 parallelism; for Louisiana, controls parish-level parallelism (default is
 capped at 2 for LA). Ignored for all other states.}
 
-\item{include_vote_methods}{(Georgia / Utah) If \code{TRUE}, also return a
+\item{include_vote_methods}{(Georgia only) If \code{TRUE}, also return a
 vote-method breakdown table (Advance in Person, Election Day, Absentee by
-Mail, Provisional) for Georgia and Utah results (default \code{FALSE}).
+Mail, Provisional) for Georgia results (default \code{FALSE}).
 Ignored for all other states.}
 }
 \value{

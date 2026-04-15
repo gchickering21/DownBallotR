@@ -194,16 +194,9 @@ scrape_elections <- function(
       paste0('"', valid_levels, '"', collapse = ", ")
     ), call. = FALSE)
 
-  if (.include_vote_methods_supplied && source == "utah_results")
+  if (isTRUE(include_vote_methods) && !source %in% c("georgia_results", "utah_results"))
     stop(
-      "'include_vote_methods' is not supported for Utah.\n",
-      "  Remove this argument.",
-      call. = FALSE
-    )
-
-  if (isTRUE(include_vote_methods) && source != "georgia_results")
-    stop(
-      "'include_vote_methods = TRUE' is only supported for Georgia.\n",
+      "'include_vote_methods = TRUE' is only supported for Georgia and Utah.\n",
       "  Remove this argument or set include_vote_methods = FALSE.",
       call. = FALSE
     )

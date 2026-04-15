@@ -182,4 +182,27 @@ def scrape(source: str, **kwargs) -> "object":
         raise ValueError(
             f"Unknown source: {source!r}. Available: {list_sources()}"
         )
-    return _SOURCES[source]["scrape_fn"](**kwargs)
+
+    result = _SOURCES[source]["scrape_fn"](**kwargs)
+
+    # Count total rows across all returned DataFrames and notify the user
+    # before the (potentially slow) reticulate Python→R transfer begins.
+    try:
+        import pandas as _pd
+        if isinstance(result, dict):
+            total_rows = sum(len(v) for v in result.values() if isinstance(v, _pd.DataFrame))
+        elif isinstance(result, _pd.DataFrame):
+            total_rows = len(result)
+        else:
+            total_rows = None
+
+        if total_rows is not None:
+            print(
+                f"Transferring {total_rows:,} rows to R"
+                + (" — this may take a minute for large scrapes..." if total_rows > 50_000 else "..."),
+                flush=True,
+            )
+    except Exception:
+        pass
+
+    return result

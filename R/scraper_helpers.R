@@ -88,7 +88,7 @@
 
   if (!is.null(year_to) && year_to > avail$end_year) {
     message(
-      "\nNote: ", requested_to, " is beyond the last confirmed year (",
+      "\nNote: ", year_to, " is beyond the last confirmed year (",
       avail$end_year, ") for ", label, ".\n",
       "  This year has not been verified. DownBallotR will attempt the scrape,\n",
       "  but results are not guaranteed.\n",

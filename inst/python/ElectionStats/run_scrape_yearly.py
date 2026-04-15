@@ -43,7 +43,7 @@ _MAX_WORKERS = 6
 _SAMPLE_N = 5000
 
 JOIN_KEYS = ["state", "election_id", "candidate_id"]
-COUNTY_COLS = ["state", "year", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
+COUNTY_COLS = ["state", "year", "election_id", "candidate_id", "county_or_city", "candidate", "votes", "county_winner"]
 
 
 # ---------------------------
@@ -109,6 +109,7 @@ def scrape_one_year(
     parallel: bool,
     scraping_method: str,
     url_style: str = "path_params",
+    level: str = "all",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Returns (state_df, county_df, precinct_df) for a single year.
@@ -118,7 +119,10 @@ def scrape_one_year(
     county_df:   long county votes (includes candidate_id)
     precinct_df: long precinct votes; empty DataFrame for states/years without
                  precinct rows on the detail pages.
+
+    When level='state', county/precinct fetching is skipped entirely.
     """
+    _need_subunit = level != "state"
 
     if scraping_method == "playwright":
         # =============================
@@ -153,7 +157,16 @@ def scrape_one_year(
             # Only hit each election detail page once
             unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
 
-            if _scraper_type == "classic":
+            if not _need_subunit:
+                county_df   = pd.DataFrame(columns=COUNTY_COLS)
+                precinct_df = pd.DataFrame(columns=_PRECINCT_COLS)
+            elif _scraper_type == "classic":
+                n_unique = len(unique_elections)
+                print(
+                    f"  [ElectionStats] Found {len(state_df):,} state-level rows; "
+                    f"fetching county/precinct for {n_unique:,} election(s)...",
+                    flush=True,
+                )
                 county_df, precinct_df = build_county_and_precinct_dataframe_parallel(
                     state_df=unique_elections,
                     client_factory=_make_client_factory(
@@ -166,11 +179,78 @@ def scrape_one_year(
                     max_workers=_MAX_WORKERS,
                 )
             else:
+                n_unique = len(unique_elections)
+                print(
+                    f"  [ElectionStats] Found {len(state_df):,} state-level rows; "
+                    f"fetching county/precinct for {n_unique:,} election(s)...",
+                    flush=True,
+                )
+                # Use positional candidate IDs from the CSV header (1, 2, 3 ...).
+                # Candidate names from v2 text summaries often differ from CSV header
+                # names, so a global name→id map built from state_df is unreliable.
+                # Passing unique_elections (no candidate columns) forces each CSV to
+                # assign its own sequential IDs, which are then consistent across
+                # county_df, precinct_df, and the rebuilt state_df below.
                 county_df, precinct_df = build_county_and_precinct_dataframe_v2(
                     state_df=unique_elections,
                     base_url=base_url,
                     max_workers=_MAX_WORKERS,
                 )
+
+            # ── Rebuild state_df from CSV data (v2 states only) ──────────────
+            # The v2 search page provides election metadata (office, district,
+            # stage, year) but only text-parsed candidate info (votes=0, no party,
+            # winner pct only).  Rebuild the candidate rows from county CSV sums so
+            # that votes, party, vote_pct, and candidate_id are all accurate and
+            # consistent with county_df / precinct_df.
+            if _scraper_type == "v2" and not county_df.empty:
+                # Preserve per-election metadata from search results
+                meta_cols = [c for c in ["election_id", "year", "office",
+                                         "office_level", "district", "stage",
+                                         "state", "detail_url"]
+                             if c in state_df.columns]
+                election_meta = (
+                    state_df[meta_cols]
+                    .drop_duplicates(subset=["election_id"])
+                    .reset_index(drop=True)
+                )
+
+                # Statewide vote totals = sum of locality (county) votes per candidate
+                statewide = (
+                    county_df
+                    .groupby(
+                        ["election_id", "candidate_id", "candidate", "party"],
+                        as_index=False,
+                    )["votes"]
+                    .sum()
+                )
+
+                # vote_pct from actual vote totals
+                elec_total = (
+                    statewide
+                    .groupby("election_id", as_index=False)["votes"]
+                    .sum()
+                    .rename(columns={"votes": "_total"})
+                )
+                statewide = statewide.merge(elec_total, on="election_id", how="left")
+                statewide["vote_pct"] = (
+                    (statewide["votes"] / statewide["_total"].replace(0, pd.NA) * 100)
+                    .round(2)
+                    .apply(lambda x: f"{x}%" if pd.notna(x) else "")
+                )
+                statewide = statewide.drop(columns=["_total"])
+
+                # Winner flag: candidate with the most votes per election
+                max_votes = statewide.groupby("election_id")["votes"].transform("max")
+                statewide["winner"] = statewide["votes"] == max_votes
+
+                # Combine CSV candidate rows with search-result election metadata
+                state_df = statewide.merge(election_meta, on="election_id", how="left")
+                state_df["state"] = state_name
+
+                # Move state to first column
+                cols = ["state"] + [c for c in state_df.columns if c != "state"]
+                state_df = state_df[cols]
 
     else:
         # =============================
@@ -209,31 +289,41 @@ def scrape_one_year(
         # Only hit each election detail page once
         unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
 
-        if parallel:
-            county_df, precinct_df = build_county_and_precinct_dataframe_parallel(
-                state_df=unique_elections,
-                client_factory=_make_client_factory(
+        if not _need_subunit:
+            county_df   = pd.DataFrame(columns=COUNTY_COLS)
+            precinct_df = pd.DataFrame(columns=_PRECINCT_COLS)
+        else:
+            n_unique = len(unique_elections)
+            print(
+                f"  [ElectionStats] Found {len(state_df):,} state-level rows; "
+                f"fetching county/precinct for {n_unique:,} election(s)...",
+                flush=True,
+            )
+            if parallel:
+                county_df, precinct_df = build_county_and_precinct_dataframe_parallel(
+                    state_df=unique_elections,
+                    client_factory=_make_client_factory(
+                        state_key=state_key,
+                        base_url=base_url,
+                        sleep_s=_SLEEP_S_COUNTY,
+                        search_path=search_path,
+                        url_style=url_style,
+                    ),
+                    max_workers=_MAX_WORKERS,
+                )
+            else:
+                county_client = _make_client(
                     state_key=state_key,
                     base_url=base_url,
                     sleep_s=_SLEEP_S_COUNTY,
                     search_path=search_path,
                     url_style=url_style,
-                ),
-                max_workers=_MAX_WORKERS,
-            )
-        else:
-            county_client = _make_client(
-                state_key=state_key,
-                base_url=base_url,
-                sleep_s=_SLEEP_S_COUNTY,
-                search_path=search_path,
-                url_style=url_style,
-            )
-            county_df = build_county_dataframe(
-                state_df=unique_elections,
-                client=county_client,
-            )
-            precinct_df = pd.DataFrame(columns=_PRECINCT_COLS)
+                )
+                county_df = build_county_dataframe(
+                    state_df=unique_elections,
+                    client=county_client,
+                )
+                precinct_df = pd.DataFrame(columns=_PRECINCT_COLS)
 
     # Common cleanup for both paths
     if county_df.empty:
@@ -248,11 +338,31 @@ def scrape_one_year(
     if "year" not in county_df.columns:
         county_df.insert(0, "year", year)
 
+    # Derive county_winner: top vote-getter per election+county
+    if not county_df.empty and "votes" in county_df.columns:
+        max_votes = county_df.groupby(
+            ["election_id", "county_or_city"], dropna=False
+        )["votes"].transform("max")
+        county_df["county_winner"] = county_df["votes"] == max_votes
+
+    # Derive precinct_winner: top vote-getter per election+county+precinct
+    if not precinct_df.empty and "votes" in precinct_df.columns:
+        max_votes = precinct_df.groupby(
+            ["election_id", "county", "precinct"], dropna=False
+        )["votes"].transform("max")
+        precinct_df["precinct_winner"] = precinct_df["votes"] == max_votes
+
     # Normalize/ensure expected output columns exist
     for c in COUNTY_COLS:
         if c not in county_df.columns:
             county_df[c] = pd.NA
     county_df = county_df[COUNTY_COLS]
+
+    for c in _PRECINCT_COLS:
+        if c not in precinct_df.columns:
+            precinct_df[c] = pd.NA
+    if not precinct_df.empty:
+        precinct_df = precinct_df[_PRECINCT_COLS]
 
     return state_df, county_df, precinct_df
 

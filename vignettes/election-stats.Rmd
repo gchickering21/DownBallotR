@@ -204,9 +204,11 @@ res_seq <- scrape_elections(
 ### `level = "county"`
 
 - `state`, `year`, `election_id`, `candidate_id`
-- `county_or_city`, `candidate_name`, `votes`
+- `county_or_city`, `candidate`, `votes`
+- `county_winner` — `TRUE` for the top vote-getter within each county/city + election
 
 ### `level = "precinct"` (CO, MA, ID, SC, NM, VA)
 
 - `state`, `election_id`, `candidate_id`
 - `county`, `precinct`, `candidate`, `votes`
+- `precinct_winner` — `TRUE` for the top vote-getter within each precinct + election

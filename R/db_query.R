@@ -135,6 +135,7 @@ db_available_years <- function(state = NULL) {
   )
 
   result <- rbind(es_df, nc_row, ct_row, ga_row, ut_row, la_row, in_row)
+  result <- result[order(result$state), ]
 
   if (!is.null(state)) {
     .stop_if_not_scalar(state, "state")

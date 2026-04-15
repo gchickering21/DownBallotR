@@ -142,8 +142,17 @@ class NcElectionPipeline:
 
         norm = normalize_northcarolina_results_cols(raw, fallback_election_date=election_date)
 
+        # Aggregation functions expect choice/choice_party/total_votes internally
         county_df = aggregate_to_county_level(norm)
         state_df = aggregate_county_to_state(county_df)
+
+        # Rename precinct columns to match county/state schema so all three
+        # levels share candidate/party/votes as join keys
+        norm = norm.rename(columns={
+            "choice":       "candidate",
+            "choice_party": "party",
+            "total_votes":  "votes",
+        })
 
         print(f"[NC]   Done: {len(norm):,} precinct rows, {len(county_df):,} county rows.")
         return norm, county_df, state_df

@@ -508,6 +508,10 @@ def _build_candidate_id_map_from_state_df(state_df: pd.DataFrame) -> Dict[str, i
 
 _COUNTY_COLS_V2 = ["state", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
 
+# Row-type labels that represent a county/locality-level aggregate row.
+# Virginia uses "Locality"; other states may use "County", "City", or "County/City".
+_COUNTY_ROW_TYPES = {"county", "locality", "city", "county/city"}
+
 
 def _parse_contest_csv_v2(
     csv_text: str,
@@ -521,20 +525,20 @@ def _parse_contest_csv_v2(
     CSV format
     ----------
     Row 0 : ``,,Candidate1,Candidate2,...,Total Votes Cast,Total Ballots Cast``
-    Row 1 : ``,,Party1,Party2,...``  (skipped)
+    Row 1 : ``,,Party1,Party2,...``
     Row 2+: ``RowType,Name,votes1,votes2,...,total,total_ballots``
 
     RowType values
     --------------
-    ``"County"``   → county-level aggregate row
+    ``"County"`` / ``"Locality"`` / ``"City"`` → county-level aggregate row
     ``"Precinct"`` → precinct-level row; county context tracked from the last
-                     County row seen above it in the file
+                     county-equivalent row seen above it in the file
     anything else  → district-level totals (skipped)
 
     Returns
     -------
     (county_df, precinct_df)
-        county_df   columns: state, election_id, candidate_id, county_or_city, candidate, votes
+        county_df   columns: state, election_id, candidate_id, county_or_city, candidate, party, votes
         precinct_df columns: state, election_id, candidate_id, county, precinct, candidate, votes
     """
     import csv as _csv
@@ -567,17 +571,27 @@ def _parse_contest_csv_v2(
     if candidate_id_map is None:
         candidate_id_map = {name: idx + 1 for idx, (_, name) in enumerate(cand_indices)}
 
+    # ── Party row (row index 1): same column positions as the candidate header ──
+    party_map: Dict[str, str] = {}
+    if len(rows) >= 2:
+        party_row = rows[1]
+        for col_idx, cand_name in cand_indices:
+            if col_idx < len(party_row):
+                party = party_row[col_idx].strip()
+                if party:
+                    party_map[cand_name] = party
+
     county_records: List[Dict] = []
     precinct_records: List[Dict] = []
     current_county: Optional[str] = None
 
-    for row in rows[1:]:   # skip only the header; party row (if any) is ignored via row_type check
+    for row in rows[1:]:
         if len(row) < 3:
             continue
         row_type = row[0].strip()
         name     = row[1].strip()
 
-        if row_type == "County":
+        if row_type.lower() in _COUNTY_ROW_TYPES:
             current_county = name
             for col_idx, cand_name in cand_indices:
                 if col_idx >= len(row):
@@ -587,12 +601,13 @@ def _parse_contest_csv_v2(
                 except ValueError:
                     continue
                 county_records.append({
-                    "state":         state,
-                    "election_id":   election_id,
-                    "candidate_id":  candidate_id_map.get(cand_name, 0),
+                    "state":          state,
+                    "election_id":    election_id,
+                    "candidate_id":   candidate_id_map.get(cand_name, 0),
                     "county_or_city": name,
-                    "candidate":     cand_name,
-                    "votes":         votes,
+                    "candidate":      cand_name,
+                    "party":          party_map.get(cand_name, ""),
+                    "votes":          votes,
                 })
 
         elif row_type == "Precinct":
@@ -613,7 +628,7 @@ def _parse_contest_csv_v2(
                     "candidate":    cand_name,
                     "votes":        votes,
                 })
-        # else: district-level totals row — skip
+        # else: district/statewide totals row — skip
 
     county_df   = pd.DataFrame(county_records)   if county_records   else pd.DataFrame(columns=_COUNTY_COLS_V2)
     precinct_df = pd.DataFrame(precinct_records) if precinct_records else pd.DataFrame(columns=_PRECINCT_COLS)
@@ -685,9 +700,6 @@ def build_county_and_precinct_dataframe_v2(
     unique_rows = [(int(row["election_id"]), str(row["state"])) for _, row in unique.iterrows()]
     n_elections = len(unique_rows)
 
-    print(f"  [ElectionStats] Downloading {n_elections} CSV(s) ({max_workers} parallel)...", flush=True)
-    done_count = 0
-
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(_fetch_one, eid, state): eid
@@ -695,14 +707,12 @@ def build_county_and_precinct_dataframe_v2(
         }
         for future in _as_completed(futures):
             eid = futures[future]
-            done_count += 1
             try:
                 c_df, p_df = future.result()
                 if not c_df.empty:
                     county_frames.append(c_df)
                 if not p_df.empty:
                     precinct_frames.append(p_df)
-                print(f"  [ElectionStats] CSV {done_count}/{n_elections} done (election_id={eid}).", flush=True)
             except Exception as exc:
                 print(f"  [ElectionStats] WARN: CSV download failed for election_id={eid}: {exc}", flush=True)
 
@@ -977,7 +987,7 @@ def _extract_precinct_vote_tds(
 
 
 _PRECINCT_COLS = [
-    "state", "election_id", "candidate_id", "county", "precinct", "candidate", "votes"
+    "state", "election_id", "candidate_id", "county", "precinct", "candidate", "votes", "precinct_winner"
 ]
 
 
@@ -1063,6 +1073,8 @@ def parse_precinct_votes_from_detail_html(
         precinct = _extract_precinct_label(tr, all_headers, style)
 
         if not county or not precinct:
+            continue
+        if county.lower() in ("totals", "total"):
             continue
         if precinct.lower() in ("totals", "total"):
             continue
@@ -1273,7 +1285,6 @@ def build_county_and_precinct_dataframe_parallel(
     precinct_frames: List[pd.DataFrame] = []
 
     n_jobs = len(jobs)
-    done_count = 0
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = {
             ex.submit(
@@ -1283,14 +1294,15 @@ def build_county_and_precinct_dataframe_parallel(
             for st, election_id, url in jobs
         }
         for fut in as_completed(futures):
-            done_count += 1
             eid = futures[fut]
-            c_df, p_df = fut.result()
-            if c_df is not None and not c_df.empty:
-                county_frames.append(c_df)
-            if p_df is not None and not p_df.empty:
-                precinct_frames.append(p_df)
-            print(f"  [ElectionStats] County/precinct: {done_count}/{n_jobs} elections done (id={eid})", flush=True)
+            try:
+                c_df, p_df = fut.result()
+                if c_df is not None and not c_df.empty:
+                    county_frames.append(c_df)
+                if p_df is not None and not p_df.empty:
+                    precinct_frames.append(p_df)
+            except Exception as exc:
+                print(f"  [ElectionStats] WARN: county/precinct failed for election_id={eid}: {exc}", flush=True)
 
     county_df   = pd.concat(county_frames,   ignore_index=True) if county_frames   else pd.DataFrame(columns=county_cols)
     precinct_df = pd.concat(precinct_frames, ignore_index=True) if precinct_frames else pd.DataFrame(columns=_PRECINCT_COLS)

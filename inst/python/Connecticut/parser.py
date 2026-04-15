@@ -49,6 +49,8 @@ Election-level classification
 from __future__ import annotations
 
 import re
+from datetime import date
+from datetime import datetime as _datetime
 
 import pandas as pd
 from lxml import html as lhtml
@@ -56,6 +58,28 @@ from lxml import html as lhtml
 from .models import CtElectionInfo
 
 from office_level_utils import classify_office_level as classify_election_level
+
+
+_CT_DATE_FMTS = ("%B %d, %Y", "%B %Y", "%Y")
+
+
+def _parse_ct_election_date(election_name: str) -> "date | None":
+    """Extract and parse the date portion from a CT election name.
+
+    Election names look like "November 8, 2022 -- General Election".
+    Returns a ``datetime.date`` on success, None if unparseable.
+    """
+    raw = (
+        election_name.split(" -- ")[0].strip()
+        if " -- " in election_name
+        else election_name.strip()
+    )
+    for fmt in _CT_DATE_FMTS:
+        try:
+            return _datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 # ── Output column definitions ─────────────────────────────────────────────────
@@ -85,10 +109,13 @@ _TOWN_COLS = [
     "party",
     "votes",
     "vote_pct",
+    "town_winner",
 ]
 
 # Columns that define a unique contest at the state level.
 _CONTEST_STATE_COLS = ["election_name", "office"]
+# Columns that define a unique contest at the town level.
+_CONTEST_TOWN_COLS = ["election_name", "town", "office"]
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -133,8 +160,10 @@ def _clean_party(img_title: str) -> str:
     return re.sub(r"\s+Party\s*$", "", img_title, flags=re.IGNORECASE).strip()
 
 
-def _add_winner(df: pd.DataFrame, contest_cols: list[str]) -> pd.DataFrame:
-    """Add boolean ``winner`` column: ``True`` for the max-votes candidate per
+def _add_winner(
+    df: pd.DataFrame, contest_cols: list[str], col: str = "winner"
+) -> pd.DataFrame:
+    """Add a boolean winner column: ``True`` for the max-votes candidate per
     contest, ``False`` for all others.  Ties both receive ``True``.
     Candidates with no valid vote data receive ``pd.NA``.
 
@@ -144,20 +173,22 @@ def _add_winner(df: pd.DataFrame, contest_cols: list[str]) -> pd.DataFrame:
         DataFrame with at least ``votes`` and the columns in *contest_cols*.
     contest_cols : list[str]
         Columns that together identify a unique contest (e.g. election + office).
+    col : str
+        Name of the output column (default ``'winner'``).
     """
     if df.empty:
         df = df.copy()
-        df["winner"] = pd.Series(dtype="boolean")
+        df[col] = pd.Series(dtype="boolean")
         return df
     df = df.copy()
     # transform("max") always returns a Series with the same index as df,
     # so boolean masks derived from it are always index-aligned.
     max_votes = df.groupby(contest_cols, dropna=False)["votes"].transform("max")
     has_votes = df["votes"].notna()
-    df["winner"] = pd.NA
-    df["winner"] = df["winner"].astype("boolean")
-    df.loc[has_votes, "winner"] = False
-    df.loc[has_votes & (df["votes"] == max_votes), "winner"] = True
+    df[col] = pd.NA
+    df[col] = df[col].astype("boolean")
+    df.loc[has_votes, col] = False
+    df.loc[has_votes & (df["votes"] == max_votes), col] = True
     return df
 
 
@@ -284,9 +315,7 @@ def parse_statewide_results(
     if not race_rows:
         return pd.DataFrame(columns=_STATE_COLS)
 
-    election_date_str = (
-        election.election_date.isoformat() if election.election_date else None
-    )
+    election_date_str = _parse_ct_election_date(election.name)
     rows: list[dict] = []
 
     for race_name, cr in race_rows:
@@ -345,9 +374,7 @@ def parse_town_results(
     if not race_rows:
         return pd.DataFrame(columns=_TOWN_COLS)
 
-    election_date_str = (
-        election.election_date.isoformat() if election.election_date else None
-    )
+    election_date_str = _parse_ct_election_date(election.name)
     rows: list[dict] = []
 
     for race_name, cr in race_rows:
@@ -370,4 +397,4 @@ def parse_town_results(
     if not rows:
         return pd.DataFrame(columns=_TOWN_COLS)
 
-    return _build_df(rows, _TOWN_COLS)
+    return _add_winner(_build_df(rows, _TOWN_COLS), _CONTEST_TOWN_COLS, col="town_winner")

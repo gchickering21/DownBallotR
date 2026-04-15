@@ -101,6 +101,22 @@ res$vote_method_county %>%
          votes_absentee, votes_provisional, votes_total)
 ```
 
+### Faster county scraping with more parallel browsers
+
+Georgia has 159 counties. By default, county pages are scraped with 4 parallel
+Chromium browsers. Increasing `max_workers` can cut runtime significantly on
+machines with enough CPU/RAM.
+
+```{r, purl=FALSE}
+res <- scrape_elections(
+  state       = "GA",
+  year_from   = 2024,
+  year_to     = 2024,
+  level       = "all",
+  max_workers = 8L
+)
+```
+
 ### Multi-year scrape
 
 ```{r, purl=FALSE}

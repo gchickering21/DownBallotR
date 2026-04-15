@@ -27,7 +27,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
-        "url_style": "path_params",
+        "url_style": "query_params",
     },
     "massachusetts": {
         "base_url": "https://electionstats.state.ma.us/elections",
@@ -56,21 +56,21 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
-        "url_style": "path_params",
+        "url_style": "query_params",
     },
     "new_mexico": {
         "base_url": "https://electionstats.sos.nm.gov",
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
-        "url_style": "path_params",
+        "url_style": "query_params",
     },
     "new_york": {
         "base_url": "https://results.elections.ny.gov",
         "search_path": "/search",
         "scraper_type": "v2",
         "scraping_method": "playwright",
-        "url_style": "path_params",
+        "url_style": "query_params",
     },
     "idaho": {
         "base_url": "https://canvass.sos.idaho.gov/eng/contests",

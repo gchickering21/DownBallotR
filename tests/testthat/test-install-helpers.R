@@ -12,6 +12,7 @@ test_that("db_required_python_packages returns expected pip-installable packages
   expect_true("requests"   %in% pkgs)
   expect_true("lxml"       %in% pkgs)
   expect_true("playwright" %in% pkgs)
+  expect_true("pyreadr" %in% pkgs)
 
   # stdlib modules must NOT be in the pip list
   expect_false("datetime"   %in% pkgs)

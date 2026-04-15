@@ -60,7 +60,7 @@ _COUNTY_COLS = [
     "party",
     "votes",
     "vote_pct",
-    "winner",
+    "county_winner",
     "num_seats",
 ]
 
@@ -104,7 +104,7 @@ def _compute_vote_pct(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
     return df
 
 
-def _fix_winners(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+def _fix_winners(df: pd.DataFrame, group_cols: list[str], col: str = "winner") -> pd.DataFrame:
     """Re-derive winner flag: top num_seats candidates by votes within each contest.
 
     The JSON marks all candidates as isWinner='F' for local races in the
@@ -114,7 +114,7 @@ def _fix_winners(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
     if df.empty:
         return df
     rank = df.groupby(group_cols, dropna=False)["votes"].rank(method="min", ascending=False)
-    df["winner"] = rank <= df["num_seats"]
+    df[col] = rank <= df["num_seats"]
     return df
 
 
@@ -299,7 +299,7 @@ def parse_county_results(
                     "party":                   _expand_party(cand.get("PARTY") or cand.get("PARTY_ABBREV", "")),
                     "votes":                    _safe_int(cand.get(vote_field, 0)),
                     "vote_pct":                 0.0,
-                    "winner":                   cand.get("isWinner", "") == "T",
+                    "county_winner":             cand.get("isWinner", "") == "T",
                     "num_seats":                num_seats,
                 })
 
@@ -307,5 +307,5 @@ def parse_county_results(
         return pd.DataFrame(columns=_COUNTY_COLS)
     df = pd.DataFrame(rows)
     df = _compute_vote_pct(df, ["election_year", "election_date", "office_id", "county_name"])
-    df = _fix_winners(df, ["election_year", "election_date", "office_id", "county_name"])
+    df = _fix_winners(df, ["election_year", "election_date", "office_id", "county_name"], col="county_winner")
     return df[_COUNTY_COLS]

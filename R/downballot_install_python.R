@@ -3,7 +3,7 @@
 #' @keywords internal
 db_required_python_packages <- function() {
   # datetime, re, and dataclasses are Python stdlib — not pip-installable
-  c("pandas", "requests", "lxml", "playwright")
+  c("pandas", "requests", "lxml", "bs4", "playwright", "pyreadr")
 }
 
 #' @keywords internal
@@ -250,7 +250,7 @@ db_install_plan <- function(pkgs, reinstall = FALSE, install_chromium = TRUE) {
 #' Install Python dependencies for downballotR
 #'
 #' Creates/uses a named virtual environment and installs Python requirements
-#' (pandas, requests, lxml, playwright), then installs Playwright Chromium.
+#' (pandas, requests, lxml, bs4, playwright), then installs Playwright Chromium.
 #'
 #' **Python must already be installed on your system before calling this
 #' function.** \code{downballot_install_python()} creates a virtual environment

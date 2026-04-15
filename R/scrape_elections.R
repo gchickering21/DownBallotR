@@ -63,9 +63,9 @@
 #'   controls county-level parallelism; for Connecticut, controls town-level
 #'   parallelism; for Louisiana, controls parish-level parallelism (default is
 #'   capped at 2 for LA). Ignored for all other states.
-#' @param include_vote_methods (Georgia / Utah) If \code{TRUE}, also return a
+#' @param include_vote_methods (Georgia only) If \code{TRUE}, also return a
 #'   vote-method breakdown table (Advance in Person, Election Day, Absentee by
-#'   Mail, Provisional) for Georgia and Utah results (default \code{FALSE}).
+#'   Mail, Provisional) for Georgia results (default \code{FALSE}).
 #'   Ignored for all other states.
 #'
 #' @return A \code{data.frame}, or a named list when \code{level = "all"}:
@@ -150,8 +150,9 @@ scrape_elections <- function(
   caller_env <- parent.frame()
 
   # Capture before match.arg() assigns to locals — missing() is call-time state
-  .parallel_supplied    <- !missing(parallel)
-  .max_workers_supplied <- !missing(max_workers)
+  .parallel_supplied           <- !missing(parallel)
+  .max_workers_supplied        <- !missing(max_workers)
+  .include_vote_methods_supplied <- !missing(include_vote_methods)
 
   level <- match.arg(level)
 
@@ -193,9 +194,16 @@ scrape_elections <- function(
       paste0('"', valid_levels, '"', collapse = ", ")
     ), call. = FALSE)
 
-  if (isTRUE(include_vote_methods) && !source %in% c("georgia_results", "utah_results"))
+  if (.include_vote_methods_supplied && source == "utah_results")
     stop(
-      "'include_vote_methods = TRUE' is only supported for Georgia and Utah.\n",
+      "'include_vote_methods' is not supported for Utah.\n",
+      "  Remove this argument.",
+      call. = FALSE
+    )
+
+  if (isTRUE(include_vote_methods) && source != "georgia_results")
+    stop(
+      "'include_vote_methods = TRUE' is only supported for Georgia.\n",
       "  Remove this argument or set include_vote_methods = FALSE.",
       call. = FALSE
     )
@@ -238,11 +246,10 @@ scrape_elections <- function(
       include_vote_methods = isTRUE(include_vote_methods)
     ),
     "utah_results" = .scrape_ut(
-      year_from            = year_from,
-      year_to              = year_to,
-      level                = level,
-      max_county_workers   = as.integer(max_workers),
-      include_vote_methods = isTRUE(include_vote_methods)
+      year_from          = year_from,
+      year_to            = year_to,
+      level              = level,
+      max_county_workers = as.integer(max_workers)
     ),
     "indiana_results" = .scrape_in(
       year_from = year_from,

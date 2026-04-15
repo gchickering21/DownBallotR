@@ -112,6 +112,7 @@ _STATE_COLS = [
     "tab",
     "office_level",
     "office",
+    "office_detail",
     "candidate",
     "party",
     "votes",
@@ -129,11 +130,12 @@ _PARISH_COLS = [
     "parish",
     "office_level",
     "office",
+    "office_detail",
     "candidate",
     "party",
     "votes",
     "vote_pct",
-    "winner",
+    "parish_winner",
     "precincts_reporting",
     "precincts_expected",
     "parish_voter_turnout_pct",
@@ -302,9 +304,17 @@ def _parse_results_from_doc(
         title_spans = race_div.xpath(".//span[contains(@class,'race-title-text')]")
         if not title_spans:
             continue
-        office = " ".join(title_spans[0].text_content().split())
-        if not office:
+        raw_office = " ".join(title_spans[0].text_content().split())
+        if not raw_office:
             continue
+
+        if " -- " in raw_office:
+            office, office_detail = raw_office.split(" -- ", 1)
+            office = office.strip()
+            office_detail = office_detail.strip()
+        else:
+            office = raw_office
+            office_detail = None
 
         election_level = _classify_election_level(tab, office)
 
@@ -352,6 +362,7 @@ def _parse_results_from_doc(
                 "election_date":      election.election_date,
                 "office_level":       election_level,
                 "office":             office,
+                "office_detail":      office_detail,
                 "candidate":          candidate,
                 "party":              party,
                 "votes":              votes,
@@ -464,6 +475,8 @@ def parse_parish_results(
         row["parish_voter_turnout_pct"] = turnout_pct
 
     df = pd.DataFrame(rows)
+    if "winner" in df.columns:
+        df = df.rename(columns={"winner": "parish_winner"})
     for col in _PARISH_COLS:
         if col not in df.columns:
             df[col] = None

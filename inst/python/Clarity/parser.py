@@ -92,7 +92,7 @@ _STATE_COLS = [
 _COUNTY_COLS = [
     "election_name", "election_year", "election_slug", "election_date",
     "result_status", "county", "office_level", "office", "localities_reporting",
-    "candidate", "party", "winner", "votes", "vote_pct", "url",
+    "candidate", "party", "county_winner", "votes", "vote_pct", "url",
     # "is_incumbent",  # commented out — not yet used downstream
 ]
 
@@ -302,7 +302,9 @@ def _parse_contest_table(panel) -> list[dict]:
     return results
 
 
-def _fix_clarity_winners(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+def _fix_clarity_winners(
+    df: pd.DataFrame, group_cols: list[str], col: str = "winner"
+) -> pd.DataFrame:
     """Derive winner: mark the top-voted candidate per contest as True.
 
     Clarity HTML does not expose a winner flag or num_seats, so we default to
@@ -317,14 +319,14 @@ def _fix_clarity_winners(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFram
     df = df.copy()
     # Use pandas nullable boolean so rows with no vote data stay NA (not False).
     # reticulate converts this to R logical, which supports NA natively.
-    df["winner"] = pd.NA
-    df["winner"] = df["winner"].astype("boolean")
+    df[col] = pd.NA
+    df[col] = df[col].astype("boolean")
     ranked = (
         df.loc[valid]
         .groupby(group_cols, dropna=False)["votes"]
         .rank(method="min", ascending=False)
     )
-    df.loc[valid, "winner"] = (ranked <= 1).astype("boolean")
+    df.loc[valid, col] = (ranked <= 1).astype("boolean")
     return df
 
 
@@ -520,7 +522,7 @@ def parse_county_results(
         if county_rows else pd.DataFrame(columns=_COUNTY_COLS)
     )
     county_df = _fill_pct(county_df)
-    county_df = _fix_clarity_winners(county_df, ["election_name", "election_year", "office", "county"])
+    county_df = _fix_clarity_winners(county_df, ["election_name", "election_year", "office", "county"], col="county_winner")
     vote_method_df = (
         pd.DataFrame(vm_rows, columns=_VM_COUNTY_COLS)
         if vm_rows else pd.DataFrame(columns=_VM_COUNTY_COLS)

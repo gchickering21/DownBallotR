@@ -38,8 +38,9 @@ structure they use for statewide general election results.
 
 ### Who created it?
 
-`DownBallotR` was developed by Graham Chickering in collaboration with
-Chris Warshaw. It is intended primarily as a research tool and is not affiliated
+`DownBallotR` was developed by [Graham Chickering](https://www.linkedin.com/in/graham-chickering-8012ba193/){target="_blank"}
+in collaboration with [Chris Warshaw](https://www.linkedin.com/in/chris-warshaw-980580/){target="_blank"}. 
+It is intended primarily as a research tool and is not affiliated
 with any government entity, election authority, or political organization.
 
 ### Is there funding or sponsorship?
@@ -386,17 +387,25 @@ Users working with data from this package should:
 ## 12. Citation
 
 If you use data retrieved through `DownBallotR` in published work, please cite
-both the package and the original data source:
+both the package and the original data sources.
 
 **Package citation:**
+
+To generate the official citation (as defined in the package metadata), run:
 
 ```r
 citation("DownBallotR")
 ```
 
-**Original sources** should be cited individually. Official state election
-results are typically citeable by state, office, and year from the relevant
-Secretary of State or State Board of Elections website.
+**Recommended citation:**
+
+Chickering, G., & Warshaw, C. (2026). *DownBallotR: Access federal, state, and local election data* (R package, version 0.1.0). https://github.com/gchickering21/DownBallotR
+
+**Original data sources:**
+
+Election results should be cited individually. Official state election results
+are typically citeable by state, office, and year from the relevant Secretary of
+State or State Board of Elections websites.
 
 ---
 

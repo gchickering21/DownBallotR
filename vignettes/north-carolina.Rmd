@@ -38,59 +38,111 @@ NC State Board of Elections, filtered by year range.
 
 ## Examples
 
-### All currently supported NC results
+### Precinct + county + state results for a single year
 
 ```{r, purl=FALSE}
-nc_all <- scrape_elections(state = "NC")
+res <- scrape_elections(state = "NC", year_from = 2025, year_to = 2025)
 
-nc_all %>%
-  select(year, county, office, candidate, party, votes) %>%
-  arrange(county, office)
+# Precinct-level results
+res$precinct %>%
+  filter(county == "Wake") %>%
+  select(election_date, contest_name, precinct, candidate, party, votes) %>%
+  arrange(contest_name, desc(votes))
+
+# County-level aggregates
+res$county %>%
+  filter(office_level == "State") %>%
+  select(county, election_date, contest_name, candidate, party, votes) %>%
+  arrange(contest_name, county, desc(votes))
+
+# Statewide totals
+res$state %>%
+  filter(winner == TRUE) %>%
+  select(election_date, contest_name, candidate, party, votes, vote_pct)
 ```
 
-### Single year
+### Statewide totals only (faster — skips precinct/county detail)
 
 ```{r, purl=FALSE}
-nc_2025 <- scrape_elections(
-  state     = "NC",
-  year_from = 2025,
-  year_to   = 2025
-)
+state_df <- scrape_elections(state = "NC", year_from = 2025, year_to = 2025,
+                              level = "state")
 
-nc_2025 %>%
-  filter(contest_outcome == "Winner") %>%
-  select(county, office, candidate, party, votes)
+state_df %>%
+  select(election_date, contest_name, candidate, party, votes, vote_pct, winner)
 ```
 
 ### Filter to a specific county
 
 ```{r, purl=FALSE}
-scrape_elections(state = "NC") %>%
+res <- scrape_elections(state = "NC", year_from = 2025, year_to = 2025)
+
+res$county %>%
   filter(county == "Wake") %>%
-  select(year, office, candidate, party, votes) %>%
-  arrange(office, desc(votes))
-```
-
-### Multi-year range
-
-```{r, purl=FALSE}
-nc_range <- scrape_elections(
-  state     = "NC",
-  year_from = 2025,
-  year_to   = 2026
-)
-
-nc_range %>%
-  group_by(year, county) %>%
-  summarise(races = n_distinct(election_id), .groups = "drop")
+  select(election_date, contest_name, candidate, party, votes) %>%
+  arrange(contest_name, desc(votes))
 ```
 
 ---
 
 ## Columns returned
 
-- `state`, `year`, `election_id`
-- `county`, `precinct`
-- `office`, `district`, `stage`
-- `candidate`, `party`
-- `votes`, `contest_outcome`
+### `$precinct` (when `level = "all"` or `"precinct"`)
+
+| Column | Description |
+|---|---|
+| `state` | Always `"NC"` |
+| `election_date` | Date of the election |
+| `election_year` | Calendar year of the election |
+| `election_type` | Election type (e.g. `"General"`, `"Primary"`) |
+| `county` | County name |
+| `precinct` | Precinct name or identifier |
+| `contest_name` | Full contest name as reported by NCSBE |
+| `contest_type` | Contest type code |
+| `contest_group_id` | Internal contest group identifier |
+| `jurisdiction` | Jurisdiction extracted from contest name |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `district` | District identifier (when applicable) |
+| `candidate` | Candidate name |
+| `party` | Party abbreviation |
+| `vote_for` | Number of seats to fill |
+| `election_day` | Election day votes |
+| `early_voting` | Early voting votes |
+| `absentee_by_mail` | Absentee by mail votes |
+| `absentee_or_early` | Combined absentee/early votes (older files) |
+| `provisional` | Provisional votes |
+| `votes` | Total votes |
+| `winner_status` | Raw winner status string from NCSBE source |
+| `runoff_status` | Runoff indicator from source |
+| `recount_status` | Recount indicator from source |
+| `real_precinct` | Whether the row represents a real precinct |
+| `precinct_abbrv` | Precinct abbreviation |
+| `ftp_date` | File date from NCSBE |
+
+### `$county` (when `level = "all"` or `"county"`)
+
+| Column | Description |
+|---|---|
+| `state` | Always `"NC"` |
+| `county` | County name |
+| `election_date` | Date of the election |
+| `contest_name` | Full contest name |
+| `jurisdiction` | Jurisdiction extracted from contest name |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `district` | District identifier (when applicable) |
+| `candidate` | Candidate name |
+| `party` | Party abbreviation |
+| `election_day` | Election day votes aggregated to county |
+| `early_voting` | Early voting votes aggregated to county |
+| `absentee_by_mail` | Absentee by mail votes aggregated to county |
+| `absentee_or_early` | Combined absentee/early votes (older files) |
+| `provisional` | Provisional votes aggregated to county |
+| `votes` | Total votes aggregated to county |
+
+### `$state` (when `level = "all"` or `"state"`)
+
+Same columns as `$county`, minus `county`, plus:
+
+| Column | Description |
+|---|---|
+| `vote_pct` | Percentage of votes within the contest |
+| `winner` | `TRUE` for the highest-voted candidate(s) per contest |

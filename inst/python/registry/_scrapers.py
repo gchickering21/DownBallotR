@@ -385,6 +385,7 @@ def _scrape_election_stats(
                 parallel=parallel,
                 scraping_method=config["scraping_method"],
                 url_style=config.get("url_style", "path_params"),
+                level=level,
             )
         except Exception as exc:
             print(f"[ElectionStats] ERROR {state_key} {year}: {exc} — skipping year", flush=True)

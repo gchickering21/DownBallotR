@@ -146,12 +146,14 @@ res$state %>%
 ### `$county` (when `level = "all"` or `"county"`)
 
 Same columns as `$state`, except `precincts_reporting` and `total_precincts`
-are absent, and two county-specific columns are added:
+are absent, `winner` is replaced by `county_winner`, and two county-specific
+columns are added:
 
 | Column | Description |
 |---|---|
 | `county_name` | County name |
 | `county_fips` | County FIPS code |
+| `county_winner` | `TRUE` if the candidate won within this county |
 
 ---
 

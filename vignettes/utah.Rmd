@@ -21,9 +21,6 @@ The Utah scraper returns election results from `electionresults.utah.gov`. It
 covers all elections available on the site — generals, primaries, and special
 elections — currently from 2023 to 2025.
 
-Optionally, it can also return a vote-method breakdown (Advance in Person,
-Election Day, Absentee by Mail, Provisional) for each contest.
-
 > **Note:** The Utah elections site uses the same Angular/PrimeNG framework as
 > the Georgia SOS site. All scraping uses a headless Chromium browser via
 > Playwright. County scraping is parallelised across up to `max_workers`
@@ -40,7 +37,6 @@ Election Day, Absentee by Mail, Provisional) for each contest.
 | `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
 | `level` | `"all"` | `"all"` — statewide + county; `"state"` — statewide only (much faster); `"county"` — county-level only |
 | `max_workers` | `4L` | Parallel Chromium browsers for county scraping |
-| `include_vote_methods` | `FALSE` | If `TRUE`, also return vote-method breakdown tables |
 
 ---
 
@@ -73,28 +69,6 @@ state_df <- scrape_elections(
 
 state_df %>%
   select(election_name, office, candidate, party, votes, pct)
-```
-
-### With vote-method breakdown
-
-```{r, purl=FALSE}
-res <- scrape_elections(
-  state                = "UT",
-  year_from            = 2024,
-  year_to              = 2024,
-  include_vote_methods = TRUE
-)
-
-# Statewide vote-method totals
-res$vote_method_state %>%
-  select(office, candidate, party, votes_advance_in_person, votes_election_day,
-         votes_absentee, votes_provisional, votes_total)
-
-# County vote-method breakdown
-res$vote_method_county %>%
-  filter(county == "Salt Lake") %>%
-  select(office, candidate, votes_advance_in_person, votes_election_day,
-         votes_absentee, votes_provisional, votes_total)
 ```
 
 ### All available years
@@ -150,27 +124,12 @@ Same columns as `$state`, plus:
 |---|---|
 | `county` | County name |
 
-### `$vote_method_state` / `$vote_method_county` (when `include_vote_methods = TRUE`)
-
-Same identifying columns as above, with votes split by method instead of a
-single `votes` + `pct`:
-
-| Column | Description |
-|---|---|
-| `votes_advance_in_person` | Advance in Person ballots |
-| `votes_election_day` | Election Day ballots |
-| `votes_absentee` | Absentee by Mail ballots |
-| `votes_provisional` | Provisional ballots |
-| `votes_total` | Sum of all methods |
-
 ---
 
 ## Performance notes
 
 - **`level = "state"` is much faster.** County scraping opens up to
   `max_workers` parallel Chromium browsers across Utah's 29 counties.
-- **`include_vote_methods` is slower.** Each contest panel requires an extra
-  Playwright click-and-re-render step.
 - **Virtual scroll.** The site uses Angular virtual scrolling; the scraper
   automatically scrolls to load all panels before parsing.
 - **Limited history.** The Utah elections site currently lists elections from

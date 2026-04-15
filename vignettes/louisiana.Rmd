@@ -135,7 +135,8 @@ res$state %>%
 | `election_date` | Date of the election |
 | `tab` | Source tab from the SOS site (e.g. `"Congressional"`, `"Statewide"`) |
 | `office_level` | `"Federal"`, `"State"`, or `"Local"` |
-| `office` | Office name (e.g. `"President of the United States"`) |
+| `office` | Office title (the part before ` -- `, e.g. `"District Judge"` or `"President of the United States"`) |
+| `office_detail` | Court, district, or seat qualifier from the office title (e.g. `"23rd Judicial District Court, ES 2, Div. F"`); `NA` when not present |
 | `candidate` | Candidate name |
 | `party` | Full party name (e.g. `"Republican"`, `"Democratic"`) |
 | `votes` | Vote total |
@@ -155,12 +156,13 @@ res$state %>%
 | `election_date` | Date of the election |
 | `parish` | Parish name (e.g. `"Orleans Parish"`) |
 | `office_level` | `"Federal"`, `"State"`, or `"Local"` |
-| `office` | Office name |
+| `office` | Office title (part before ` -- `) |
+| `office_detail` | Court, district, or seat qualifier; `NA` when not present |
 | `candidate` | Candidate name |
 | `party` | Full party name |
 | `votes` | Parish-level vote total |
 | `vote_pct` | Percentage of votes within the contest for this parish |
-| `winner` | `TRUE` if the candidate won |
+| `parish_winner` | `TRUE` if the candidate won within this parish |
 | `precincts_reporting` | Precincts reporting in this parish |
 | `precincts_expected` | Total precincts expected in this parish |
 | `parish_voter_turnout_pct` | Parish-level voter turnout percentage; `NA` when not published |

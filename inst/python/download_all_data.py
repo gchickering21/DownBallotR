@@ -966,6 +966,148 @@ def download_louisiana(
     return results
 
 
+# ── Trial run ─────────────────────────────────────────────────────────────────
+
+# One representative recent year per section used by trial_run().
+TRIAL_YEARS: dict[str, int] = {
+    "vermont":        2024,
+    "virginia":       2023,
+    "colorado":       2024,
+    "massachusetts":  2024,
+    "new_hampshire":  2024,
+    "idaho":          2024,
+    "new_york":       2024,
+    "new_mexico":     2024,
+    "south_carolina": 2024,
+    "nc":             2025,
+    "indiana":        2024,
+    "georgia":        2024,
+    "utah":           2024,
+    "connecticut":    2024,
+    "louisiana":      2024,
+}
+
+
+def trial_run(output_dir: Path, *, dry_run: bool = False) -> list[bool]:
+    """Run one year for every state/section as a quick end-to-end smoke test.
+
+    Uses a fixed recent year per section (see TRIAL_YEARS).  Output files are
+    written under ``output_dir/trial/`` so they never collide with a full run.
+    All sections use ``level='all'`` to exercise the full pipeline.
+    """
+    trial_dir = output_dir / "trial"
+    print(f"Trial output directory: {trial_dir}")
+    all_results: list[bool] = []
+
+    # ── ElectionStats ──────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: ELECTION_STATS (trial — one year each)")
+    print(f"{'─'*70}")
+    for state_key, year in {
+        k: TRIAL_YEARS[k] for k in ELECTION_STATS_STATES
+    }.items():
+        results = download_election_stats(
+            trial_dir,
+            dry_run=dry_run,
+            state=state_key,
+            workers=1,
+            es_year_from=year,
+            es_year_to=year,
+        )
+        all_results.extend(results)
+
+    # ── North Carolina ─────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: NC (trial)")
+    print(f"{'─'*70}")
+    year = TRIAL_YEARS["nc"]
+    base = trial_dir / "northcarolina_results"
+    stem = f"nc_{year}_{year}"
+    paths = {
+        "precinct": base / f"{stem}_precinct.csv",
+        "county":   base / f"{stem}_county.csv",
+        "state":    base / f"{stem}_state.csv",
+    }
+    label = f"NC State Board of Elections  {year}  (precinct + county + state)"
+    print(f"\n[{label}]")
+    if _all_valid(paths):
+        print("  ↷ all three output files exist, skipping")
+        all_results.append(True)
+    elif dry_run:
+        for key, p in paths.items():
+            print(f"  (dry-run) [{key}] → {p.name}")
+        all_results.append(True)
+    else:
+        try:
+            from NorthCarolina.pipeline import NcElectionPipeline
+            from datetime import date
+            start = date(year, 1, 1)
+            end   = date(year, 12, 31)
+            pipeline = NcElectionPipeline()
+            precinct_df, county_df, state_df = pipeline.run(
+                start_date=start, end_date=end,
+                min_supported_date=start, max_supported_date=end,
+            )
+            ok = True
+            for key, df in [("precinct", precinct_df), ("county", county_df), ("state", state_df)]:
+                if df.empty:
+                    print(f"  ⚠ empty result for '{key}' — skipping write")
+                else:
+                    _save(df, paths[key])
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            ok = False
+        all_results.append(ok)
+
+    # ── Indiana ────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: INDIANA (trial)")
+    print(f"{'─'*70}")
+    all_results.extend(download_indiana(
+        trial_dir, dry_run=dry_run,
+        in_year_from=TRIAL_YEARS["indiana"], in_year_to=TRIAL_YEARS["indiana"],
+    ))
+
+    # ── Georgia ────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: GEORGIA (trial)")
+    print(f"{'─'*70}")
+    all_results.extend(download_georgia(
+        trial_dir, dry_run=dry_run,
+        ga_year_from=TRIAL_YEARS["georgia"], ga_year_to=TRIAL_YEARS["georgia"],
+    ))
+
+    # ── Utah ───────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: UTAH (trial)")
+    print(f"{'─'*70}")
+    all_results.extend(download_utah(
+        trial_dir, dry_run=dry_run,
+        ut_year_from=TRIAL_YEARS["utah"], ut_year_to=TRIAL_YEARS["utah"],
+    ))
+
+    # ── Connecticut ────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: CONNECTICUT (trial)")
+    print(f"{'─'*70}")
+    all_results.extend(download_connecticut(
+        trial_dir, dry_run=dry_run,
+        ct_year_from=TRIAL_YEARS["connecticut"], ct_year_to=TRIAL_YEARS["connecticut"],
+    ))
+
+    # ── Louisiana ──────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: LOUISIANA (trial)")
+    print(f"{'─'*70}")
+    all_results.extend(download_louisiana(
+        trial_dir, dry_run=dry_run,
+        la_year_from=TRIAL_YEARS["louisiana"], la_year_to=TRIAL_YEARS["louisiana"],
+    ))
+
+    return all_results
+
+
 # ── Dispatch table ─────────────────────────────────────────────────────────────
 
 SECTIONS: dict[str, Callable] = {
@@ -1033,6 +1175,15 @@ def main() -> None:
         "--dry-run",
         action="store_true",
         help="Print what would be downloaded without actually scraping.",
+    )
+    parser.add_argument(
+        "--trial-run",
+        action="store_true",
+        help=(
+            "Run one representative year per state/section as a smoke test. "
+            "Output goes to <output-dir>/trial/ so it never collides with a full run. "
+            "Ignores --section and all year-range flags."
+        ),
     )
 
     # ElectionStats-specific options
@@ -1272,6 +1423,24 @@ def main() -> None:
         print(f"LA level         : {args.la_level}")
         print(f"LA parish workers: {args.la_parish_workers}")
     print("=" * 70)
+
+    if args.trial_run:
+        print("\nMode: TRIAL RUN (one year per state, output → <output-dir>/trial/)")
+        print("=" * 70)
+        all_results = trial_run(output_dir, dry_run=args.dry_run)
+        n_total   = len(all_results)
+        n_success = sum(all_results)
+        n_failed  = n_total - n_success
+        print(f"\n{'='*70}")
+        print(f"DONE  |  {n_success}/{n_total} tasks succeeded", end="")
+        if n_failed:
+            print(f"  |  {n_failed} failed (see errors above)")
+        else:
+            print()
+        print("=" * 70)
+        if n_failed:
+            sys.exit(1)
+        return
 
     to_run = SECTIONS if args.section == "all" else {args.section: SECTIONS[args.section]}
 

@@ -136,7 +136,7 @@ res$state %>%
 | `party` | Party name (e.g. `"Democratic"`, `"Republican"`) |
 | `votes` | Total votes (integer) |
 | `vote_pct` | Percentage of votes in contest (recomputed from town totals for State/Local) |
-| `contest_outcome` | `"Won"` or `"Lost"`; `NA` if vote data missing |
+| `winner` | `TRUE` if the candidate won the statewide contest |
 
 ### `$town` (when `level = "all"` or `"town"`)
 
@@ -144,15 +144,16 @@ res$state %>%
 |---|---|
 | `election_name` | Human-readable election name |
 | `election_year` | Calendar year |
-| `election_date` | ISO date string when parseable; `NA` otherwise |
+| `election_date` | Date of the election |
 | `county` | County name |
 | `town` | Town name |
-| `election_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | Office name |
 | `candidate` | Candidate name |
 | `party` | Party name |
 | `votes` | Votes in this town (integer) |
 | `vote_pct` | Percentage as reported by CTEMS for this town |
+| `town_winner` | `TRUE` if the candidate won within this town |
 
 ---
 

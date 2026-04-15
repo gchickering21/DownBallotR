@@ -95,7 +95,7 @@ hosted by the maintainers.
 
 **Coverage:** 15 US states across 7 distinct sources (ElectionStats and state
 election portals for NC, CT, GA, UT, IN, LA). Historical depth varies from 1789
-(Vermont, Virginia via ElectionStats) to 2019–present (Indiana).
+(Vermont, Virginia via ElectionStats) to 2019(Indiana) to the present.
 
 **What the data is:** Vote totals by candidate and contest at the statewide,
 county/parish/town, or precinct level, depending on source and the `level`
@@ -103,8 +103,7 @@ argument. Results are returned as-collected; party labels, contest names, and
 geographic identifiers are not normalized to a common schema.
 
 **What the data is not:** Certified results. Data should be verified against
-the original source before publication or high-stakes use. Cite the source
-website — not this package — when reporting specific election results.
+the original source before publication or high-stakes use.
 
 Full documentation of data composition, collection process, limitations, and
 responsible use is in the

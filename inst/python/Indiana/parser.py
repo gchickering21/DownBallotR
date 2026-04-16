@@ -32,6 +32,7 @@ _STATE_COLS = [
     "election_type",
     "office_level",
     "office",
+    "district",
     "candidate",
     "party",
     "votes",
@@ -46,8 +47,8 @@ _COUNTY_COLS = [
     "election_type",
     "office_level",
     "office",
+    "district",
     "county_name",
-    "county_fips",
     "candidate",
     "party",
     "votes",
@@ -108,6 +109,21 @@ def _fix_winners(df: pd.DataFrame, group_cols: list[str], col: str = "winner") -
     rank = df.groupby(group_cols, dropna=False)["votes"].rank(method="min", ascending=False)
     df[col] = rank <= df["num_seats"]
     return df
+
+
+def _extract_district(office_title: str) -> "str | None":
+    """Return everything after the first ', ' in OFFICE_TITLE, or None.
+
+    Examples
+    --------
+    'State Representative, District 001' → 'District 001'
+    'Adams County Commissioner, District 1' → 'District 1'
+    'Adams County Council, At Large' → 'At Large'
+    'Attorney General' → None
+    """
+    if ", " in office_title:
+        return office_title.split(", ", 1)[1].strip() or None
+    return None
 
 
 def _ensure_list(obj: Any) -> list:
@@ -190,8 +206,8 @@ def parse_state_results(
     summary = root.get("StatewideSummary", {})
 
     for race in _ensure_list(summary.get("Race")):
-        office_id    = race.get("OFFICEID", "")
         office_title = race.get("OFFICE_TITLE", "")
+        district     = _extract_district(office_title)
         num_seats    = _safe_int(race.get("NumofSeats", 1))
 
         for cand in _ensure_list(race.get("Candidates", {}).get("Candidate")):
@@ -201,6 +217,7 @@ def parse_state_results(
                 "election_type":  "General",
                 "office_level":   office_level,
                 "office":         category_name,
+                "district":       district,
                 "candidate":      cand.get("NAME_ON_BALLOT", "") or cand.get("CandidateName", ""),
                 "party":          _expand_party(cand.get("PARTY", "")),
                 "votes":          _safe_int(cand.get("TOTAL", 0)),
@@ -212,8 +229,8 @@ def parse_state_results(
     if not rows:
         return pd.DataFrame(columns=_STATE_COLS)
     df = pd.DataFrame(rows)
-    df = _compute_vote_pct(df, ["election_year", "election_date", "office"])
-    df = _fix_winners(df, ["election_year", "election_date", "office"])
+    df = _compute_vote_pct(df, ["election_year", "election_date", "office", "district"])
+    df = _fix_winners(df, ["election_year", "election_date", "office", "district"])
     return df[_STATE_COLS]
 
 
@@ -260,8 +277,8 @@ def parse_county_results(
             vote_field = "TOTAL"
 
         for race in races:
-            office_id    = race.get("OFFICEID", "")
             office_title = race.get("OFFICE_TITLE", "")
+            district     = _extract_district(office_title)
             num_seats    = _safe_int(race.get("NumofSeats", 1))
 
             for cand in _ensure_list(race.get("Candidates", {}).get("Candidate")):
@@ -271,8 +288,8 @@ def parse_county_results(
                     "election_type":   "General",
                     "office_level":    office_level,
                     "office":          category_name,
+                    "district":        district,
                     "county_name":     county_name,
-                    "county_fips":     county_fips,
                     "candidate":       cand.get("NAME_ON_BALLOT", "") or cand.get("CandidateName", ""),
                     "party":           _expand_party(cand.get("PARTY") or cand.get("PARTY_ABBREV", "")),
                     "votes":           _safe_int(cand.get(vote_field, 0)),
@@ -284,6 +301,6 @@ def parse_county_results(
     if not rows:
         return pd.DataFrame(columns=_COUNTY_COLS)
     df = pd.DataFrame(rows)
-    df = _compute_vote_pct(df, ["election_year", "election_date", "office", "county_name"])
-    df = _fix_winners(df, ["election_year", "election_date", "office", "county_name"], col="county_winner")
+    df = _compute_vote_pct(df, ["election_year", "election_date", "office", "district", "county_name"])
+    df = _fix_winners(df, ["election_year", "election_date", "office", "district", "county_name"], col="county_winner")
     return df[_COUNTY_COLS]

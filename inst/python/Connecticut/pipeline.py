@@ -95,6 +95,8 @@ def _aggregate_towns_to_state(town_df: pd.DataFrame) -> pd.DataFrame:
     agg["vote_pct"] = (agg["votes"] / contest_totals * 100).round(2)
 
     # winner is added later by _build_state_df after all parts are combined.
+    # district from town_df is county_name; aggregated statewide rows have no district.
+    agg["district"] = pd.NA
     base_cols = [c for c in _STATE_COLS if c != "winner"]
     return agg[base_cols]
 

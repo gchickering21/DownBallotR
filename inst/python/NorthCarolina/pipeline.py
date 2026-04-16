@@ -10,7 +10,7 @@ import pandas as pd
 from .discovery import discover_northcarolina_results_zips
 from .selection import select_elections
 from .io_utils import download_zip_bytes, read_results_pct_from_zip
-from .normalize import normalize_northcarolina_results_cols, get_config
+from .normalize import normalize_northcarolina_results_cols, get_config, extract_office_short
 from .aggregate import aggregate_to_county_level, aggregate_county_to_state
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
@@ -154,17 +154,35 @@ class NcElectionPipeline:
                 .astype("Int64")
             )
 
-        # Rename contest_name → office in county/state outputs
-        county_df = county_df.rename(columns={"contest_name": "office"})
-        state_df = state_df.rename(columns={"contest_name": "office"})
+        # Rename contest_name → full_office_name; derive short office label for county/state
+        county_df = county_df.rename(columns={"contest_name": "full_office_name"})
+        state_df  = state_df.rename(columns={"contest_name": "full_office_name"})
+        county_df["office"] = county_df["full_office_name"].apply(extract_office_short)
+        state_df["office"]  = state_df["full_office_name"].apply(extract_office_short)
+
+        # Enforce canonical column order from schema
+        county_df = county_df.reindex(columns=cfg.schema.county_cols)
+        state_df = state_df.reindex(columns=cfg.schema.state_cols)
+
+        # Drop columns that are not wanted in the precinct output.
+        norm = norm.drop(columns=["provisional", "precinct_abbrv", "real_precinct"], errors="ignore")
 
         # Rename precinct columns to match county/state schema so all three
-        # levels share candidate/party/votes as join keys
+        # levels share candidate/party/votes as join keys; also derive office columns
         norm = norm.rename(columns={
-            "choice":       "candidate",
-            "choice_party": "party",
-            "total_votes":  "votes",
+            "choice":        "candidate",
+            "choice_party":  "party",
+            "total_votes":   "votes",
+            "contest_name":  "full_office_name",
         })
+        norm["office"] = norm["full_office_name"].apply(extract_office_short)
+
+        # Compute precinct-level vote_pct and precinct_winner
+        contest_cols = ["state", "election_date", "county", "precinct", "full_office_name"]
+        contest_total = norm.groupby(contest_cols, dropna=False)["votes"].transform("sum")
+        norm["vote_pct"] = ((norm["votes"] / contest_total) * 100).round(2)
+        max_votes = norm.groupby(contest_cols, dropna=False)["votes"].transform("max")
+        norm["precinct_winner"] = norm["votes"].eq(max_votes)
 
         print(f"[NC]   Done: {len(norm):,} precinct rows, {len(county_df):,} county rows.")
         return norm, county_df, state_df

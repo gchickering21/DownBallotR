@@ -43,7 +43,7 @@ _MAX_WORKERS = 6
 _SAMPLE_N = 5000
 
 JOIN_KEYS = ["state", "election_id", "candidate_id"]
-COUNTY_COLS = ["state", "election_year", "election_type", "election_id", "candidate_id", "county_or_city", "candidate", "party", "votes", "county_winner"]
+COUNTY_COLS = ["state", "election_year", "election_type", "election_id", "candidate_id", "office", "office_level", "district", "county_or_city", "candidate", "party", "votes", "county_winner", "url"]
 
 
 # ---------------------------
@@ -235,20 +235,34 @@ def scrape_one_year(
                     .sum()
                 )
 
-                # vote_pct from actual vote totals
-                elec_total = (
-                    statewide
-                    .groupby("election_id", as_index=False)["votes"]
-                    .sum()
-                    .rename(columns={"votes": "_total"})
-                )
-                statewide = statewide.merge(elec_total, on="election_id", how="left")
-                statewide["vote_pct"] = (
-                    (statewide["votes"] / statewide["_total"].replace(0, pd.NA) * 100)
-                    .round(2)
-                    .apply(lambda x: f"{x}%" if pd.notna(x) else "")
-                )
-                statewide = statewide.drop(columns=["_total"])
+                # vote_pct denominator: use total_votes (includes blanks/scattering/void)
+                # when available, otherwise fall back to summing candidate votes.
+                if "total_votes" in county_df.columns and county_df["total_votes"].notna().any():
+                    elec_total = (
+                        county_df
+                        .drop_duplicates(subset=["election_id", "county_or_city"])
+                        .groupby("election_id", as_index=False)["total_votes"]
+                        .sum()
+                    )
+                    statewide = statewide.merge(elec_total, on="election_id", how="left")
+                    statewide["vote_pct"] = (
+                        (statewide["votes"] / statewide["total_votes"].replace(0, pd.NA) * 100)
+                        .round(2)
+                        .apply(lambda x: f"{x}%" if pd.notna(x) else "")
+                    )
+                else:
+                    elec_total = (
+                        statewide
+                        .groupby("election_id", as_index=False)["votes"]
+                        .sum()
+                        .rename(columns={"votes": "total_votes"})
+                    )
+                    statewide = statewide.merge(elec_total, on="election_id", how="left")
+                    statewide["vote_pct"] = (
+                        (statewide["votes"] / statewide["total_votes"].replace(0, pd.NA) * 100)
+                        .round(2)
+                        .apply(lambda x: f"{x}%" if pd.notna(x) else "")
+                    )
 
                 # Winner flag: candidate with the most votes per election
                 max_votes = statewide.groupby("election_id")["votes"].transform("max")
@@ -365,12 +379,13 @@ def scrape_one_year(
     # Enrich county/precinct with election_type and party from state_df.
     # election_year is already on county_df (added above) but not precinct_df.
     if not state_df.empty:
+        _url_cols = ["url"] if "url" in state_df.columns else []
         _type_party = (
-            state_df[["election_id", "candidate_id", "election_type", "party"]]
+            state_df[["election_id", "candidate_id", "election_type", "office", "office_level", "district", "party"] + _url_cols]
             .drop_duplicates(subset=["election_id", "candidate_id"])
         )
         _year_type_party = (
-            state_df[["election_id", "candidate_id", "election_year", "election_type", "party"]]
+            state_df[["election_id", "candidate_id", "election_year", "election_type", "office", "office_level", "district", "party"] + _url_cols]
             .drop_duplicates(subset=["election_id", "candidate_id"])
         )
         if not county_df.empty:

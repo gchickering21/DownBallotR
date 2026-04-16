@@ -578,11 +578,15 @@ def _parse_contest_csv_v2(
     # ── Candidate columns from header row ─────────────────────────────────────
     header = rows[0]
     cand_indices: List[tuple[int, str]] = []
+    total_votes_col_idx: Optional[int] = None
     for i, col in enumerate(header):
         if i < 2:
             continue
         col_clean = col.strip()
-        if not col_clean or col_clean.lower().startswith("total"):
+        if not col_clean:
+            break
+        if col_clean.lower().startswith("total votes"):
+            total_votes_col_idx = i
             break
         cand_indices.append((i, col_clean))
 
@@ -617,6 +621,12 @@ def _parse_contest_csv_v2(
 
         if row_type.lower() in _COUNTY_ROW_TYPES:
             current_county = name
+            county_tv: Optional[int] = None
+            if total_votes_col_idx is not None and total_votes_col_idx < len(row):
+                try:
+                    county_tv = int(row[total_votes_col_idx].strip().replace(",", ""))
+                except ValueError:
+                    pass
             for col_idx, cand_name in cand_indices:
                 if col_idx >= len(row):
                     continue
@@ -632,6 +642,7 @@ def _parse_contest_csv_v2(
                     "candidate":      cand_name,
                     "party":          party_map.get(cand_name, ""),
                     "votes":          votes,
+                    "total_votes":    county_tv,
                 })
 
         elif row_type == "Precinct":
@@ -1011,7 +1022,7 @@ def _extract_precinct_vote_tds(
 
 
 _PRECINCT_COLS = [
-    "state", "election_year", "election_type", "election_id", "candidate_id", "county", "precinct", "candidate", "party", "votes", "precinct_winner"
+    "state", "election_year", "election_type", "election_id", "candidate_id", "office", "office_level", "district", "county", "precinct", "candidate", "party", "votes", "precinct_winner", "url"
 ]
 
 

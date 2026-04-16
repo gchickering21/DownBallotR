@@ -84,21 +84,21 @@ from office_level_utils import classify_office_level
 # ---------------------------------------------------------------------------
 _STATE_COLS = [
     "election_name", "election_type", "election_year", "election_date",
-    "office_level", "office",
+    "office_level", "office", "district",
     "candidate", "party", "winner", "votes", "vote_pct", "url",
     # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _COUNTY_COLS = [
     "election_name", "election_type", "election_year", "election_date",
-    "county", "office_level", "office",
+    "county", "office_level", "office", "district",
     "candidate", "party", "county_winner", "votes", "vote_pct", "url",
     # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _VM_STATE_COLS = [
     "election_name", "election_type", "election_year", "election_date",
-    "office_level", "office",
+    "office_level", "office", "district",
     "candidate", "party",
     # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
@@ -107,7 +107,7 @@ _VM_STATE_COLS = [
 
 _VM_COUNTY_COLS = [
     "election_name", "election_type", "election_year", "election_date",
-    "county", "office_level", "office",
+    "county", "office_level", "office", "district",
     "candidate", "party",
     # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
@@ -118,6 +118,48 @@ _PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
 _DASH_PARTY_RE   = re.compile(r"\s+-\s+(\S+)\s*$")
 _REPORTING_RE    = re.compile(r"(\d+)\s*/\s*(\d+)")
 _DATE_RE         = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
+
+# Matches district info at the end of an office string, e.g.:
+#   "State House of Representatives - District 119"
+#   "State House District 75"  /  "State House Dist 68"
+#   "State House 172 (Special)"  /  "State Senate 11 (Special)"
+_OFFICE_DISTRICT_RE = re.compile(
+    r"\s*(?:-\s*)?(?:District|Dist\.?)\s+(\d+)(\s*\([^)]+\))?\s*$"
+    r"|"
+    r"\s+(\d+)(\s*\([^)]+\))?\s*$",
+    re.I,
+)
+
+# Normalize shortened office names to their canonical form
+_OFFICE_ALIASES: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"^state\s+house$", re.I), "State House of Representatives"),
+]
+
+
+def _split_office_district(raw: str) -> tuple[str, str | None]:
+    """Split a raw office string into (office, district).
+
+    Examples
+    --------
+    'State House of Representatives - District 119' → ('State House of Representatives', 'District 119')
+    'State House District 75'  → ('State House of Representatives', 'District 75')
+    'State House Dist 68'      → ('State House of Representatives', 'District 68')
+    'State House 172 (Special)'→ ('State House of Representatives', 'District 172 (Special)')
+    'State Senate 11 (Special)'→ ('State Senate', 'District 11 (Special)')
+    """
+    name = raw.strip()
+    district = None
+    m = _OFFICE_DISTRICT_RE.search(name)
+    if m:
+        num     = m.group(1) or m.group(3)
+        special = (m.group(2) or m.group(4) or "").strip()
+        district = f"District {num}" + (f" {special}" if special else "")
+        name = name[: m.start()].strip()
+    for alias_re, canonical in _OFFICE_ALIASES:
+        if alias_re.match(name):
+            name = canonical
+            break
+    return name, district or None
 
 # ---------------------------------------------------------------------------
 # Election type classification
@@ -433,16 +475,18 @@ def parse_state_results(
         )
 
     for panel in panels:
-        office = _panel_office(panel)
-        if not office:
+        raw_office = _panel_office(panel)
+        if not raw_office:
             continue
+        office, district = _split_office_district(raw_office)
         base = {
             "election_name":        election_info.name,
             "election_type":        _classify_election_type(election_info.name),
             "election_year":        election_info.year,
             "election_date":        page_meta["election_date"],
-            "office_level":         classify_office_level(office),
+            "office_level":         classify_office_level(raw_office),
             "office":               office,
+            "district":             district,
             "url":                  election_info.url,
         }
 
@@ -459,7 +503,7 @@ def parse_state_results(
         if state_rows else pd.DataFrame(columns=_STATE_COLS)
     )
     state_df = _fill_pct(state_df)
-    state_df = _fix_clarity_winners(state_df, ["election_name", "election_year", "office"])
+    state_df = _fix_clarity_winners(state_df, ["election_name", "election_year", "office", "district"])
     vote_method_df = (
         pd.DataFrame(vm_rows, columns=_VM_STATE_COLS)
         if vm_rows else pd.DataFrame(columns=_VM_STATE_COLS)
@@ -517,17 +561,19 @@ def parse_county_results(
 
     panels = doc.xpath("//p-panel[contains(@class,'ballot-item')]")
     for panel in panels:
-        office = _panel_office(panel)
-        if not office:
+        raw_office = _panel_office(panel)
+        if not raw_office:
             continue
+        office, district = _split_office_district(raw_office)
         base = {
             "election_name":        election_info.name,
             "election_type":        _classify_election_type(election_info.name),
             "election_year":        election_info.year,
             "election_date":        page_meta["election_date"],
             "county":               county_name,
-            "office_level":         classify_office_level(office),
+            "office_level":         classify_office_level(raw_office),
             "office":               office,
+            "district":             district,
             "url":                  url,
         }
 
@@ -544,7 +590,7 @@ def parse_county_results(
         if county_rows else pd.DataFrame(columns=_COUNTY_COLS)
     )
     county_df = _fill_pct(county_df)
-    county_df = _fix_clarity_winners(county_df, ["election_name", "election_year", "office", "county"], col="county_winner")
+    county_df = _fix_clarity_winners(county_df, ["election_name", "election_year", "office", "district", "county"], col="county_winner")
     vote_method_df = (
         pd.DataFrame(vm_rows, columns=_VM_COUNTY_COLS)
         if vm_rows else pd.DataFrame(columns=_VM_COUNTY_COLS)

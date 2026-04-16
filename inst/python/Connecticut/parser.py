@@ -90,6 +90,7 @@ _STATE_COLS = [
     "election_date",
     "office_level",
     "office",
+    "district",
     "candidate",
     "party",
     "votes",
@@ -101,7 +102,7 @@ _TOWN_COLS = [
     "election_name",
     "election_year",
     "election_date",
-    "county",
+    "district",
     "town",
     "office_level",
     "office",
@@ -113,9 +114,9 @@ _TOWN_COLS = [
 ]
 
 # Columns that define a unique contest at the state level.
-_CONTEST_STATE_COLS = ["election_name", "office"]
+_CONTEST_STATE_COLS = ["election_name", "office", "district"]
 # Columns that define a unique contest at the town level.
-_CONTEST_TOWN_COLS = ["election_name", "town", "office"]
+_CONTEST_TOWN_COLS = ["election_name", "district", "town", "office"]
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -319,15 +320,13 @@ def parse_statewide_results(
     rows: list[dict] = []
 
     for race_name, cr in race_rows:
-        # Include district in office name when present.
-        office = f"{race_name} — {cr['district']}" if cr["district"] else race_name
-
         rows.append({
             "election_name": election.name,
             "election_year": election.year,
             "election_date": election_date_str,
             "office_level":  classify_election_level(race_name),
-            "office":        office,
+            "office":        race_name,
+            "district":      cr["district"] or None,
             "candidate":     cr["candidate"],
             "party":         cr["party"],
             "votes":         _parse_votes(cr["votes_raw"]),
@@ -378,16 +377,14 @@ def parse_town_results(
     rows: list[dict] = []
 
     for race_name, cr in race_rows:
-        office = f"{race_name} — {cr['district']}" if cr["district"] else race_name
-
         rows.append({
             "election_name": election.name,
             "election_year": election.year,
             "election_date": election_date_str,
-            "county":        county_name,
+            "district":      county_name,
             "town":          town_name,
             "office_level":  classify_election_level(race_name),
-            "office":        office,
+            "office":        race_name,
             "candidate":     cr["candidate"],
             "party":         cr["party"],
             "votes":         _parse_votes(cr["votes_raw"]),

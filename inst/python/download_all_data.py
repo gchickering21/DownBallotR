@@ -972,7 +972,7 @@ def download_louisiana(
 # One representative recent year per section used by trial_run().
 TRIAL_YEARS: dict[str, int] = {
     "vermont":        2024,
-    "virginia":       2023,
+    "virginia":       2024,
     "colorado":       2024,
     "massachusetts":  2024,
     "new_hampshire":  2024,

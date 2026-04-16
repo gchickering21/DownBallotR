@@ -99,6 +99,52 @@ def load_northcarolina_results_config(config_path: str | Path) -> NcResultsConfi
 _WHITESPACE_RE = re.compile(r"\s+")
 
 
+# =========================================================
+# Office short-name extraction
+# =========================================================
+
+_OFFICE_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'BOARD OF EDUCATION',        re.I), 'Board of Education'),
+    (re.compile(r'BOARD OF COMMISSIONERS',    re.I), 'Board of Commissioners'),
+    (re.compile(r'BOARD OF ALDERMEN',         re.I), 'Board of Aldermen'),
+    (re.compile(r'BOARD OF TRUSTEES',         re.I), 'Board of Trustees'),
+    (re.compile(r'BOARD OF DIRECTORS',        re.I), 'Board of Directors'),
+    (re.compile(r'BOARD MEMBERS?',            re.I), 'Board Member'),
+    (re.compile(r'CITY COUNCIL',              re.I), 'City Council'),
+    (re.compile(r'TOWN COUNCIL',              re.I), 'Town Council'),
+    (re.compile(r'VILLAGE COUNCIL',           re.I), 'Village Council'),
+    (re.compile(r'COUNCIL MEMBERS?',          re.I), 'Council Member'),
+    (re.compile(r'COUNCIL',                   re.I), 'Council'),
+    (re.compile(r'MAYOR',                     re.I), 'Mayor'),
+    (re.compile(r'COMMISSIONERS?',            re.I), 'Commissioner'),
+    (re.compile(r'ALDERMEN',                  re.I), 'Aldermen'),
+    (re.compile(r'ALDERMAN',                  re.I), 'Alderman'),
+    (re.compile(r'COUNCILMEN',                re.I), 'Councilmen'),
+    (re.compile(r'COUNCILMAN',                re.I), 'Councilman'),
+    (re.compile(r'TRUSTEE',                   re.I), 'Trustee'),
+    (re.compile(r'BOARD',                     re.I), 'Board'),
+    (re.compile(r'SALES AND USE TAX',         re.I), 'Sales and Use Tax Referendum'),
+    (re.compile(r'MIXED BEVERAGE ELECTION',   re.I), 'Mixed Beverage Election'),
+    (re.compile(r'MALT BEVERAGE ELECTION',    re.I), 'Malt Beverage Election'),
+    (re.compile(r'UNFORTIFIED WINE ELECTION', re.I), 'Unfortified Wine Election'),
+    (re.compile(r'REFERENDUM',                re.I), 'Referendum'),
+    (re.compile(r'ELECTION',                  re.I), 'Election'),
+]
+
+_QUALIFIER_RE = re.compile(r'\s*\([^)]+\)\s*$')
+
+
+def extract_office_short(full_name: object) -> object:
+    """Return a short office label (e.g. 'Mayor', 'City Council') from a full contest name."""
+    if full_name is None or (isinstance(full_name, float) and pd.isna(full_name)):
+        return pd.NA
+    name = _QUALIFIER_RE.sub('', str(full_name)).strip()
+    for pattern, label in _OFFICE_PATTERNS:
+        if pattern.search(name):
+            return label
+    return full_name
+
+
 def _norm_col(c: object) -> str:
     """Normalize raw column labels for robust matching."""
     return _WHITESPACE_RE.sub(" ", str(c).strip().lower())
@@ -284,7 +330,7 @@ def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) 
         df["contest_name"].str.extract(r"\(([^)]+)\)$", expand=False)
     )
 
-    # Reorder: state … contest_name | jurisdiction office_level district | vote cols …
+    # Reorder: state, election_year, … contest_name | jurisdiction office_level district | vote cols …
     cols = df.columns.tolist()
     i = cols.index("contest_name") + 1
     new_order = (
@@ -292,6 +338,9 @@ def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) 
         + ["jurisdiction", "office_level", "district"]
         + [c for c in cols[i:] if c not in {"jurisdiction", "office_level", "district"}]
     )
+    if "election_year" in new_order:
+        new_order.remove("election_year")
+        new_order.insert(1, "election_year")
     df = df[new_order]
 
     return df

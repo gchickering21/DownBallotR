@@ -92,6 +92,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 import sys
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -988,7 +989,7 @@ TRIAL_YEARS: dict[str, int] = {
 }
 
 
-def trial_run(output_dir: Path, *, dry_run: bool = False) -> list[bool]:
+def trial_run(output_dir: Path, *, dry_run: bool = False, workers: int = os.cpu_count() or 1) -> list[bool]:
     """Run one year for every state/section as a quick end-to-end smoke test.
 
     Uses a fixed recent year per section (see TRIAL_YEARS).  Output files are
@@ -1076,6 +1077,7 @@ def trial_run(output_dir: Path, *, dry_run: bool = False) -> list[bool]:
     all_results.extend(download_georgia(
         trial_dir, dry_run=dry_run,
         ga_year_from=TRIAL_YEARS["georgia"], ga_year_to=TRIAL_YEARS["georgia"],
+        ga_county_workers=workers,
     ))
 
     # ── Utah ───────────────────────────────────────────────────────────────────
@@ -1085,6 +1087,7 @@ def trial_run(output_dir: Path, *, dry_run: bool = False) -> list[bool]:
     all_results.extend(download_utah(
         trial_dir, dry_run=dry_run,
         ut_year_from=TRIAL_YEARS["utah"], ut_year_to=TRIAL_YEARS["utah"],
+        ut_county_workers=workers,
     ))
 
     # ── Connecticut ────────────────────────────────────────────────────────────
@@ -1094,6 +1097,7 @@ def trial_run(output_dir: Path, *, dry_run: bool = False) -> list[bool]:
     all_results.extend(download_connecticut(
         trial_dir, dry_run=dry_run,
         ct_year_from=TRIAL_YEARS["connecticut"], ct_year_to=TRIAL_YEARS["connecticut"],
+        ct_town_workers=workers,
     ))
 
     # ── Louisiana ──────────────────────────────────────────────────────────────
@@ -1103,6 +1107,7 @@ def trial_run(output_dir: Path, *, dry_run: bool = False) -> list[bool]:
     all_results.extend(download_louisiana(
         trial_dir, dry_run=dry_run,
         la_year_from=TRIAL_YEARS["louisiana"], la_year_to=TRIAL_YEARS["louisiana"],
+        la_parish_workers=workers,
     ))
 
     return all_results
@@ -1164,10 +1169,10 @@ def main() -> None:
     parser.add_argument(
         "--workers",
         type=int,
-        default=1,
+        default=os.cpu_count() or 1,
         metavar="N",
         help=(
-            "Number of parallel download workers (default: 1 = sequential). "
+            f"Number of parallel download workers (default: {os.cpu_count() or 1} = all available CPUs). "
             "Keep at 1 for Playwright sections (election_stats SC/NM/NY/VA)."
         ),
     )
@@ -1427,7 +1432,7 @@ def main() -> None:
     if args.trial_run:
         print("\nMode: TRIAL RUN (one year per state, output → <output-dir>/trial/)")
         print("=" * 70)
-        all_results = trial_run(output_dir, dry_run=args.dry_run)
+        all_results = trial_run(output_dir, dry_run=args.dry_run, workers=args.workers)
         n_total   = len(all_results)
         n_success = sum(all_results)
         n_failed  = n_total - n_success

@@ -65,7 +65,7 @@ Some questions to keep in mind as you read:
 
 ## Step 4: Run the tests
 
-Below are test calls grouped by state. **You don't need to run all of them** — pick a few states you're interested in, or work through them in order. Each call fetches a single recent year to keep things fast but feel free to adjust the years, input variables, or any other areas of interest (Note to keep year ranges minimal, separately we are working to create a downloadable dataset so these sites do not need to be constantly scraped). Do your best to try to break things and report any issues. 
+Below are test calls grouped by state. **You don't need to run all of them** — pick a few states you're interested in, or work through them in order. Each call fetches a single recent year to keep things fast but **feel free to adjust the years, input variables, or any other areas of interest** (Note to keep year ranges minimal, separately we are working to create a downloadable dataset so these sites do not need to be constantly scraped). **Do your best to try to break things and report any issues.**
 
 After each call, look at what comes back and note anything surprising, confusing, or broken.
 

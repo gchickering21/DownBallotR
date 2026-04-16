@@ -178,23 +178,18 @@ The level of preprocessing varies substantially by source. In general:
 - **Election stages** (primary, general, runoff) are not consistently
   distinguished across sources.
 
-### Are results deduplicated?
-
-For multi-year scrapes, the package concatenates results across years. No
-deduplication is applied. If a source re-publishes or corrects results for a
-prior year, a second scrape will return the corrected version, which may differ
-from a prior retrieval.
 
 ### Is any imputation or gap-filling done?
 
-No. The package does not impute missing values, fill in absent contests, or
-estimate results for precincts or jurisdictions that did not report.
+Some columns, such as office_level or winner, are not reported by certain states. The package does its best based on other columns, such as vote counts or election names, to infer 
+the correct values.
 
 ### Is the output validated?
 
 The package does not validate the substantive correctness of retrieved data
 against any external reference. It checks that scraping operations succeeded
-and returns what the source provided.
+and returns what the source provided. We will be working to create a publically available dataset containing 
+these results that will be validated and checked in the future.
 
 ---
 

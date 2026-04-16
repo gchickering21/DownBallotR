@@ -18,6 +18,7 @@ articles:
     navbar: ~
     contents:
       - python-setup
+      - beta-testing
   - title: Using the package
     navbar: ~
     contents:

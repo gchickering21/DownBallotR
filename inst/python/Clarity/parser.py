@@ -83,21 +83,21 @@ from office_level_utils import classify_office_level
 # Output column definitions
 # ---------------------------------------------------------------------------
 _STATE_COLS = [
-    "election_name", "election_year", "election_date",
+    "election_name", "election_type", "election_year", "election_date",
     "office_level", "office",
     "candidate", "party", "winner", "votes", "vote_pct", "url",
     # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _COUNTY_COLS = [
-    "election_name", "election_year", "election_date",
+    "election_name", "election_type", "election_year", "election_date",
     "county", "office_level", "office",
     "candidate", "party", "county_winner", "votes", "vote_pct", "url",
     # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _VM_STATE_COLS = [
-    "election_name", "election_year", "election_date",
+    "election_name", "election_type", "election_year", "election_date",
     "office_level", "office",
     "candidate", "party",
     # "is_incumbent",  # commented out — not yet used downstream
@@ -106,7 +106,7 @@ _VM_STATE_COLS = [
 ]
 
 _VM_COUNTY_COLS = [
-    "election_name", "election_year", "election_date",
+    "election_name", "election_type", "election_year", "election_date",
     "county", "office_level", "office",
     "candidate", "party",
     # "is_incumbent",  # commented out — not yet used downstream
@@ -118,6 +118,34 @@ _PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
 _DASH_PARTY_RE   = re.compile(r"\s+-\s+(\S+)\s*$")
 _REPORTING_RE    = re.compile(r"(\d+)\s*/\s*(\d+)")
 _DATE_RE         = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
+
+# ---------------------------------------------------------------------------
+# Election type classification
+# ---------------------------------------------------------------------------
+_ELECTION_TYPE_RULES: list[tuple[re.Pattern, str]] = [
+    # Most specific special-election combinations first
+    (re.compile(r"special.{0,30}primary.{0,30}runoff",              re.I), "special_primary_runoff"),
+    (re.compile(r"special.{0,30}runoff|runoff.{0,30}special",       re.I), "special_runoff"),
+    (re.compile(r"special.{0,30}primary",                           re.I), "special_primary"),
+    (re.compile(r"special",                                         re.I), "special"),
+    # Presidential primary before generic primary
+    (re.compile(r"presidential.{0,30}(preference|primary)",         re.I), "presidential_primary"),
+    # Primary+Runoff before either alone
+    (re.compile(r"primary.{0,50}runoff|runoff.{0,50}primary",       re.I), "primary_runoff"),
+    (re.compile(r"general.{0,30}runoff|runoff.{0,30}general",       re.I), "general_runoff"),
+    (re.compile(r"primary",                                         re.I), "primary"),
+    (re.compile(r"general",                                         re.I), "general"),
+    # Catch-all for bare "Runoff" (e.g. district-specific runoffs)
+    (re.compile(r"runoff",                                          re.I), "runoff"),
+    (re.compile(r"recount",                                         re.I), "recount"),
+]
+
+
+def _classify_election_type(name: str) -> str:
+    for pattern, label in _ELECTION_TYPE_RULES:
+        if pattern.search(name):
+            return label
+    return "other"
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +438,7 @@ def parse_state_results(
             continue
         base = {
             "election_name":        election_info.name,
+            "election_type":        _classify_election_type(election_info.name),
             "election_year":        election_info.year,
             "election_date":        page_meta["election_date"],
             "office_level":         classify_office_level(office),
@@ -493,6 +522,7 @@ def parse_county_results(
             continue
         base = {
             "election_name":        election_info.name,
+            "election_type":        _classify_election_type(election_info.name),
             "election_year":        election_info.year,
             "election_date":        page_meta["election_date"],
             "county":               county_name,

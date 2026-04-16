@@ -27,9 +27,13 @@ from text_utils import parse_int as _parse_int
 # Some tables have trailing "summary" columns that are NOT candidates (totals, blanks, etc.).
 TRAILING_IGNORE_HEADERS = {
     "All Others",
+    "Blank",
     "Blanks",
     "No Preference",
+    "Scattering",
+    "Total Votes",
     "Total Votes Cast",
+    "Void",
 }
 
 # Many tables start with locality identifier columns (county/city/precinct/ward/etc.)
@@ -410,15 +414,33 @@ def parse_county_votes_from_detail_html(
         raise ValueError("state is required to build CountyVotes rows (got None).")
 
     # ---------------------------------------------------
-    # 7) Iterate through each locality row (county/city)
+    # 7) Detect whether a "Total Votes" / "Total Votes Cast" column is present.
+    #    It is always the last column when present, so we check the last header label
+    #    and grab the last <td> from each data row.
+    # ---------------------------------------------------
+    _TOTAL_VOTES_LABELS = {"Total Votes", "Total Votes Cast"}
+    all_header_labels = _get_all_header_labels(table)
+    has_total_votes_col = bool(all_header_labels) and all_header_labels[-1] in _TOTAL_VOTES_LABELS
+
+    # ---------------------------------------------------
+    # 8) Iterate through each locality row (county/city)
     # ---------------------------------------------------
     rows: List[CountyVotes] = []
+    county_total_votes: Dict[str, Optional[int]] = {}  # county_or_city -> total votes cast
 
     for tr in _iter_locality_rows(table):
         # Extract county/city name from the row.
         county = _extract_county_name_from_row(tr)
         if not county or county.lower() == "totals":
             continue  # Skip rows that don't look like a valid locality row.
+
+        # Extract total votes cast for this locality (last <td> when column exists).
+        if has_total_votes_col:
+            all_tds = tr.xpath("./td")
+            if all_tds:
+                county_total_votes[county] = _parse_int(
+                    _extract_vote_text_from_td(all_tds[-1])
+                )
 
         # Extract ONLY the candidate vote <td> cells (ignore locality cols + summary cols).
         vote_tds = _extract_candidate_vote_tds(
@@ -430,7 +452,7 @@ def parse_county_votes_from_detail_html(
             continue  # Skip malformed rows.
 
         # ---------------------------------------------------
-        # 8) Pair each candidate name with its corresponding vote cell
+        # 9) Pair each candidate name with its corresponding vote cell
         # ---------------------------------------------------
         for cand_name, td in zip(candidate_names, vote_tds):
             # Extract vote count string and parse into int.
@@ -444,7 +466,7 @@ def parse_county_votes_from_detail_html(
                 continue
 
             # ---------------------------------------------------
-            # 9) Create a CountyVotes dataclass instance for this (locality, candidate)
+            # 10) Create a CountyVotes dataclass instance for this (locality, candidate)
             # ---------------------------------------------------
             rows.append(
                 CountyVotes(
@@ -458,9 +480,11 @@ def parse_county_votes_from_detail_html(
             )
 
     # ---------------------------------------------------
-    # 10) Convert dataclass rows into a pandas DataFrame
+    # 11) Convert dataclass rows into a pandas DataFrame; attach total_votes when available.
     # ---------------------------------------------------
     df = pd.DataFrame([asdict(r) for r in rows])
+    if not df.empty and county_total_votes:
+        df["total_votes"] = df["county_or_city"].map(county_total_votes)
     return df
 
 
@@ -987,7 +1011,7 @@ def _extract_precinct_vote_tds(
 
 
 _PRECINCT_COLS = [
-    "state", "election_id", "candidate_id", "county", "precinct", "candidate", "votes", "precinct_winner"
+    "state", "election_year", "election_type", "election_id", "candidate_id", "county", "precinct", "candidate", "party", "votes", "precinct_winner"
 ]
 
 

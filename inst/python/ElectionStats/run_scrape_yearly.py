@@ -43,7 +43,7 @@ _MAX_WORKERS = 6
 _SAMPLE_N = 5000
 
 JOIN_KEYS = ["state", "election_id", "candidate_id"]
-COUNTY_COLS = ["state", "election_year", "election_id", "candidate_id", "county_or_city", "candidate", "votes", "county_winner"]
+COUNTY_COLS = ["state", "election_year", "election_type", "election_id", "candidate_id", "county_or_city", "candidate", "party", "votes", "county_winner"]
 
 
 # ---------------------------
@@ -185,17 +185,27 @@ def scrape_one_year(
                     f"fetching county/precinct for {n_unique:,} election(s)...",
                     flush=True,
                 )
-                # Use positional candidate IDs from the CSV header (1, 2, 3 ...).
-                # Candidate names from v2 text summaries often differ from CSV header
-                # names, so a global name→id map built from state_df is unreliable.
-                # Passing unique_elections (no candidate columns) forces each CSV to
-                # assign its own sequential IDs, which are then consistent across
-                # county_df, precinct_df, and the rebuilt state_df below.
-                county_df, precinct_df = build_county_and_precinct_dataframe_v2(
-                    state_df=unique_elections,
-                    base_url=base_url,
-                    max_workers=_MAX_WORKERS,
-                )
+                _county_method = _state_cfg.get("county_method", "csv")
+                if _county_method == "html":
+                    # States like NY: no CSV API endpoint; fetch rendered detail pages
+                    # sequentially through the already-open Playwright browser.
+                    county_df, precinct_df = build_county_and_precinct_dataframe_parallel(
+                        state_df=unique_elections,
+                        client_factory=lambda: pw_client,
+                        max_workers=1,  # Playwright is not thread-safe
+                    )
+                else:
+                    # Use positional candidate IDs from the CSV header (1, 2, 3 ...).
+                    # Candidate names from v2 text summaries often differ from CSV header
+                    # names, so a global name→id map built from state_df is unreliable.
+                    # Passing unique_elections (no candidate columns) forces each CSV to
+                    # assign its own sequential IDs, which are then consistent across
+                    # county_df, precinct_df, and the rebuilt state_df below.
+                    county_df, precinct_df = build_county_and_precinct_dataframe_v2(
+                        state_df=unique_elections,
+                        base_url=base_url,
+                        max_workers=_MAX_WORKERS,
+                    )
 
             # ── Rebuild state_df from CSV data (v2 states only) ──────────────
             # The v2 search page provides election metadata (office, district,
@@ -351,6 +361,26 @@ def scrape_one_year(
             ["election_id", "county", "precinct"], dropna=False
         )["votes"].transform("max")
         precinct_df["precinct_winner"] = precinct_df["votes"] == max_votes
+
+    # Enrich county/precinct with election_type and party from state_df.
+    # election_year is already on county_df (added above) but not precinct_df.
+    if not state_df.empty:
+        _type_party = (
+            state_df[["election_id", "candidate_id", "election_type", "party"]]
+            .drop_duplicates(subset=["election_id", "candidate_id"])
+        )
+        _year_type_party = (
+            state_df[["election_id", "candidate_id", "election_year", "election_type", "party"]]
+            .drop_duplicates(subset=["election_id", "candidate_id"])
+        )
+        if not county_df.empty:
+            county_df = county_df.merge(
+                _type_party, on=["election_id", "candidate_id"], how="left"
+            )
+        if not precinct_df.empty:
+            precinct_df = precinct_df.merge(
+                _year_type_party, on=["election_id", "candidate_id"], how="left"
+            )
 
     # Normalize/ensure expected output columns exist
     for c in COUNTY_COLS:

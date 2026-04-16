@@ -164,6 +164,20 @@ class PlaywrightClient(BasePlaywrightClient):
 
         return self.page.content()
 
+    def get_html(self, url: str) -> str:
+        """Fetch a contest detail page by URL, extracting election_id from the path.
+
+        Implements the same interface as StateHttpClient.get_html so this client
+        can be passed to the standard county/precinct parsers.
+
+        Expected URL form: {base_url}/contest/{election_id}
+        """
+        import re
+        m = re.search(r"/contest/(\d+)", url)
+        if not m:
+            raise ValueError(f"Cannot extract election_id from URL: {url}")
+        return self.get_detail_page(int(m.group(1)))
+
     def get_detail_page(self, election_id: int) -> str:
         """Navigate to election detail page and return HTML after JS loads.
 

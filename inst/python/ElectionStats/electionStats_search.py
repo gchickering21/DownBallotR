@@ -479,7 +479,7 @@ def parse_search_results(page_html: str, client, state_name: str, url:str) -> Li
                     office=office,
                     office_level=lookup_office_level(office, state_name),
                     district=district,
-                    stage=stage,
+                    election_type=stage,
                     candidate_id=candidate_id,
                     candidate=candidate_name,
                     party=_normalize_party(party, stage),
@@ -528,7 +528,7 @@ def fetch_search_results_dicts(
     page: int = 1,
 ) -> List[dict]:
     rows = fetch_search_results(client, state_key=state_key, year_from=year_from, year_to=year_to, page=page)
-    return [asdict(r) | {"detail_url": client.build_detail_url(r.election_id)} for r in rows]
+    return [asdict(r) | {"url": client.build_detail_url(r.election_id)} for r in rows]
 
 
 def iter_search_results(
@@ -647,7 +647,7 @@ def fetch_all_search_results_v2(
 def rows_to_dataframe(rows: list[ElectionSearchRow], client) -> pd.DataFrame:
     """
     Convert parsed ElectionSearchRow objects into a pandas DataFrame.
-    Includes computed detail_url.
+    Includes computed url.
 
     Parameters
     ----------
@@ -659,15 +659,15 @@ def rows_to_dataframe(rows: list[ElectionSearchRow], client) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        DataFrame with election results and detail_url column
+        DataFrame with election results and url column
     """
     # Check for build_detail_url method to distinguish client types
     # StateHttpClient has this method (uses /view/ URLs for MA/CO/NH/ID/VT)
     # PlaywrightClient does not (uses /contest/ URLs for SC/NM/NY/VA)
     if hasattr(client, 'build_detail_url'):
         # StateHttpClient (classic states: MA/CO/NH/ID/VT)
-        records = [asdict(r) | {"detail_url": client.build_detail_url(r.election_id)} for r in rows]
+        records = [asdict(r) | {"url": client.build_detail_url(r.election_id)} for r in rows]
     else:
         # PlaywrightClient (v2 states: SC/NM/NY/VA)
-        records = [asdict(r) | {"detail_url": f"{client.base_url}/contest/{r.election_id}"} for r in rows]
+        records = [asdict(r) | {"url": f"{client.base_url}/contest/{r.election_id}"} for r in rows]
     return pd.DataFrame.from_records(records)

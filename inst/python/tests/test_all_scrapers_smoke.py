@@ -165,11 +165,11 @@ def test_election_stats_classic(state: str, year: int) -> None:
     assert not result.empty, f"[{state}] Scraper returned 0 rows"
 
     # Columns populated
-    _assert_populated(result, state, ["state", "year", "election_id", "candidate_id",
+    _assert_populated(result, state, ["state", "election_year", "election_id", "candidate_id",
                                        "office", "candidate"])
 
     # Year matches request
-    _assert_year_range(result, state, "year", year)
+    _assert_year_range(result, state, "election_year", year)
 
     # Multiple offices (catches total parse failure)
     _assert_multiple_offices(result, state, "office")
@@ -179,7 +179,7 @@ def test_election_stats_classic(state: str, year: int) -> None:
 
     print(f"\n  [{state}] {len(result):,} rows | "
           f"{result['office'].nunique()} offices | "
-          f"year={result['year'].unique().tolist()}")
+          f"election_year={result['election_year'].unique().tolist()}")
 
 
 # ── ElectionStats — v2 (Playwright-based) ─────────────────────────────────────
@@ -205,15 +205,15 @@ def test_election_stats_v2(state: str, year: int) -> None:
     assert isinstance(result, pd.DataFrame), f"[{state}] Expected DataFrame, got {type(result).__name__}"
     assert not result.empty, f"[{state}] Scraper returned 0 rows"
 
-    _assert_populated(result, state, ["state", "year", "election_id", "candidate_id",
+    _assert_populated(result, state, ["state", "election_year", "election_id", "candidate_id",
                                        "office", "candidate"])
-    _assert_year_range(result, state, "year", year)
+    _assert_year_range(result, state, "election_year", year)
     _assert_multiple_offices(result, state, "office")
     _assert_votes_positive(result, state, col="total_vote_count")
 
     print(f"\n  [{state}] {len(result):,} rows | "
           f"{result['office'].nunique()} offices | "
-          f"year={result['year'].unique().tolist()}")
+          f"election_year={result['election_year'].unique().tolist()}")
 
 
 # ── North Carolina ─────────────────────────────────────────────────────────────
@@ -229,8 +229,8 @@ def test_north_carolina() -> None:
     assert isinstance(result, pd.DataFrame), f"[NC] Expected DataFrame, got {type(result).__name__}"
     assert not result.empty, "[NC] Scraper returned 0 rows"
 
-    _assert_populated(result, "north_carolina", ["state", "year"])
-    _assert_year_range(result, "north_carolina", "year", 2024)
+    _assert_populated(result, "north_carolina", ["state", "election_year"])
+    _assert_year_range(result, "north_carolina", "election_year", 2024)
     _assert_votes_positive(result, "north_carolina")
 
     print(f"\n  [north_carolina] {len(result):,} rows")
@@ -249,8 +249,8 @@ def test_connecticut() -> None:
     assert isinstance(result, pd.DataFrame), f"[CT] Expected DataFrame, got {type(result).__name__}"
     assert not result.empty, "[CT] Scraper returned 0 rows"
 
-    _assert_populated(result, "connecticut", ["state", "year"])
-    _assert_year_range(result, "connecticut", "year", 2024)
+    _assert_populated(result, "connecticut", ["state", "election_year"])
+    _assert_year_range(result, "connecticut", "election_year", 2024)
     _assert_votes_positive(result, "connecticut")
     _assert_multiple_offices(result, "connecticut")
 
@@ -270,8 +270,8 @@ def test_georgia() -> None:
     assert isinstance(result, pd.DataFrame), f"[GA] Expected DataFrame, got {type(result).__name__}"
     assert not result.empty, "[GA] Scraper returned 0 rows"
 
-    _assert_populated(result, "georgia", ["state", "year"])
-    _assert_year_range(result, "georgia", "year", 2024)
+    _assert_populated(result, "georgia", ["state", "election_year"])
+    _assert_year_range(result, "georgia", "election_year", 2024)
     _assert_votes_positive(result, "georgia")
     _assert_multiple_offices(result, "georgia")
 
@@ -291,8 +291,8 @@ def test_utah() -> None:
     assert isinstance(result, pd.DataFrame), f"[UT] Expected DataFrame, got {type(result).__name__}"
     assert not result.empty, "[UT] Scraper returned 0 rows"
 
-    _assert_populated(result, "utah", ["state", "year"])
-    _assert_year_range(result, "utah", "year", 2024)
+    _assert_populated(result, "utah", ["state", "election_year"])
+    _assert_year_range(result, "utah", "election_year", 2024)
     _assert_votes_positive(result, "utah")
     _assert_multiple_offices(result, "utah")
 
@@ -312,8 +312,8 @@ def test_indiana() -> None:
     assert isinstance(result, pd.DataFrame), f"[IN] Expected DataFrame, got {type(result).__name__}"
     assert not result.empty, "[IN] Scraper returned 0 rows"
 
-    _assert_populated(result, "indiana", ["state", "year"])
-    _assert_year_range(result, "indiana", "year", 2024)
+    _assert_populated(result, "indiana", ["state", "election_year"])
+    _assert_year_range(result, "indiana", "election_year", 2024)
     _assert_votes_positive(result, "indiana")
     _assert_multiple_offices(result, "indiana")
 

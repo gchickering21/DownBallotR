@@ -83,22 +83,22 @@ from office_level_utils import classify_office_level
 # Output column definitions
 # ---------------------------------------------------------------------------
 _STATE_COLS = [
-    "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "office_level", "office", "localities_reporting",
+    "election_name", "election_year", "election_date",
+    "office_level", "office",
     "candidate", "party", "winner", "votes", "vote_pct", "url",
     # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _COUNTY_COLS = [
-    "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "county", "office_level", "office", "localities_reporting",
+    "election_name", "election_year", "election_date",
+    "county", "office_level", "office",
     "candidate", "party", "county_winner", "votes", "vote_pct", "url",
     # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _VM_STATE_COLS = [
-    "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "office_level", "office", "localities_reporting",
+    "election_name", "election_year", "election_date",
+    "office_level", "office",
     "candidate", "party",
     # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
@@ -106,8 +106,8 @@ _VM_STATE_COLS = [
 ]
 
 _VM_COUNTY_COLS = [
-    "election_name", "election_year", "election_slug", "election_date",
-    "result_status", "county", "office_level", "office", "localities_reporting",
+    "election_name", "election_year", "election_date",
+    "county", "office_level", "office",
     "candidate", "party",
     # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
@@ -408,16 +408,12 @@ def parse_state_results(
         office = _panel_office(panel)
         if not office:
             continue
-        localities_reporting = _panel_localities_reporting(panel)
         base = {
             "election_name":        election_info.name,
             "election_year":        election_info.year,
-            "election_slug":        election_info.slug,
             "election_date":        page_meta["election_date"],
-            "result_status":        page_meta["result_status"],
             "office_level":         classify_office_level(office),
             "office":               office,
-            "localities_reporting": localities_reporting,
             "url":                  election_info.url,
         }
 
@@ -495,17 +491,13 @@ def parse_county_results(
         office = _panel_office(panel)
         if not office:
             continue
-        localities_reporting = _panel_localities_reporting(panel)
         base = {
             "election_name":        election_info.name,
             "election_year":        election_info.year,
-            "election_slug":        election_info.slug,
             "election_date":        page_meta["election_date"],
-            "result_status":        page_meta["result_status"],
             "county":               county_name,
             "office_level":         classify_office_level(office),
             "office":               office,
-            "localities_reporting": localities_reporting,
             "url":                  url,
         }
 

@@ -728,7 +728,7 @@ def build_county_dataframe(state_df: pd.DataFrame, client) -> pd.DataFrame:
     Parameters
     ----------
     state_df : pd.DataFrame
-        Must include at least ['election_id', 'detail_url'].
+        Must include at least ['election_id', 'url'].
         If 'state' exists, it will be passed through and included in output.
         If 'candidate_id' exists, it will be used to create a stable candidate_id_map.
     client : object
@@ -740,7 +740,7 @@ def build_county_dataframe(state_df: pd.DataFrame, client) -> pd.DataFrame:
         Concatenated county/city vote dataframe (long form).
     """
     # Validate required columns exist.
-    required = {"election_id", "detail_url"}
+    required = {"election_id", "url"}
     missing = required - set(state_df.columns)
     if missing:
         raise ValueError(f"state_df missing columns: {sorted(missing)}")
@@ -758,7 +758,7 @@ def build_county_dataframe(state_df: pd.DataFrame, client) -> pd.DataFrame:
     # Build a list of jobs (state, election_id, url) to run.
     jobs: List[Tuple[Optional[str], int, str]] = []
     for _, r in state_df.iterrows():
-        url = str(r["detail_url"]).strip()
+        url = str(r["url"]).strip()
         if not url:
             continue  # Skip missing/blank urls.
         st = str(r["state"]) if has_state else None
@@ -1160,7 +1160,7 @@ def build_county_dataframe_parallel(
     Parameters
     ----------
     state_df : pd.DataFrame
-        Must include at least ['election_id', 'detail_url'].
+        Must include at least ['election_id', 'url'].
         If 'state' exists, it will be passed through and included in output.
         If 'candidate_id' exists, it will be used to create a stable candidate_id_map.
     client_factory : callable
@@ -1175,7 +1175,7 @@ def build_county_dataframe_parallel(
         Concatenated county/city vote dataframe (long form).
     """
     # Validate required columns exist.
-    required = {"election_id", "detail_url"}
+    required = {"election_id", "url"}
     missing = required - set(state_df.columns)
     if missing:
         raise ValueError(f"state_df missing columns: {sorted(missing)}")
@@ -1193,7 +1193,7 @@ def build_county_dataframe_parallel(
     # Build a list of jobs (state, election_id, url).
     jobs: List[Tuple[Optional[str], int, str]] = []
     for _, r in state_df.iterrows():
-        url = str(r["detail_url"]).strip()
+        url = str(r["url"]).strip()
         if not url:
             continue
         st = str(r["state"]) if has_state else None
@@ -1240,7 +1240,7 @@ def build_county_and_precinct_dataframe_parallel(
     Parameters
     ----------
     state_df : pd.DataFrame
-        Must include ``['election_id', 'detail_url']``.
+        Must include ``['election_id', 'url']``.
         ``'state'`` and ``'candidate_id'`` columns are used when present.
     client_factory : callable
         Returns a new client instance per thread.
@@ -1252,7 +1252,7 @@ def build_county_and_precinct_dataframe_parallel(
     Tuple[pd.DataFrame, pd.DataFrame]
         ``(county_df, precinct_df)`` — either may be empty.
     """
-    required = {"election_id", "detail_url"}
+    required = {"election_id", "url"}
     missing = required - set(state_df.columns)
     if missing:
         raise ValueError(f"state_df missing columns: {sorted(missing)}")
@@ -1266,7 +1266,7 @@ def build_county_and_precinct_dataframe_parallel(
 
     jobs: List[Tuple[Optional[str], int, str]] = []
     for _, r in state_df.iterrows():
-        url = str(r["detail_url"]).strip()
+        url = str(r["url"]).strip()
         if not url:
             continue
         st = str(r["state"]) if has_state else None

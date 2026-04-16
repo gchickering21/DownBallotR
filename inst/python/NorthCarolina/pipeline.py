@@ -53,8 +53,8 @@ class NcElectionPipeline:
                 stacklevel=2,
             )
             precinct_empty = pd.DataFrame(columns=cfg.schema.join_cols + ["election_year"])
-            county_empty   = pd.DataFrame(columns=cfg.schema.county_cols + ["election_year"])
-            state_empty    = pd.DataFrame(columns=cfg.schema.state_cols + ["election_year"])
+            county_empty   = pd.DataFrame(columns=cfg.schema.county_cols)
+            state_empty    = pd.DataFrame(columns=cfg.schema.state_cols)
             return precinct_empty, county_empty, state_empty
 
         elections = self._filter_elections(
@@ -119,8 +119,8 @@ class NcElectionPipeline:
                     f"See the warning messages printed above for details."
                 )
             precinct_empty = pd.DataFrame(columns=cfg.schema.join_cols + ["election_year"])
-            county_empty = pd.DataFrame(columns=cfg.schema.county_cols + ["election_year"])
-            state_empty = pd.DataFrame(columns=cfg.schema.state_cols + ["election_year"])
+            county_empty = pd.DataFrame(columns=cfg.schema.county_cols)
+            state_empty = pd.DataFrame(columns=cfg.schema.state_cols)
             return precinct_empty, county_empty, state_empty
 
         precinct_final = pd.concat(precinct_frames, ignore_index=True)
@@ -145,6 +145,18 @@ class NcElectionPipeline:
         # Aggregation functions expect choice/choice_party/total_votes internally
         county_df = aggregate_to_county_level(norm)
         state_df = aggregate_county_to_state(county_df)
+
+        # Add election_year to county/state outputs derived from election_date
+        for df in (county_df, state_df):
+            df["election_year"] = (
+                pd.to_datetime(df["election_date"], errors="coerce")
+                .dt.year
+                .astype("Int64")
+            )
+
+        # Rename contest_name → office in county/state outputs
+        county_df = county_df.rename(columns={"contest_name": "office"})
+        state_df = state_df.rename(columns={"contest_name": "office"})
 
         # Rename precinct columns to match county/state schema so all three
         # levels share candidate/party/votes as join keys

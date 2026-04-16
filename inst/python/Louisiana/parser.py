@@ -109,17 +109,14 @@ _STATE_COLS = [
     "election_name",
     "election_year",
     "election_date",
-    "tab",
     "office_level",
     "office",
-    "office_detail",
+    "district",
     "candidate",
     "party",
     "votes",
     "vote_pct",
     "winner",
-    "precincts_reporting",
-    "precincts_expected",
     "voter_turnout_pct",
 ]
 
@@ -130,14 +127,12 @@ _PARISH_COLS = [
     "parish",
     "office_level",
     "office",
-    "office_detail",
+    "district",
     "candidate",
     "party",
     "votes",
     "vote_pct",
     "parish_winner",
-    "precincts_reporting",
-    "precincts_expected",
     "parish_voter_turnout_pct",
 ]
 
@@ -309,12 +304,12 @@ def _parse_results_from_doc(
             continue
 
         if " -- " in raw_office:
-            office, office_detail = raw_office.split(" -- ", 1)
+            office, district = raw_office.split(" -- ", 1)
             office = office.strip()
-            office_detail = office_detail.strip()
+            district = district.strip()
         else:
             office = raw_office
-            office_detail = None
+            district = None
 
         election_level = _classify_election_level(tab, office)
 
@@ -362,7 +357,7 @@ def _parse_results_from_doc(
                 "election_date":      election.election_date,
                 "office_level":       election_level,
                 "office":             office,
-                "office_detail":      office_detail,
+                "district":           district,
                 "candidate":          candidate,
                 "party":              party,
                 "votes":              votes,

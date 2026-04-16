@@ -43,7 +43,7 @@ _MAX_WORKERS = 6
 _SAMPLE_N = 5000
 
 JOIN_KEYS = ["state", "election_id", "candidate_id"]
-COUNTY_COLS = ["state", "year", "election_id", "candidate_id", "county_or_city", "candidate", "votes", "county_winner"]
+COUNTY_COLS = ["state", "election_year", "election_id", "candidate_id", "county_or_city", "candidate", "votes", "county_winner"]
 
 
 # ---------------------------
@@ -115,7 +115,7 @@ def scrape_one_year(
     Returns (state_df, county_df, precinct_df) for a single year.
     Dispatches to requests-based or Playwright-based scraping.
 
-    state_df:    candidate-exploded search results (includes detail_url)
+    state_df:    candidate-exploded search results (includes url)
     county_df:   long county votes (includes candidate_id)
     precinct_df: long precinct votes; empty DataFrame for states/years without
                  precinct rows on the detail pages.
@@ -151,11 +151,11 @@ def scrape_one_year(
             else:
                 state_df["state"] = state_name
 
-            if "year" not in state_df.columns:
-                state_df.insert(0, "year", year)
+            if "election_year" not in state_df.columns:
+                state_df.insert(0, "election_year", year)
 
             # Only hit each election detail page once
-            unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
+            unique_elections = state_df[["state", "election_id", "url"]].drop_duplicates()
 
             if not _need_subunit:
                 county_df   = pd.DataFrame(columns=COUNTY_COLS)
@@ -205,9 +205,9 @@ def scrape_one_year(
             # consistent with county_df / precinct_df.
             if _scraper_type == "v2" and not county_df.empty:
                 # Preserve per-election metadata from search results
-                meta_cols = [c for c in ["election_id", "year", "office",
-                                         "office_level", "district", "stage",
-                                         "state", "detail_url"]
+                meta_cols = [c for c in ["election_id", "election_year", "office",
+                                         "office_level", "district", "election_type",
+                                         "state", "url"]
                              if c in state_df.columns]
                 election_meta = (
                     state_df[meta_cols]
@@ -283,11 +283,11 @@ def scrape_one_year(
             state_df["state"] = state_name
 
         # Ensure a year column exists
-        if "year" not in state_df.columns:
-            state_df.insert(0, "year", year)
+        if "election_year" not in state_df.columns:
+            state_df.insert(0, "election_year", year)
 
         # Only hit each election detail page once
-        unique_elections = state_df[["state", "election_id", "detail_url"]].drop_duplicates()
+        unique_elections = state_df[["state", "election_id", "url"]].drop_duplicates()
 
         if not _need_subunit:
             county_df   = pd.DataFrame(columns=COUNTY_COLS)
@@ -335,8 +335,8 @@ def scrape_one_year(
     else:
         county_df["state"] = state_name
 
-    if "year" not in county_df.columns:
-        county_df.insert(0, "year", year)
+    if "election_year" not in county_df.columns:
+        county_df.insert(0, "election_year", year)
 
     # Derive county_winner: top vote-getter per election+county
     if not county_df.empty and "votes" in county_df.columns:

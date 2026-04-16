@@ -6,11 +6,11 @@ from dataclasses import dataclass
 class ElectionSearchRow:
     state: str
     election_id: int
-    year: int
+    election_year: int
     office: str
     office_level: str
     district: str
-    stage: str
+    election_type: str
     candidate_id: int
     candidate: str
     party: str

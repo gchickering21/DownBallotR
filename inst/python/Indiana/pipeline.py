@@ -109,7 +109,6 @@ class InElectionPipeline:
             if self.level in ("all", "state"):
                 df = parse_state_results(
                     offcat_data, election, cat_name, office_level,
-                    precincts_reporting, total_precincts,
                 )
                 if not df.empty:
                     state_frames.append(df)

@@ -981,10 +981,10 @@ TRIAL_YEARS: dict[str, int] = {
     "south_carolina": 2024,
     "nc":             2025,
     "indiana":        2024,
-    "georgia":        2024,
+    "georgia":        2023,
     "utah":           2024,
-    "connecticut":    2024,
-    "louisiana":      2024,
+    "connecticut":    2023,
+    "louisiana":      2026,
 }
 
 
@@ -1021,7 +1021,7 @@ def trial_run(output_dir: Path, *, dry_run: bool = False) -> list[bool]:
     print("  SECTION: NC (trial)")
     print(f"{'─'*70}")
     year = TRIAL_YEARS["nc"]
-    base = trial_dir / "northcarolina_results"
+    base = trial_dir / "nc"
     stem = f"nc_{year}_{year}"
     paths = {
         "precinct": base / f"{stem}_precinct.csv",

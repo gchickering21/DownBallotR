@@ -475,7 +475,7 @@ def parse_search_results(page_html: str, client, state_name: str, url:str) -> Li
                 ElectionSearchRow(
                     state=state_name or client.state,  # keep client as source of truth for state label
                     election_id=election_id,
-                    year=year,
+                    election_year=year,
                     office=office,
                     office_level=lookup_office_level(office, state_name),
                     district=district,

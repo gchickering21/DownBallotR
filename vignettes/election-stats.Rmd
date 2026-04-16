@@ -72,9 +72,9 @@ state_df <- scrape_elections(
 )
 
 state_df %>%
-  filter(contest_outcome == "Winner") %>%
-  arrange(desc(total_vote_count)) %>%
-  select(office, district, candidate, party, total_vote_count)
+  filter(winner == TRUE) %>%
+  arrange(desc(votes)) %>%
+  select(office, district, candidate, party, votes)
 ```
 
 ### County-level vote counts
@@ -89,7 +89,7 @@ county_df <- scrape_elections(
 
 county_df %>%
   arrange(desc(votes)) %>%
-  select(county_or_city, candidate_name, votes)
+  select(county_or_city, candidate, votes)
 ```
 
 ### Both levels at once (default)
@@ -118,8 +118,8 @@ ma_results <- scrape_elections(
 )
 
 ma_results %>%
-  filter(stage == "General") %>%
-  select(year, office, district, candidate, party, total_vote_count)
+  filter(election_type == "General") %>%
+  select(election_year, office, district, candidate, party, votes)
 ```
 
 ### Playwright state (South Carolina)
@@ -133,8 +133,8 @@ sc_results <- scrape_elections(
 )
 
 sc_results %>%
-  filter(contest_outcome == "Winner") %>%
-  select(office, district, candidate, party, vote_percentage)
+  filter(winner == TRUE) %>%
+  select(office, district, candidate, party, vote_pct)
 ```
 
 ### Precinct-level results
@@ -195,15 +195,15 @@ res_seq <- scrape_elections(
 
 ### `level = "state"` (candidate-level)
 
-- `state`, `year`, `election_id`, `candidate_id`
-- `office`, `district`, `stage` (General, Primary, etc.)
+- `state`, `election_year`, `election_id`, `candidate_id`
+- `office`, `district`, `election_type` (General, Primary, etc.)
 - `candidate`, `party`
-- `total_vote_count`, `vote_percentage`, `contest_outcome`
-- `detail_url`
+- `votes`, `vote_pct`, `winner`
+- `url`
 
 ### `level = "county"`
 
-- `state`, `year`, `election_id`, `candidate_id`
+- `state`, `election_year`, `election_id`, `candidate_id`
 - `county_or_city`, `candidate`, `votes`
 - `county_winner` — `TRUE` for the top vote-getter within each county/city + election
 

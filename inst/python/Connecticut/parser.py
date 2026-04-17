@@ -60,7 +60,7 @@ from .models import CtElectionInfo
 from office_level_utils import classify_office_level as classify_election_level
 
 
-_CT_DATE_FMTS = ("%B %d, %Y", "%B %Y", "%Y")
+_CT_DATE_FMTS = ("%m/%d/%Y", "%B %d, %Y", "%B %Y", "%Y")
 
 
 def _parse_ct_election_date(election_name: str) -> "date | None":

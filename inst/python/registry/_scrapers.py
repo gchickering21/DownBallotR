@@ -21,10 +21,32 @@ from ._validators import (
     _to_year,
     _validate_level,
     _validate_level_ct,
+    _validate_level_la,
     _validate_workers,
-    _VALID_LEVELS_LA,
 )
 from ._year_ranges import _clamp_year_range
+
+
+def _prep_years(
+    year_from: "int | None",
+    year_to: "int | None",
+    source_key: "str | None" = None,
+) -> "tuple[int | None, int | None]":
+    year_from = _to_year(year_from)
+    year_to   = _to_year(year_to)
+    if source_key is not None:
+        year_from, year_to = _clamp_year_range(year_from, year_to, source_key)
+    return year_from, year_to
+
+
+def _format_year_label(year_from: "int | None", year_to: "int | None") -> str:
+    if year_from and year_to:
+        return f"{year_from}–{year_to}"
+    if year_from:
+        return f"{year_from}–"
+    if year_to:
+        return f"–{year_to}"
+    return "all years"
 
 
 # ── State-portal scrapers (Clarity / Playwright-based) ────────────────────────
@@ -58,16 +80,9 @@ def _scrape_ut(
     """
     _validate_level(level)
     max_county_workers = _validate_workers(max_county_workers, "max_county_workers")
-    year_from = _to_year(year_from)
-    year_to   = _to_year(year_to)
-    year_from, year_to = _clamp_year_range(year_from, year_to, "utah_results")
+    year_from, year_to = _prep_years(year_from, year_to, "utah_results")
 
-    label = (
-        f"{year_from}–{year_to}" if year_from and year_to
-        else f"{year_from}–" if year_from
-        else f"–{year_to}" if year_to
-        else "all years"
-    )
+    label = _format_year_label(year_from, year_to)
     print(f"[UT] Starting scrape | {label} | level={level!r} | vote_methods={include_vote_methods}")
 
     from Clarity.Utah.pipeline import get_ut_election_results
@@ -109,16 +124,9 @@ def _scrape_ga(
     """
     _validate_level(level)
     max_county_workers = _validate_workers(max_county_workers, "max_county_workers")
-    year_from = _to_year(year_from)
-    year_to   = _to_year(year_to)
-    year_from, year_to = _clamp_year_range(year_from, year_to, "georgia_results")
+    year_from, year_to = _prep_years(year_from, year_to, "georgia_results")
 
-    label = (
-        f"{year_from}–{year_to}" if year_from and year_to
-        else f"{year_from}–" if year_from
-        else f"–{year_to}" if year_to
-        else "all years"
-    )
+    label = _format_year_label(year_from, year_to)
     print(f"[GA] Starting scrape | {label} | level={level!r} | vote_methods={include_vote_methods}")
 
     from Clarity.Georgia.pipeline import get_ga_election_results
@@ -155,15 +163,9 @@ def _scrape_ct(
     """
     _validate_level_ct(level)
     max_town_workers = _validate_workers(max_town_workers, "max_town_workers")
-    year_from = _to_year(year_from)
-    year_to   = _to_year(year_to)
+    year_from, year_to = _prep_years(year_from, year_to)
 
-    label = (
-        f"{year_from}–{year_to}" if year_from and year_to
-        else f"{year_from}–" if year_from
-        else f"–{year_to}" if year_to
-        else "all years"
-    )
+    label = _format_year_label(year_from, year_to)
     print(f"[CT] Starting scrape | {label} | level={level!r}")
 
     from Connecticut.pipeline import get_ct_election_results
@@ -197,19 +199,11 @@ def _scrape_la(
     max_parish_workers : int
         Parallel Chromium browsers for parish scraping (default 2).
     """
-    if level not in _VALID_LEVELS_LA:
-        raise ValueError(f"level must be one of {_VALID_LEVELS_LA}; got {level!r}.")
+    _validate_level_la(level)
     max_parish_workers = _validate_workers(max_parish_workers, "max_parish_workers")
-    year_from = _to_year(year_from)
-    year_to   = _to_year(year_to)
-    year_from, year_to = _clamp_year_range(year_from, year_to, "louisiana_results")
+    year_from, year_to = _prep_years(year_from, year_to, "louisiana_results")
 
-    label = (
-        f"{year_from}–{year_to}" if year_from and year_to
-        else f"{year_from}–" if year_from
-        else f"–{year_to}" if year_to
-        else "all years"
-    )
+    label = _format_year_label(year_from, year_to)
     print(f"[LA] Starting scrape | {label} | level={level!r}")
 
     from Louisiana.pipeline import get_la_election_results
@@ -241,16 +235,9 @@ def _scrape_in(
         ``'county'`` — county-level totals only.
     """
     _validate_level(level)
-    year_from = _to_year(year_from)
-    year_to   = _to_year(year_to)
-    year_from, year_to = _clamp_year_range(year_from, year_to, "indiana_results")
+    year_from, year_to = _prep_years(year_from, year_to, "indiana_results")
 
-    label = (
-        f"{year_from}–{year_to}" if year_from and year_to
-        else f"{year_from}–" if year_from
-        else f"–{year_to}" if year_to
-        else "all years"
-    )
+    label = _format_year_label(year_from, year_to)
     print(f"[IN] Starting scrape | {label} | level={level!r}")
 
     from Indiana.pipeline import get_in_election_results
@@ -284,15 +271,9 @@ def _scrape_nc(
         ``'county'``   — county-level DataFrame only.
         ``'state'``    — statewide totals DataFrame only.
     """
-    year_from = _to_year(year_from)
-    year_to   = _to_year(year_to)
+    year_from, year_to = _prep_years(year_from, year_to)
 
-    label = (
-        f"{year_from}–{year_to}" if year_from and year_to
-        else f"{year_from}–" if year_from
-        else f"–{year_to}" if year_to
-        else "all years"
-    )
+    label = _format_year_label(year_from, year_to)
     print(f"[NC] Starting scrape | {label} | level={level!r}")
 
     min_date, max_date = year_to_date_range(year_from, year_to)

@@ -178,6 +178,28 @@ class PlaywrightClient(BasePlaywrightClient):
             raise ValueError(f"Cannot extract election_id from URL: {url}")
         return self.get_detail_page(int(m.group(1)))
 
+    def fetch_csv_text(self, url: str) -> str:
+        """Fetch a CSV URL using the browser session's cookies/Cloudflare clearance.
+
+        Uses Playwright's APIRequestContext so the request inherits the browser
+        context's cookies (including any Cloudflare clearance tokens), bypassing
+        bot-protection that would block a plain ``requests.get()`` call.
+
+        Parameters
+        ----------
+        url : str
+            Full URL to fetch (e.g. the contest CSV download endpoint).
+
+        Returns
+        -------
+        str
+            Response body as text.
+        """
+        if self.context is None:
+            raise RuntimeError("Browser not initialized. Use context manager (with statement).")
+        response = self.context.request.get(url)
+        return response.text()
+
     def get_detail_page(self, election_id: int) -> str:
         """Navigate to election detail page and return HTML after JS loads.
 

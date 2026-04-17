@@ -134,6 +134,7 @@ class NcElectionPipeline:
         return precinct_final, county_final, state_final
 
     def _scrape_one(self, election) -> pd.DataFrame:
+        cfg = get_config()
         zip_url = _get_attr(election, "zip_url")
         election_date = _get_attr(election, "election_date")
 

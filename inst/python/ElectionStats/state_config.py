@@ -71,7 +71,8 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "v2",
         "scraping_method": "playwright",
         "url_style": "query_params",
-        "county_method": "html",  # No CSV API; fetch rendered detail pages via Playwright
+        "county_method": "csv",
+        "csv_requires_browser": True,  # CSV API is behind Cloudflare; must fetch via browser session
     },
     "idaho": {
         "base_url": "https://canvass.sos.idaho.gov/eng/contests",

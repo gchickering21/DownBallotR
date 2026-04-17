@@ -40,6 +40,13 @@ def _validate_level_ct(level: str) -> None:
         )
 
 
+def _validate_level_la(level: str) -> None:
+    if level not in _VALID_LEVELS_LA:
+        raise ValueError(
+            f"level must be one of {_VALID_LEVELS_LA} for Louisiana; got {level!r}."
+        )
+
+
 def _validate_workers(value: int, name: str = "max_workers") -> int:
     """Ensure a parallelism argument is a positive integer, capped at _R_WORKERS_CAP.
 

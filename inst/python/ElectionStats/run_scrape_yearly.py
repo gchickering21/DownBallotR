@@ -43,7 +43,7 @@ _MAX_WORKERS = 6
 _SAMPLE_N = 5000
 
 JOIN_KEYS = ["state", "election_id", "candidate_id"]
-COUNTY_COLS = ["state", "election_year", "election_type", "election_id", "candidate_id", "office", "office_level", "district", "county_or_city", "candidate", "party", "votes", "county_winner", "url"]
+COUNTY_COLS = ["state", "election_year", "election_type", "election_id", "candidate_id", "office", "office_level", "district", "county_or_city", "candidate", "party", "votes", "vote_pct", "county_winner", "url"]
 
 
 # ---------------------------
@@ -186,26 +186,28 @@ def scrape_one_year(
                     flush=True,
                 )
                 _county_method = _state_cfg.get("county_method", "csv")
-                if _county_method == "html":
-                    # States like NY: no CSV API endpoint; fetch rendered detail pages
-                    # sequentially through the already-open Playwright browser.
-                    county_df, precinct_df = build_county_and_precinct_dataframe_parallel(
-                        state_df=unique_elections,
-                        client_factory=lambda: pw_client,
-                        max_workers=1,  # Playwright is not thread-safe
-                    )
-                else:
-                    # Use positional candidate IDs from the CSV header (1, 2, 3 ...).
-                    # Candidate names from v2 text summaries often differ from CSV header
-                    # names, so a global name→id map built from state_df is unreliable.
-                    # Passing unique_elections (no candidate columns) forces each CSV to
-                    # assign its own sequential IDs, which are then consistent across
-                    # county_df, precinct_df, and the rebuilt state_df below.
-                    county_df, precinct_df = build_county_and_precinct_dataframe_v2(
-                        state_df=unique_elections,
-                        base_url=base_url,
-                        max_workers=_MAX_WORKERS,
-                    )
+                # Use positional candidate IDs from the CSV header (1, 2, 3 ...).
+                # Candidate names from v2 text summaries often differ from CSV header
+                # names, so a global name→id map built from state_df is unreliable.
+                # Passing unique_elections (no candidate columns) forces each CSV to
+                # assign its own sequential IDs, which are then consistent across
+                # county_df, precinct_df, and the rebuilt state_df below.
+                #
+                # For states like NY whose CSV API is behind Cloudflare, pass
+                # pw_client.fetch_csv_text as the fetcher so downloads go through
+                # the already-open browser session (which has Cloudflare clearance).
+                # This also forces sequential execution (required for Playwright).
+                _csv_fetcher = (
+                    pw_client.fetch_csv_text
+                    if _state_cfg.get("csv_requires_browser", False)
+                    else None
+                )
+                county_df, precinct_df = build_county_and_precinct_dataframe_v2(
+                    state_df=unique_elections,
+                    base_url=base_url,
+                    max_workers=_MAX_WORKERS,
+                    fetcher=_csv_fetcher,
+                )
 
             # ── Rebuild state_df from CSV data (v2 states only) ──────────────
             # The v2 search page provides election metadata (office, district,
@@ -369,6 +371,22 @@ def scrape_one_year(
         )["votes"].transform("max")
         county_df["county_winner"] = county_df["votes"] == max_votes
 
+    # Derive vote_pct per (election_id, county_or_city): use total_votes when present
+    # (v2 states include blanks/scattering in total_votes), else sum candidate votes.
+    if not county_df.empty and "votes" in county_df.columns:
+        if "total_votes" in county_df.columns and county_df["total_votes"].notna().any():
+            denom = county_df["total_votes"].replace(0, pd.NA)
+        else:
+            denom = county_df.groupby(
+                ["election_id", "county_or_city"], dropna=False
+            )["votes"].transform("sum").replace(0, pd.NA)
+        county_df["vote_pct"] = (
+            (county_df["votes"] / denom * 100)
+            .pipe(lambda s: pd.to_numeric(s, errors="coerce"))
+            .round(2)
+            .apply(lambda x: f"{x}%" if pd.notna(x) else "")
+        )
+
     # Derive precinct_winner: top vote-getter per election+county+precinct
     if not precinct_df.empty and "votes" in precinct_df.columns:
         max_votes = precinct_df.groupby(
@@ -389,10 +407,16 @@ def scrape_one_year(
             .drop_duplicates(subset=["election_id", "candidate_id"])
         )
         if not county_df.empty:
+            _join_keys = {"election_id", "candidate_id"}
+            _overlap = [c for c in _type_party.columns if c not in _join_keys and c in county_df.columns]
+            county_df = county_df.drop(columns=_overlap)
             county_df = county_df.merge(
                 _type_party, on=["election_id", "candidate_id"], how="left"
             )
         if not precinct_df.empty:
+            _join_keys = {"election_id", "candidate_id"}
+            _overlap = [c for c in _year_type_party.columns if c not in _join_keys and c in precinct_df.columns]
+            precinct_df = precinct_df.drop(columns=_overlap)
             precinct_df = precinct_df.merge(
                 _year_type_party, on=["election_id", "candidate_id"], how="left"
             )

@@ -105,7 +105,6 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 
 import registry
-from Louisiana.pipeline import get_la_election_results
 
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -119,6 +118,11 @@ CURRENT_YEAR = datetime.date.today().year
 ELECTION_STATS_PRECINCT_STATES: frozenset[str] = frozenset({
     "colorado", "massachusetts", "idaho",
     "south_carolina", "new_mexico", "virginia",
+})
+
+# States that produce only a state-level file (no county output).
+ELECTION_STATS_NO_COUNTY_STATES: frozenset[str] = frozenset({
+    "new_york",
 })
 
 # Year ranges mirror registry._YEAR_RANGES / STATE_CONFIGS
@@ -296,6 +300,85 @@ def _run_tasks(
     return results
 
 
+def _save_scrape_result(
+    result: "pd.DataFrame | dict",
+    paths: "dict[str, Path]",
+    level: str,
+) -> bool:
+    """Save a scrape result (DataFrame or dict of DataFrames) to *paths*."""
+    try:
+        if isinstance(result, dict):
+            for key, df in result.items():
+                if key not in paths:
+                    continue
+                if df.empty:
+                    print(f"  ⚠ empty result for '{key}' — skipping write")
+                else:
+                    _save(df, paths[key])
+        elif isinstance(result, pd.DataFrame):
+            if result.empty:
+                print("  ⚠ empty result — skipping write")
+            elif level in paths:
+                _save(result, paths[level])
+        else:
+            print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
+            return False
+    except Exception:
+        print("  ✗ ERROR while saving result:")
+        traceback.print_exc()
+        return False
+    return True
+
+
+def _download_yearly(
+    output_dir: Path,
+    *,
+    base_subdir: str,
+    source: str,
+    year_from: int,
+    year_to: int,
+    level: str,
+    dry_run: bool,
+    make_label: "Callable[[int], str]",
+    make_paths: "Callable[[Path, int], dict[str, Path]]",
+    scrape_kwargs: "dict | None" = None,
+) -> "list[bool]":
+    """Year-loop boilerplate shared by all single-state yearly downloaders."""
+    base = output_dir / base_subdir
+    scrape_kwargs = scrape_kwargs or {}
+    results: list[bool] = []
+
+    for year in range(year_from, year_to + 1):
+        print(f"\n[{make_label(year)}]")
+        paths = make_paths(base, year)
+
+        if _all_valid(paths):
+            print("  ↷ all output files exist, skipping")
+            results.append(True)
+            continue
+
+        if dry_run:
+            for key, p in paths.items():
+                status = "exists" if p.exists() else "would write"
+                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
+            results.append(True)
+            continue
+
+        try:
+            result = registry.scrape(
+                source, year_from=year, year_to=year, level=level, **scrape_kwargs
+            )
+        except Exception:
+            print("  ✗ ERROR during scrape:")
+            traceback.print_exc()
+            results.append(False)
+            continue
+
+        results.append(_save_scrape_result(result, paths, level))
+
+    return results
+
+
 # ── Section downloaders ────────────────────────────────────────────────────────
 
 def download_election_stats(
@@ -339,13 +422,16 @@ def download_election_stats(
         label       = f"ElectionStats  {s}  {year_from}–{year_to}"
 
         precinct_path = state_dir / f"{stem}_precinct.csv"
-        has_precinct  = s in ELECTION_STATS_PRECINCT_STATES
+        has_county   = s not in ELECTION_STATS_NO_COUNTY_STATES
+        has_precinct = s in ELECTION_STATS_PRECINCT_STATES
 
         print(f"\n[{label}]")
-        base_ok     = _is_valid_csv(state_path) and _is_valid_csv(county_path)
-        precinct_ok = (not has_precinct) or _is_valid_csv(precinct_path)
-        if base_ok and precinct_ok:
-            files = f"{stem}_state.csv, {stem}_county.csv" + (f", {stem}_precinct.csv" if has_precinct else "")
+        state_ok  = _is_valid_csv(state_path)
+        county_ok = (not has_county) or _is_valid_csv(county_path)
+        if state_ok and county_ok:
+            files = f"{stem}_state.csv"
+            if has_county:
+                files += f", {stem}_county.csv"
             print(f"  ↷ already exists, skipping: {files}")
             return True
 
@@ -407,29 +493,26 @@ def download_election_stats(
     return results
 
 
-def download_nc(output_dir: Path, *, dry_run: bool, **_) -> list[bool]:
-    """
-    NC State Board of Elections: full 2000–2025 range, all three aggregation levels.
+def download_nc(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    nc_year_from: int = NC_YEAR_RANGE[0],
+    nc_year_to: int = NC_YEAR_RANGE[1],
+    **_,
+) -> "list[bool]":
+    """NC State Board of Elections, all three aggregation levels in a single pipeline run."""
+    from datetime import date
 
-    Calls NcElectionPipeline directly (instead of the registry wrapper) so that
-    all three outputs are captured in a single pipeline run:
-      nc_{year_from}_{year_to}_precinct.csv  — raw precinct-level results
-      nc_{year_from}_{year_to}_county.csv    — aggregated to county level
-      nc_{year_from}_{year_to}_state.csv     — aggregated to state level
-    """
-    import datetime as _dt
-
-    year_from, year_to = NC_YEAR_RANGE
     base  = output_dir / "northcarolina_results"
-    stem  = f"nc_{year_from}_{year_to}"
-    label = f"NC State Board of Elections  {year_from}–{year_to}  (precinct + county + state)"
-
-    # Use a sentinel path for skip-detection; check all three files
+    stem  = f"nc_{nc_year_from}_{nc_year_to}"
+    label = f"NC State Board of Elections  {nc_year_from}–{nc_year_to}  (precinct + county + state)"
     paths = {
         "precinct": base / f"{stem}_precinct.csv",
         "county":   base / f"{stem}_county.csv",
         "state":    base / f"{stem}_state.csv",
     }
+
     print(f"\n[{label}]")
     if _all_valid(paths):
         print("  ↷ all three output files exist, skipping")
@@ -442,17 +525,13 @@ def download_nc(output_dir: Path, *, dry_run: bool, **_) -> list[bool]:
 
     try:
         from NorthCarolina.pipeline import NcElectionPipeline
-        from datetime import date
 
-        start = date(year_from, 1, 1)
-        end   = date(year_to, 12, 31)
-
+        start = date(nc_year_from, 1, 1)
+        end   = date(nc_year_to, 12, 31)
         pipeline = NcElectionPipeline()
         precinct_df, county_df, state_df = pipeline.run(
-            start_date=start,
-            end_date=end,
-            min_supported_date=start,
-            max_supported_date=end,
+            start_date=start, end_date=end,
+            min_supported_date=start, max_supported_date=end,
         )
     except Exception:
         print("  ✗ ERROR during scrape:")
@@ -481,80 +560,30 @@ def download_indiana(
     in_year_to: int = IN_YEAR_RANGE[1],
     in_level: str = "all",
     **_,
-) -> list[bool]:
-    """
-    Indiana General Election results, one set of files per year.
+) -> "list[bool]":
+    """Indiana General Election results, one set of files per year."""
+    def make_label(year: int) -> str:
+        return f"Indiana  {year}General  level={in_level}"
 
-    Output files per year (in_level='all'):
-      data/indiana/in_{year}_state.csv   — statewide candidate totals
-      data/indiana/in_{year}_county.csv  — per-county candidate totals
-    """
-    base = output_dir / "indiana"
-    results: list[bool] = []
-
-    for year in range(in_year_from, in_year_to + 1):
-        label = f"Indiana  {year}General  level={in_level}"
-        print(f"\n[{label}]")
-
+    def make_paths(base: Path, year: int) -> "dict[str, Path]":
         paths: dict[str, Path] = {}
         if in_level in ("all", "state"):
             paths["state"]  = base / f"in_{year}_state.csv"
         if in_level in ("all", "county"):
             paths["county"] = base / f"in_{year}_county.csv"
+        return paths
 
-        if _all_valid(paths):
-            print("  ↷ all output files exist, skipping")
-            results.append(True)
-            continue
-
-        if dry_run:
-            for key, p in paths.items():
-                status = "exists" if p.exists() else "would write"
-                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
-            results.append(True)
-            continue
-
-        try:
-            result = registry.scrape(
-                "indiana_results",
-                year_from=year,
-                year_to=year,
-                level=in_level,
-            )
-        except Exception:
-            print("  ✗ ERROR during scrape:")
-            traceback.print_exc()
-            results.append(False)
-            continue
-
-        ok = True
-        try:
-            if isinstance(result, dict):
-                for key, df in result.items():
-                    if key not in paths:
-                        continue
-                    if df.empty:
-                        print(f"  ⚠ empty result for '{key}' — skipping write")
-                    else:
-                        _save(df, paths[key])
-            elif isinstance(result, pd.DataFrame):
-                key = in_level
-                if key in paths:
-                    if result.empty:
-                        print("  ⚠ empty result — skipping write")
-                    else:
-                        _save(result, paths[key])
-            else:
-                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
-                ok = False
-        except Exception:
-            print("  ✗ ERROR while saving result:")
-            traceback.print_exc()
-            ok = False
-
-        results.append(ok)
-
-    return results
+    return _download_yearly(
+        output_dir,
+        base_subdir="indiana",
+        source="indiana_results",
+        year_from=in_year_from,
+        year_to=in_year_to,
+        level=in_level,
+        dry_run=dry_run,
+        make_label=make_label,
+        make_paths=make_paths,
+    )
 
 
 def download_georgia(
@@ -567,39 +596,17 @@ def download_georgia(
     ga_vote_methods: bool = False,
     ga_county_workers: int = 2,
     **_,
-) -> list[bool]:
-    """
-    Georgia Secretary of State election results, one set of files per year.
+) -> "list[bool]":
+    """Georgia Secretary of State election results, one set of files per year."""
+    vm_suffix = " +vote-methods" if ga_vote_methods else ""
 
-    For each year in [ga_year_from, ga_year_to], all elections in that year are
-    scraped in a single pipeline call (the GA SOS site groups elections by year).
-    County-level pages are scraped in parallel (--county-workers controls
-    concurrency; each worker spawns its own Chromium process).
+    def make_label(year: int) -> str:
+        return f"Georgia SOS  {year}  level={ga_level}{vm_suffix}"
 
-    Output files per year (level='all'):
-      data/georgia/ga_{year}_state.csv           — statewide candidate totals
-      data/georgia/ga_{year}_county.csv          — per-county candidate totals
-
-    With --vote-methods, additionally:
-      data/georgia/ga_{year}_vote_method_state.csv   — per-method statewide
-      data/georgia/ga_{year}_vote_method_county.csv  — per-method by county
-
-    Note: county scraping is Playwright-based (one Chromium process per worker).
-    The outer loop over years runs sequentially; parallelism within each year is
-    controlled by --county-workers.
-    """
-    base = output_dir / "georgia"
-    results: list[bool] = []
-
-    for year in range(ga_year_from, ga_year_to + 1):
-        vm_suffix = " +vote-methods" if ga_vote_methods else ""
-        label = f"Georgia SOS  {year}  level={ga_level}{vm_suffix}"
-        print(f"\n[{label}]")
-
-        # Build expected output paths based on level and ga_vote_methods flag
+    def make_paths(base: Path, year: int) -> "dict[str, Path]":
         paths: dict[str, Path] = {}
         if ga_level in ("all", "state"):
-            paths["state"] = base / f"ga_{year}_state.csv"
+            paths["state"]  = base / f"ga_{year}_state.csv"
         if ga_level in ("all", "county"):
             paths["county"] = base / f"ga_{year}_county.csv"
         if ga_vote_methods:
@@ -607,64 +614,23 @@ def download_georgia(
                 paths["vote_method_state"]  = base / f"ga_{year}_vote_method_state.csv"
             if ga_level in ("all", "county"):
                 paths["vote_method_county"] = base / f"ga_{year}_vote_method_county.csv"
+        return paths
 
-        # Skip if all expected outputs already exist
-        if _all_valid(paths):
-            print("  ↷ all output files exist, skipping")
-            results.append(True)
-            continue
-
-        if dry_run:
-            for key, p in paths.items():
-                status = "exists" if p.exists() else "would write"
-                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
-            results.append(True)
-            continue
-
-        try:
-            result = registry.scrape(
-                "georgia_results",
-                year_from=year,
-                year_to=year,
-                level=ga_level,
-                include_vote_methods=ga_vote_methods,
-                max_county_workers=ga_county_workers,
-            )
-        except Exception:
-            print("  ✗ ERROR during scrape:")
-            traceback.print_exc()
-            results.append(False)
-            continue
-
-        ok = True
-        try:
-            if isinstance(result, dict):
-                for key, df in result.items():
-                    if key not in paths:
-                        continue  # unexpected key (e.g. level mismatch)
-                    if df.empty:
-                        print(f"  ⚠ empty result for '{key}' — skipping write")
-                    else:
-                        _save(df, paths[key])
-            elif isinstance(result, pd.DataFrame):
-                # level='state' or level='county' without vote_methods
-                key = ga_level
-                if key in paths:
-                    if result.empty:
-                        print("  ⚠ empty result — skipping write")
-                    else:
-                        _save(result, paths[key])
-            else:
-                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
-                ok = False
-        except Exception:
-            print("  ✗ ERROR while saving result:")
-            traceback.print_exc()
-            ok = False
-
-        results.append(ok)
-
-    return results
+    return _download_yearly(
+        output_dir,
+        base_subdir="georgia",
+        source="georgia_results",
+        year_from=ga_year_from,
+        year_to=ga_year_to,
+        level=ga_level,
+        dry_run=dry_run,
+        make_label=make_label,
+        make_paths=make_paths,
+        scrape_kwargs=dict(
+            include_vote_methods=ga_vote_methods,
+            max_county_workers=ga_county_workers,
+        ),
+    )
 
 
 def download_utah(
@@ -677,34 +643,17 @@ def download_utah(
     ut_vote_methods: bool = False,
     ut_county_workers: int = 2,
     **_,
-) -> list[bool]:
-    """
-    Utah election results, one set of files per year.
+) -> "list[bool]":
+    """Utah election results, one set of files per year."""
+    vm_suffix = " +vote-methods" if ut_vote_methods else ""
 
-    For each year in [ut_year_from, ut_year_to], all elections in that year are
-    scraped in a single pipeline call.  County-level pages are scraped in
-    parallel (--ut-county-workers controls concurrency; each worker spawns its
-    own Chromium process).
+    def make_label(year: int) -> str:
+        return f"Utah  {year}  level={ut_level}{vm_suffix}"
 
-    Output files per year (level='all'):
-      data/utah/ut_{year}_state.csv           — statewide candidate totals
-      data/utah/ut_{year}_county.csv          — per-county candidate totals
-
-    With --ut-vote-methods, additionally:
-      data/utah/ut_{year}_vote_method_state.csv   — per-method statewide
-      data/utah/ut_{year}_vote_method_county.csv  — per-method by county
-    """
-    base = output_dir / "utah"
-    results: list[bool] = []
-
-    for year in range(ut_year_from, ut_year_to + 1):
-        vm_suffix = " +vote-methods" if ut_vote_methods else ""
-        label = f"Utah  {year}  level={ut_level}{vm_suffix}"
-        print(f"\n[{label}]")
-
+    def make_paths(base: Path, year: int) -> "dict[str, Path]":
         paths: dict[str, Path] = {}
         if ut_level in ("all", "state"):
-            paths["state"] = base / f"ut_{year}_state.csv"
+            paths["state"]  = base / f"ut_{year}_state.csv"
         if ut_level in ("all", "county"):
             paths["county"] = base / f"ut_{year}_county.csv"
         if ut_vote_methods:
@@ -712,62 +661,23 @@ def download_utah(
                 paths["vote_method_state"]  = base / f"ut_{year}_vote_method_state.csv"
             if ut_level in ("all", "county"):
                 paths["vote_method_county"] = base / f"ut_{year}_vote_method_county.csv"
+        return paths
 
-        if _all_valid(paths):
-            print("  ↷ all output files exist, skipping")
-            results.append(True)
-            continue
-
-        if dry_run:
-            for key, p in paths.items():
-                status = "exists" if p.exists() else "would write"
-                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
-            results.append(True)
-            continue
-
-        try:
-            result = registry.scrape(
-                "utah_results",
-                year_from=year,
-                year_to=year,
-                level=ut_level,
-                include_vote_methods=ut_vote_methods,
-                max_county_workers=ut_county_workers,
-            )
-        except Exception:
-            print("  ✗ ERROR during scrape:")
-            traceback.print_exc()
-            results.append(False)
-            continue
-
-        ok = True
-        try:
-            if isinstance(result, dict):
-                for key, df in result.items():
-                    if key not in paths:
-                        continue
-                    if df.empty:
-                        print(f"  ⚠ empty result for '{key}' — skipping write")
-                    else:
-                        _save(df, paths[key])
-            elif isinstance(result, pd.DataFrame):
-                key = ut_level
-                if key in paths:
-                    if result.empty:
-                        print("  ⚠ empty result — skipping write")
-                    else:
-                        _save(result, paths[key])
-            else:
-                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
-                ok = False
-        except Exception:
-            print("  ✗ ERROR while saving result:")
-            traceback.print_exc()
-            ok = False
-
-        results.append(ok)
-
-    return results
+    return _download_yearly(
+        output_dir,
+        base_subdir="utah",
+        source="utah_results",
+        year_from=ut_year_from,
+        year_to=ut_year_to,
+        level=ut_level,
+        dry_run=dry_run,
+        make_label=make_label,
+        make_paths=make_paths,
+        scrape_kwargs=dict(
+            include_vote_methods=ut_vote_methods,
+            max_county_workers=ut_county_workers,
+        ),
+    )
 
 
 def download_connecticut(
@@ -779,95 +689,31 @@ def download_connecticut(
     ct_level: str = "all",
     ct_town_workers: int = 2,
     **_,
-) -> list[bool]:
-    """
-    Connecticut CTEMS election results, one set of files per year.
+) -> "list[bool]":
+    """Connecticut CTEMS election results, one set of files per year."""
+    def make_label(year: int) -> str:
+        return f"Connecticut CTEMS  {year}  level={ct_level}"
 
-    For each year in [ct_year_from, ct_year_to], all elections held in that
-    year are scraped in a single pipeline call (the CTEMS site groups results
-    by election, discoverable from the dropdown on the landing page).
-
-    Town-level pages are scraped in parallel, one Chromium process per county
-    (--ct-town-workers controls concurrency).
-
-    Output files per year (ct_level='all'):
-      data/connecticut/ct_{year}_state.csv  — statewide totals (federal from
-                                              Summary page + state/local
-                                              aggregated from towns)
-      data/connecticut/ct_{year}_town.csv   — per-town candidate totals with
-                                              election_level classification
-
-    ct_level='state' omits town scraping (much faster; statewide only).
-    ct_level='town'  omits state aggregation (town-level DataFrame only).
-    """
-    base = output_dir / "connecticut"
-    results: list[bool] = []
-
-    for year in range(ct_year_from, ct_year_to + 1):
-        label = f"Connecticut CTEMS  {year}  level={ct_level}"
-        print(f"\n[{label}]")
-
-        # Build expected output paths based on ct_level
+    def make_paths(base: Path, year: int) -> "dict[str, Path]":
         paths: dict[str, Path] = {}
         if ct_level in ("all", "state"):
             paths["state"] = base / f"ct_{year}_state.csv"
         if ct_level in ("all", "town"):
-            paths["town"] = base / f"ct_{year}_town.csv"
+            paths["town"]  = base / f"ct_{year}_town.csv"
+        return paths
 
-        if _all_valid(paths):
-            print("  ↷ all output files exist, skipping")
-            results.append(True)
-            continue
-
-        if dry_run:
-            for key, p in paths.items():
-                status = "exists" if p.exists() else "would write"
-                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
-            results.append(True)
-            continue
-
-        try:
-            result = registry.scrape(
-                "connecticut_results",
-                year_from=year,
-                year_to=year,
-                level=ct_level,
-                max_town_workers=ct_town_workers,
-            )
-        except Exception:
-            print("  ✗ ERROR during scrape:")
-            traceback.print_exc()
-            results.append(False)
-            continue
-
-        ok = True
-        try:
-            if isinstance(result, dict):
-                for key, df in result.items():
-                    if key not in paths:
-                        continue
-                    if df.empty:
-                        print(f"  ⚠ empty result for '{key}' — skipping write")
-                    else:
-                        _save(df, paths[key])
-            elif isinstance(result, pd.DataFrame):
-                key = ct_level
-                if key in paths:
-                    if result.empty:
-                        print("  ⚠ empty result — skipping write")
-                    else:
-                        _save(result, paths[key])
-            else:
-                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
-                ok = False
-        except Exception:
-            print("  ✗ ERROR while saving result:")
-            traceback.print_exc()
-            ok = False
-
-        results.append(ok)
-
-    return results
+    return _download_yearly(
+        output_dir,
+        base_subdir="connecticut",
+        source="connecticut_results",
+        year_from=ct_year_from,
+        year_to=ct_year_to,
+        level=ct_level,
+        dry_run=dry_run,
+        make_label=make_label,
+        make_paths=make_paths,
+        scrape_kwargs=dict(max_town_workers=ct_town_workers),
+    )
 
 
 def download_louisiana(
@@ -879,92 +725,31 @@ def download_louisiana(
     la_level: str = "all",
     la_parish_workers: int = 2,
     **_,
-) -> list[bool]:
-    """
-    Louisiana SOS Graphical election results, one set of files per year.
+) -> "list[bool]":
+    """Louisiana SOS Graphical election results, one set of files per year."""
+    def make_label(year: int) -> str:
+        return f"Louisiana  {year}  level={la_level}"
 
-    For each year in [la_year_from, la_year_to], all elections in that year are
-    scraped in a single pipeline call (the LA SOS site groups elections by date,
-    discoverable from the dropdown on the landing page).
-
-    Parish-level pages are scraped sequentially by default (la_parish_workers=1)
-    or in parallel across multiple Chromium processes.
-
-    Output files per year (la_level='all'):
-      data/louisiana/la_{year}_state.csv   — statewide tab results (Congressional,
-                                             Presidential, Statewide, Legislative,
-                                             Multiparish — deduped across tabs)
-      data/louisiana/la_{year}_parish.csv  — per-parish candidate totals
-
-    la_level='state'  omits parish scraping (much faster).
-    la_level='parish' omits statewide tab scraping.
-    """
-    base = output_dir / "louisiana"
-    results: list[bool] = []
-
-    for year in range(la_year_from, la_year_to + 1):
-        label = f"Louisiana {year}  level={la_level}"
-        print(f"\n[{label}]")
-
+    def make_paths(base: Path, year: int) -> "dict[str, Path]":
         paths: dict[str, Path] = {}
         if la_level in ("all", "state"):
             paths["state"]  = base / f"la_{year}_state.csv"
         if la_level in ("all", "parish"):
             paths["parish"] = base / f"la_{year}_parish.csv"
+        return paths
 
-        if _all_valid(paths):
-            print("  ↷ all output files exist, skipping")
-            results.append(True)
-            continue
-
-        if dry_run:
-            for key, p in paths.items():
-                status = "exists" if p.exists() else "would write"
-                print(f"  (dry-run) [{key}] → {p.name}  ({status})")
-            results.append(True)
-            continue
-
-        try:
-            result = get_la_election_results(
-                year_from=year,
-                year_to=year,
-                level=la_level,
-                max_parish_workers=la_parish_workers,
-            )
-        except Exception:
-            print("  ✗ ERROR during scrape:")
-            traceback.print_exc()
-            results.append(False)
-            continue
-
-        ok = True
-        try:
-            if isinstance(result, dict):
-                for key, df in result.items():
-                    if key not in paths:
-                        continue
-                    if df.empty:
-                        print(f"  ⚠ empty result for '{key}' — skipping write")
-                    else:
-                        _save(df, paths[key])
-            elif isinstance(result, pd.DataFrame):
-                key = la_level
-                if key in paths:
-                    if result.empty:
-                        print("  ⚠ empty result — skipping write")
-                    else:
-                        _save(result, paths[key])
-            else:
-                print(f"  ✗ unexpected result type {type(result).__name__} — skipping")
-                ok = False
-        except Exception:
-            print("  ✗ ERROR while saving result:")
-            traceback.print_exc()
-            ok = False
-
-        results.append(ok)
-
-    return results
+    return _download_yearly(
+        output_dir,
+        base_subdir="louisiana",
+        source="louisiana_results",
+        year_from=la_year_from,
+        year_to=la_year_to,
+        level=la_level,
+        dry_run=dry_run,
+        make_label=make_label,
+        make_paths=make_paths,
+        scrape_kwargs=dict(max_parish_workers=la_parish_workers),
+    )
 
 
 # ── Trial run ─────────────────────────────────────────────────────────────────
@@ -1022,44 +807,7 @@ def trial_run(output_dir: Path, *, dry_run: bool = False, workers: int = os.cpu_
     print("  SECTION: NC (trial)")
     print(f"{'─'*70}")
     year = TRIAL_YEARS["nc"]
-    base = trial_dir / "nc"
-    stem = f"nc_{year}_{year}"
-    paths = {
-        "precinct": base / f"{stem}_precinct.csv",
-        "county":   base / f"{stem}_county.csv",
-        "state":    base / f"{stem}_state.csv",
-    }
-    label = f"NC State Board of Elections  {year}  (precinct + county + state)"
-    print(f"\n[{label}]")
-    if _all_valid(paths):
-        print("  ↷ all three output files exist, skipping")
-        all_results.append(True)
-    elif dry_run:
-        for key, p in paths.items():
-            print(f"  (dry-run) [{key}] → {p.name}")
-        all_results.append(True)
-    else:
-        try:
-            from NorthCarolina.pipeline import NcElectionPipeline
-            from datetime import date
-            start = date(year, 1, 1)
-            end   = date(year, 12, 31)
-            pipeline = NcElectionPipeline()
-            precinct_df, county_df, state_df = pipeline.run(
-                start_date=start, end_date=end,
-                min_supported_date=start, max_supported_date=end,
-            )
-            ok = True
-            for key, df in [("precinct", precinct_df), ("county", county_df), ("state", state_df)]:
-                if df.empty:
-                    print(f"  ⚠ empty result for '{key}' — skipping write")
-                else:
-                    _save(df, paths[key])
-        except Exception:
-            print("  ✗ ERROR during scrape:")
-            traceback.print_exc()
-            ok = False
-        all_results.append(ok)
+    all_results.extend(download_nc(trial_dir, dry_run=dry_run, nc_year_from=year, nc_year_to=year))
 
     # ── Indiana ────────────────────────────────────────────────────────────────
     print(f"\n{'─'*70}")
@@ -1151,11 +899,6 @@ def main() -> None:
             "Which section to download (default: all). "
             f"Choices: {', '.join(SECTIONS)} or all."
         ),
-    )
-    parser.add_argument(
-        "--fast",
-        action="store_true",
-        help="(No effect currently — reserved for future lightweight scrape modes.)",
     )
     parser.add_argument(
         "--state",

@@ -86,21 +86,18 @@ _STATE_COLS = [
     "election_name", "election_type", "election_year", "election_date",
     "office_level", "office", "district",
     "candidate", "party", "winner", "votes", "vote_pct", "url",
-    # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _COUNTY_COLS = [
     "election_name", "election_type", "election_year", "election_date",
     "county", "office_level", "office", "district",
     "candidate", "party", "county_winner", "votes", "vote_pct", "url",
-    # "is_incumbent",  # commented out — not yet used downstream
 ]
 
 _VM_STATE_COLS = [
     "election_name", "election_type", "election_year", "election_date",
     "office_level", "office", "district",
     "candidate", "party",
-    # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total", "url",
 ]
@@ -109,7 +106,6 @@ _VM_COUNTY_COLS = [
     "election_name", "election_type", "election_year", "election_date",
     "county", "office_level", "office", "district",
     "candidate", "party",
-    # "is_incumbent",  # commented out — not yet used downstream
     "votes_advance_in_person", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total", "url",
 ]
@@ -253,11 +249,7 @@ def _panel_localities_reporting(panel) -> str | None:
 
 
 def _parse_candidate_name(raw_name: str) -> tuple[str, str]:
-    """Return (clean_candidate_name, inline_party).
-
-    # is_incumbent detection commented out — not yet used downstream:
-    # is_incumbent = "(I)" in raw_name
-    """
+    """Return (clean_candidate_name, inline_party)."""
     inline_party = ""
 
     m_paren = _PARTY_SUFFIX_RE.search(raw_name)
@@ -284,7 +276,6 @@ def _parse_ballot_options(panel) -> list[dict]:
         )
         raw_name = _clean(name_divs[0].text_content()) if name_divs else ""
         candidate, inline_party = _parse_candidate_name(raw_name)
-        # is_incumbent = ... # commented out — not yet used downstream
         if not candidate:
             continue
 
@@ -311,7 +302,6 @@ def _parse_ballot_options(panel) -> list[dict]:
             "candidate": candidate,
             "party":     party,
             "winner":    None,
-            # "is_incumbent": is_incumbent,  # commented out — not yet used downstream
             "votes":     votes,
             "vote_pct":  vote_pct,
         })
@@ -348,7 +338,6 @@ def _parse_contest_table(panel) -> list[dict]:
         )
         raw_name = _clean(name_div[0].text_content()) if name_div else first_cell_text
         candidate, inline_party = _parse_candidate_name(raw_name)
-        # is_incumbent = ... # commented out — not yet used downstream
         if not candidate:
             continue
 
@@ -362,7 +351,6 @@ def _parse_contest_table(panel) -> list[dict]:
         results.append({
             "candidate": candidate,
             "party":     party,
-            # "is_incumbent": is_incumbent,  # commented out — not yet used downstream
             "votes_advance_in_person": _get_col(cells, "Advance in Person"),
             "votes_election_day":      _get_col(cells, "Election Day"),
             "votes_absentee":          _get_col(cells, "Absentee by Mail"),

@@ -11,7 +11,7 @@ from lxml import html
 from .electionStats_client import StateHttpClient
 from .electionStats_models import ElectionSearchRow
 from .state_config import get_scraper_type
-from .office_registry import lookup_office_level
+from office_level_utils import lookup_office_level
 from text_utils import clean_text as _clean_ws, parse_int as _parse_int, parse_percentage as _parse_percentage
 
 # Accept both VA/MA: election-id-#### and CO: contest-id-####

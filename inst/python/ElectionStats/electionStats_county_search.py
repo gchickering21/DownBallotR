@@ -674,17 +674,15 @@ def build_county_and_precinct_dataframe_v2(
     state_df: pd.DataFrame,
     base_url: str,
     max_workers: int = 6,
+    fetcher=None,
 ) -> "tuple[pd.DataFrame, pd.DataFrame]":
     """
-    Download and parse county + precinct votes for v2 states (SC, NM, VA)
-    using the CSV download API — no Playwright interaction required.
+    Download and parse county + precinct votes for v2 states (SC, NM, NY, VA)
+    using the CSV download API.
 
     For each unique election_id in *state_df* the function calls::
 
         GET {base_url}/api/download_contest/{election_id}_table.csv?split_party=false
-
-    and parses county rows (first column == ``"County"``) and precinct rows
-    (first column == ``"Precinct"``) from the flat CSV.
 
     Parameters
     ----------
@@ -695,7 +693,14 @@ def build_county_and_precinct_dataframe_v2(
     base_url : str
         Public base URL for the state (e.g. ``'https://electionstats.sos.nm.gov'``).
     max_workers : int
-        Number of parallel download threads (default 6).
+        Number of parallel download threads (default 6). Ignored when *fetcher*
+        is provided (sequential execution is used instead).
+    fetcher : callable, optional
+        ``fetcher(url) -> str`` used to download each CSV.  When provided the
+        downloads run sequentially on the calling thread (required for
+        Playwright-based fetchers which are not thread-safe).  When ``None``
+        (the default) a plain ``requests.get`` call is used inside a
+        ``ThreadPoolExecutor``.
 
     Returns
     -------
@@ -717,39 +722,48 @@ def build_county_and_precinct_dataframe_v2(
             if name and name not in candidate_id_map:
                 candidate_id_map[name] = cid
 
-    import requests as _requests
-
-    def _fetch(u: str) -> str:
-        return _requests.get(u, timeout=30).text
-
-    def _fetch_one(election_id: int, state: str) -> "tuple[pd.DataFrame, pd.DataFrame]":
-        url = f"{base}/api/download_contest/{election_id}_table.csv?split_party=false"
-        csv_text = fetch_with_retry(_fetch, url)
-        return _parse_contest_csv_v2(csv_text, election_id, state, candidate_id_map)
-
     base = base_url.rstrip("/")
     county_frames:   List[pd.DataFrame] = []
     precinct_frames: List[pd.DataFrame] = []
 
     unique = state_df[["state", "election_id"]].drop_duplicates()
     unique_rows = [(int(row["election_id"]), str(row["state"])) for _, row in unique.iterrows()]
-    n_elections = len(unique_rows)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {
-            pool.submit(_fetch_one, eid, state): eid
-            for eid, state in unique_rows
-        }
-        for future in _as_completed(futures):
-            eid = futures[future]
+    def _fetch_one(election_id: int, state: str) -> "tuple[pd.DataFrame, pd.DataFrame]":
+        url = f"{base}/api/download_contest/{election_id}_table.csv?split_party=false"
+        _f = fetcher if fetcher is not None else (
+            lambda u: __import__("requests").get(u, timeout=30).text
+        )
+        csv_text = fetch_with_retry(_f, url)
+        return _parse_contest_csv_v2(csv_text, election_id, state, candidate_id_map)
+
+    if fetcher is not None:
+        # Playwright (or any non-thread-safe) fetcher: run sequentially on calling thread.
+        for eid, state in unique_rows:
             try:
-                c_df, p_df = future.result()
+                c_df, p_df = _fetch_one(eid, state)
                 if not c_df.empty:
                     county_frames.append(c_df)
                 if not p_df.empty:
                     precinct_frames.append(p_df)
             except Exception as exc:
                 print(f"  [ElectionStats] WARN: CSV download failed for election_id={eid}: {exc}", flush=True)
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(_fetch_one, eid, state): eid
+                for eid, state in unique_rows
+            }
+            for future in _as_completed(futures):
+                eid = futures[future]
+                try:
+                    c_df, p_df = future.result()
+                    if not c_df.empty:
+                        county_frames.append(c_df)
+                    if not p_df.empty:
+                        precinct_frames.append(p_df)
+                except Exception as exc:
+                    print(f"  [ElectionStats] WARN: CSV download failed for election_id={eid}: {exc}", flush=True)
 
     county_df   = pd.concat(county_frames,   ignore_index=True) if county_frames   else pd.DataFrame(columns=_COUNTY_COLS_V2)
     precinct_df = pd.concat(precinct_frames, ignore_index=True) if precinct_frames else pd.DataFrame(columns=_PRECINCT_COLS)
@@ -1261,6 +1275,97 @@ def build_county_dataframe_parallel(
 
     # Combine successful results, preserving schema on empty.
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=out_cols)
+
+
+def build_county_and_precinct_dataframe_sequential(
+    state_df: pd.DataFrame,
+    client,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Sequential (single-thread) version that fetches each detail page once
+    and returns ``(county_df, precinct_df)``.
+
+    Use this instead of the parallel version when the client is not thread-safe
+    (e.g. Playwright's sync API, which requires all calls on the same greenlet).
+
+    Parameters
+    ----------
+    state_df : pd.DataFrame
+        Must include ``['election_id', 'url']``.
+        ``'state'`` and ``'candidate_id'`` columns are used when present.
+    client : object
+        Must implement ``client.get_html(url) -> str``.
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        ``(county_df, precinct_df)`` — either may be empty.
+    """
+    required = {"election_id", "url"}
+    missing = required - set(state_df.columns)
+    if missing:
+        raise ValueError(f"state_df missing columns: {sorted(missing)}")
+
+    has_state = "state" in state_df.columns
+    county_cols = (
+        ["state", "election_id", "candidate_id", "county_or_city", "candidate", "votes"]
+        if has_state
+        else ["election_id", "candidate_id", "county_or_city", "candidate", "votes"]
+    )
+
+    jobs: List[Tuple[Optional[str], int, str]] = []
+    for _, r in state_df.iterrows():
+        url = str(r["url"]).strip()
+        if not url:
+            continue
+        st = str(r["state"]) if has_state else None
+        jobs.append((st, int(r["election_id"]), url))
+
+    if not jobs:
+        return pd.DataFrame(columns=county_cols), pd.DataFrame(columns=_PRECINCT_COLS)
+
+    candidate_id_map = (
+        _build_candidate_id_map_from_state_df(state_df)
+        if "candidate_id" in state_df.columns
+        else None
+    )
+
+    county_frames: List[pd.DataFrame] = []
+    precinct_frames: List[pd.DataFrame] = []
+
+    for st, election_id, url in jobs:
+        try:
+            detail_html = fetch_with_retry(client.get_html, url)
+
+            c_df = parse_county_votes_from_detail_html(
+                detail_html, election_id=election_id, state=st
+            )
+            if candidate_id_map and "candidate" in c_df.columns:
+                c_df["candidate_id"] = c_df["candidate"].map(candidate_id_map)
+
+            p_df = parse_precinct_votes_from_detail_html(
+                detail_html,
+                election_id=election_id,
+                state=st,
+                candidate_id_map=candidate_id_map,
+            )
+
+            if not c_df.empty:
+                county_frames.append(c_df)
+            if not p_df.empty:
+                precinct_frames.append(p_df)
+
+        except Exception as e:
+            print(
+                f"[ERROR] Failed to parse detail "
+                f"(state={st}, election_id={election_id})\n"
+                f"URL: {url}\n"
+                f"Error: {type(e).__name__}: {e}\n"
+            )
+
+    c_out = pd.concat(county_frames, ignore_index=True) if county_frames else pd.DataFrame(columns=county_cols)
+    p_out = pd.concat(precinct_frames, ignore_index=True) if precinct_frames else pd.DataFrame(columns=_PRECINCT_COLS)
+    return c_out, p_out
 
 
 def build_county_and_precinct_dataframe_parallel(

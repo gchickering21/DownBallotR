@@ -8,8 +8,7 @@
   year_from = NULL,
   year_to = NULL,
   level = "all",
-  max_county_workers = 4L,
-  include_vote_methods = FALSE
+  max_county_workers = 4L
 )
 }
 \description{

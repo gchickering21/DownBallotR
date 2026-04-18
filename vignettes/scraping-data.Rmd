@@ -20,7 +20,7 @@ knitr::opts_chunk$set(
 
 Before scraping data you need a working Python environment. If you have not
 done so yet, follow the steps in the
-[Python setup vignette](python-setup.html):
+[Python setup vignette](https://gchickering21.github.io/DownBallotR/articles/python-setup.html):
 
 ```{r, purl=FALSE}
 # One-time setup (downloads ~100-200 MB the first time)

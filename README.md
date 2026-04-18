@@ -112,69 +112,38 @@ responsible use is in the
 ---
 
 ## Vignettes
-**Datasheet** — overview of the package’s purpose, data sources, structure, and ethical considerations, including how election data are collected, standardized, and intended to be used:
 
-- Source: [vignettes/datasheet.Rmd](vignettes/datasheet.Rmd)
-- In R (after installing): `vignette("datasheet", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/datasheet.html>
+These four vignettes are bundled with the package and accessible offline after installing:
+
+**Datasheet** — overview of the package’s purpose, data sources, structure, and ethical considerations:
+
+- In R: `vignette("datasheet", package = "DownBallotR")`
+- Online: <https://gchickering21.github.io/DownBallotR/articles/datasheet.html>
 
 **Python setup** — environment installation, session activation, and troubleshooting:
 
-- Source: [vignettes/python-setup.Rmd](vignettes/python-setup.Rmd)
-- In R (after installing): `vignette("python-setup", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/python-setup.html>
+- In R: `vignette("python-setup", package = "DownBallotR")`
+- Online: <https://gchickering21.github.io/DownBallotR/articles/python-setup.html>
 
-**Data dictionary** — all columns returned across all states and sources, with type, description, and source indicators:
+**Data dictionary** — all columns returned across all states and sources:
 
-- Source: [vignettes/data-dictionary.Rmd](vignettes/data-dictionary.Rmd)
-- In R (after installing): `vignette("data-dictionary", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/data-dictionary.html>
+- In R: `vignette("data-dictionary", package = "DownBallotR")`
+- Online: <https://gchickering21.github.io/DownBallotR/articles/data-dictionary.html>
 
-**Scraping data** — entry point overview, routing rules, data availability, and quick-reference table:
+**Scraping data** — entry point overview, routing rules, and data availability:
 
-- Source: [vignettes/scraping-data.Rmd](vignettes/scraping-data.Rmd)
-- In R (after installing): `vignette("scraping-data", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/scraping-data.html>
+- In R: `vignette("scraping-data", package = "DownBallotR")`
+- Online: <https://gchickering21.github.io/DownBallotR/articles/scraping-data.html>
 
-**ElectionStats states** — VA, MA, CO, NH, ID, SC, NM, NY, VT; candidate + county results:
+## Scraper articles
 
-- Source: [vignettes/election-stats.Rmd](vignettes/election-stats.Rmd)
-- In R (after installing): `vignette("election-stats", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/election-stats.html>
+Detailed per-state documentation is available on the package website:
 
-**North Carolina** — NC State Board of Elections; precinct-level results:
-
-- Source: [vignettes/north-carolina.Rmd](vignettes/north-carolina.Rmd)
-- In R (after installing): `vignette("north-carolina", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/north-carolina.html>
-
-**Connecticut** — CT CTEMS; statewide + town results, 2016–present:
-
-- Source: [vignettes/connecticut.Rmd](vignettes/connecticut.Rmd)
-- In R (after installing): `vignette("connecticut", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/connecticut.html>
-
-**Georgia** — GA Secretary of State; statewide + county + precinct results, 2000–present:
-
-- Source: [vignettes/georgia.Rmd](vignettes/georgia.Rmd)
-- In R (after installing): `vignette("georgia", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/georgia.html>
-
-**Utah** — Utah elections site; statewide + county + precinct results, 2023–present:
-
-- Source: [vignettes/utah.Rmd](vignettes/utah.Rmd)
-- In R (after installing): `vignette("utah", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/utah.html>
-
-**Indiana** — Indiana voters portal; statewide + county General Election results, 2019–present:
-
-- Source: [vignettes/indiana.Rmd](vignettes/indiana.Rmd)
-- In R (after installing): `vignette("indiana", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/indiana.html>
-
-**Louisiana** — Louisiana Secretary of State; statewide + parish results, 1982–present:
-
-- Source: [vignettes/louisiana.Rmd](vignettes/louisiana.Rmd)
-- In R (after installing): `vignette("louisiana", package = "DownBallotR")`
-- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/louisiana.html>
+- [ElectionStats states](https://gchickering21.github.io/DownBallotR/articles/election-stats.html) — VA, MA, CO, NH, ID, SC, NM, NY, VT
+- [North Carolina](https://gchickering21.github.io/DownBallotR/articles/north-carolina.html) — precinct-level results, 2000–present
+- [Connecticut](https://gchickering21.github.io/DownBallotR/articles/connecticut.html) — statewide + town results, 2016–present
+- [Georgia](https://gchickering21.github.io/DownBallotR/articles/georgia.html) — statewide + county + precinct results, 2000–present
+- [Utah](https://gchickering21.github.io/DownBallotR/articles/utah.html) — statewide + county + precinct results, 2023–present
+- [Indiana](https://gchickering21.github.io/DownBallotR/articles/indiana.html) — statewide + county General Election results, 2019–present
+- [Louisiana](https://gchickering21.github.io/DownBallotR/articles/louisiana.html) — statewide + parish results, 1982–present
 

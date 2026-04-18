@@ -56,7 +56,6 @@ def _scrape_ut(
     year_to: "int | None" = None,
     level: str = "all",
     max_county_workers: int = 4,
-    include_vote_methods: bool = False,
     **_,
 ):
     """Scrape Utah election results.
@@ -73,25 +72,20 @@ def _scrape_ut(
         ``'county'`` — county-level DataFrame only.
     max_county_workers : int
         Parallel Chromium browsers for county scraping (default 4).
-    include_vote_methods : bool
-        When True, expands each contest's vote-method breakdown table and adds
-        ``'vote_method_state'`` / ``'vote_method_county'`` to the result dict
-        (default False).
     """
     _validate_level(level)
     max_county_workers = _validate_workers(max_county_workers, "max_county_workers")
     year_from, year_to = _prep_years(year_from, year_to, "utah_results")
 
     label = _format_year_label(year_from, year_to)
-    print(f"[UT] Starting scrape | {label} | level={level!r} | vote_methods={include_vote_methods}")
+    print(f"[UT] Starting scrape | {label} | level={level!r}")
 
     from Clarity.Utah.pipeline import get_ut_election_results
     return get_ut_election_results(
         year_from=year_from,
         year_to=year_to,
         level=level,
-        max_county_workers=max_county_workers,
-        include_vote_methods=include_vote_methods,
+        max_county_workers=max_county_workers
     )
 
 

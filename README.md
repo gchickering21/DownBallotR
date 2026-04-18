@@ -35,8 +35,8 @@ need to specify a source by name.
 | VA, MA, CO, NH, ID, SC, NM, NY, VT | ElectionStats | Candidate + county results (+ precinct for CO, MA, ID, SC, NM, VA); years vary by state |
 | `"NC"` / `"north_carolina"` | NC State Board of Elections | Precinct-level local election results, 2000–present |
 | `"CT"` / `"connecticut"` | Connecticut CTEMS | Statewide + town results, 2016–present |
-| `"GA"` / `"georgia"` | Georgia Secretary of State | Statewide + county results, 2000–present |
-| `"UT"` / `"utah"` | Utah elections site | Statewide + county results, 2023–present |
+| `"GA"` / `"georgia"` | Georgia Secretary of State | Statewide + county + precinct results, 2000–present |
+| `"UT"` / `"utah"` | Utah elections site | Statewide + county + precinct results, 2023–present |
 | `"IN"` / `"indiana"` | Indiana voters portal | Statewide + county General Election results, 2019–present |
 | `"LA"` / `"louisiana"` | Louisiana Secretary of State | Statewide + parish results, 1982–present |
 
@@ -149,13 +149,13 @@ responsible use is in the
 - In R (after installing): `vignette("connecticut", package = "DownBallotR")`
 - Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/connecticut.html>
 
-**Georgia** — GA Secretary of State; statewide + county results, 2000–present:
+**Georgia** — GA Secretary of State; statewide + county + precinct results, 2000–present:
 
 - Source: [vignettes/georgia.Rmd](vignettes/georgia.Rmd)
 - In R (after installing): `vignette("georgia", package = "DownBallotR")`
 - Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/georgia.html>
 
-**Utah** — Utah elections site; statewide + county results, 2023–present:
+**Utah** — Utah elections site; statewide + county + precinct results, 2023–present:
 
 - Source: [vignettes/utah.Rmd](vignettes/utah.Rmd)
 - In R (after installing): `vignette("utah", package = "DownBallotR")`

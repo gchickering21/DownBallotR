@@ -101,6 +101,14 @@ CLARITY_COUNTY_COLS: list[str] = [
     "url",
 ]
 
+CLARITY_PRECINCT_COLS: list[str] = [
+    "state", "election_name", "election_type", "election_year", "election_date",
+    "office_level", "office", "district", "county", "precinct",
+    "candidate", "party",
+    "votes", "vote_pct", "precinct_winner",
+    "url",
+]
+
 # Vote-method variants (optional; returned when include_vote_methods=True)
 CLARITY_VM_STATE_COLS: list[str] = [
     "state", "election_name", "election_type", "election_year", "election_date",

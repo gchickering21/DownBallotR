@@ -33,11 +33,15 @@ import pandas as pd
 from .client import ClarityPlaywrightClient
 from .discovery import parse_election_links
 from .models import ClarityElectionInfo
-from .parser import parse_state_results, parse_county_results, county_name_from_url
+from .parser import (
+    parse_state_results, parse_county_results, parse_precinct_results,
+    parse_precinct_links, parse_ballot_item_precinct_links,
+    county_name_from_url, precinct_name_from_url,
+)
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
 from column_schemas import (
-    CLARITY_STATE_COLS, CLARITY_COUNTY_COLS,
+    CLARITY_STATE_COLS, CLARITY_COUNTY_COLS, CLARITY_PRECINCT_COLS,
     CLARITY_VM_STATE_COLS, CLARITY_VM_COUNTY_COLS,
     finalize_df, compute_vote_pct,
 )
@@ -140,8 +144,10 @@ class ClarityPipeline:
         max_county_workers: int = 2,
         include_vote_methods: bool = False,
     ):
-        if level not in ("all", "state", "county"):
-            raise ValueError(f"level must be 'all', 'state', or 'county'; got {level!r}")
+        if level not in ("all", "state", "county", "precinct"):
+            raise ValueError(
+                f"level must be 'all', 'state', 'county', or 'precinct'; got {level!r}"
+            )
         self.base_url = base_url
         self.county_suffix = county_suffix
         self.state_abbrev = state_abbrev
@@ -162,8 +168,9 @@ class ClarityPipeline:
 
     def _empty_result(self) -> "pd.DataFrame | dict":
         """Return a correctly-schemed empty result for this pipeline's level."""
-        s = pd.DataFrame(columns=CLARITY_STATE_COLS)
-        c = pd.DataFrame(columns=CLARITY_COUNTY_COLS)
+        s   = pd.DataFrame(columns=CLARITY_STATE_COLS)
+        c   = pd.DataFrame(columns=CLARITY_COUNTY_COLS)
+        p   = pd.DataFrame(columns=CLARITY_PRECINCT_COLS)
         vms = pd.DataFrame(columns=CLARITY_VM_STATE_COLS)
         vmc = pd.DataFrame(columns=CLARITY_VM_COUNTY_COLS)
         if self.level == "state":
@@ -174,7 +181,9 @@ class ClarityPipeline:
             if self.include_vote_methods:
                 return {"county": c, "vote_method_county": vmc}
             return c
-        result = {"state": s, "county": c}
+        if self.level == "precinct":
+            return p
+        result = {"state": s, "county": c, "precinct": p}
         if self.include_vote_methods:
             result["vote_method_state"]  = vms
             result["vote_method_county"] = vmc
@@ -238,6 +247,71 @@ class ClarityPipeline:
                 html = client.get_county_page(url)
         return parse_county_results(html, county, election, url=url)
 
+    def _fetch_ballot_item_precinct_urls(
+        self, bi_url: str, server_base: str
+    ) -> list[str]:
+        """Fetch one ballot-item page and return its precinct dropdown URLs."""
+        with self._client() as client:
+            bi_html = client.get_precinct_page(bi_url)
+        return parse_ballot_item_precinct_links(bi_html, server_base)
+
+    def _get_precinct_urls_for_county(
+        self, county_url: str
+    ) -> tuple[str, list[str]]:
+        """Return (county_name, precinct_urls) for a county election page.
+
+        Two-phase navigation, both phases parallelised with ``max_county_workers``:
+
+        1. Render the county election page and extract per-contest
+           ``/ballot-items/{uuid}`` links (one per contest, labelled
+           "View results by precinct").
+        2. Fetch all ballot-item pages in parallel and collect the precinct
+           dropdown links each one exposes.  URLs are deduplicated so that if
+           all contests share the same precinct set, we only keep one copy.
+        """
+        from urllib.parse import urlparse
+        county_name = county_name_from_url(county_url, self.county_suffix)
+        parsed = urlparse(county_url)
+        server_base = f"{parsed.scheme}://{parsed.netloc}"
+
+        # Phase 1: county page → ballot-item URLs (one per contest)
+        with self._client() as client:
+            county_html = client.get_county_page_with_precinct_links(county_url)
+        ballot_item_urls = parse_precinct_links(county_html, server_base)
+
+        if not ballot_item_urls:
+            return county_name, []
+
+        # Phase 2: all ballot-item pages in parallel → precinct URLs
+        seen: set[str] = set()
+        precinct_urls: list[str] = []
+
+        with ThreadPoolExecutor(max_workers=self.max_county_workers) as pool:
+            futures = {
+                pool.submit(self._fetch_ballot_item_precinct_urls, bi_url, server_base): bi_url
+                for bi_url in ballot_item_urls
+            }
+            for future in as_completed(futures):
+                try:
+                    for u in future.result():
+                        if u not in seen:
+                            seen.add(u)
+                            precinct_urls.append(u)
+                except Exception as exc:
+                    bi_url = futures[future]
+                    self._p(f"    WARNING: failed to fetch ballot-item precinct links from {bi_url}: {exc}")
+
+        return county_name, precinct_urls
+
+    def _scrape_precinct(
+        self, url: str, county_name: str, election: ClarityElectionInfo
+    ) -> pd.DataFrame:
+        """Render one precinct page; return precinct_df."""
+        precinct = precinct_name_from_url(url, self.county_suffix)
+        with self._client() as client:
+            html = client.get_precinct_page(url)
+        return parse_precinct_results(html, county_name, precinct, election, url=url)
+
     # ── Orchestrator ───────────────────────────────────────────────────────────
 
     def run(
@@ -249,11 +323,12 @@ class ClarityPipeline:
 
         Returns
         -------
-        If ``level='state'``: pd.DataFrame (statewide totals only).
-        If ``level='county'``: pd.DataFrame (county-level only).
-        If ``level='all'``:   dict with keys ``'state'``, ``'county'``, and
-                               optionally ``'vote_method_state'`` and
-                               ``'vote_method_county'``.
+        If ``level='state'``:    pd.DataFrame (statewide totals only).
+        If ``level='county'``:   pd.DataFrame (county-level only).
+        If ``level='precinct'``: pd.DataFrame (precinct-level only).
+        If ``level='all'``:      dict with keys ``'state'``, ``'county'``, and
+                                  optionally ``'vote_method_state'`` and
+                                  ``'vote_method_county'``.
         """
         all_elections = self.discover()
 
@@ -277,6 +352,7 @@ class ClarityPipeline:
         self._p(f"Scraping {len(elections)} election row(s)...")
         state_frames: list[pd.DataFrame] = []
         county_frames: list[pd.DataFrame] = []
+        precinct_frames: list[pd.DataFrame] = []
         vm_state_frames: list[pd.DataFrame] = []
         vm_county_frames: list[pd.DataFrame] = []
         failed: list[tuple[ClarityElectionInfo, Exception]] = []
@@ -284,10 +360,10 @@ class ClarityPipeline:
         for election in elections:
             self._p(f"  {election.year}: {election.name} ({election.slug})")
 
-            # --- State-level ---
+            # --- State-level (also yields county URLs for sub-scrapes) ---
             try:
                 state_df, vm_state_df, county_urls = self._scrape_state(election)
-                if not state_df.empty:
+                if self.level != "precinct" and not state_df.empty:
                     state_frames.append(state_df)
                 if not vm_state_df.empty:
                     vm_state_frames.append(vm_state_df)
@@ -327,6 +403,88 @@ class ClarityPipeline:
                 if county_failed:
                     self._p(f"    NOTE: {county_failed}/{n} county scrape(s) failed.")
 
+            # --- Precinct-level (parallelised per county then per precinct) ---
+            if self.level in ("all", "precinct") and county_urls:
+                n_counties = len(county_urls)
+                w = self.max_county_workers
+                self._p(
+                    f"    Getting precinct links for {n_counties} counties "
+                    f"({w} parallel workers)..."
+                )
+                # Phase A: render each county page with precinct button clicked
+                # to collect (county_name, precinct_urls) pairs.
+                county_precinct_map: list[tuple[str, list[str]]] = []
+                county_link_failed = 0
+                with ThreadPoolExecutor(max_workers=w) as pool:
+                    futures = {
+                        pool.submit(self._get_precinct_urls_for_county, url): url
+                        for url in county_urls
+                    }
+                    for future in as_completed(futures):
+                        url = futures[future]
+                        county = county_name_from_url(url, self.county_suffix)
+                        try:
+                            county_name_r, precinct_urls = future.result()
+                            if precinct_urls:
+                                county_precinct_map.append((county_name_r, precinct_urls))
+                            else:
+                                self._p(
+                                    f"    NOTE: no precinct links found for {county}."
+                                )
+                        except Exception as exc:
+                            county_link_failed += 1
+                            self._p(
+                                f"    WARNING: precinct link fetch failed for {county}: {exc}"
+                            )
+
+                if county_link_failed:
+                    self._p(
+                        f"    NOTE: {county_link_failed}/{n_counties} county "
+                        f"precinct-link fetch(es) failed."
+                    )
+
+                # Phase B: render each precinct page in parallel.
+                all_precinct_urls = [
+                    (county_name_r, p_url)
+                    for county_name_r, p_urls in county_precinct_map
+                    for p_url in p_urls
+                ]
+                n_precincts = len(all_precinct_urls)
+                if n_precincts:
+                    self._p(
+                        f"    Scraping {n_precincts} precincts across "
+                        f"{len(county_precinct_map)} counties ({w} parallel workers)..."
+                    )
+                    precinct_failed = 0
+                    precinct_done = 0
+                    with ThreadPoolExecutor(max_workers=w) as pool:
+                        futures = {
+                            pool.submit(self._scrape_precinct, p_url, cname, election): (cname, p_url)
+                            for cname, p_url in all_precinct_urls
+                        }
+                        for future in as_completed(futures):
+                            cname, p_url = futures[future]
+                            precinct_done += 1
+                            try:
+                                pdf = future.result()
+                                if not pdf.empty:
+                                    precinct_frames.append(pdf)
+                                if precinct_done % 10 == 0 or precinct_done == n_precincts:
+                                    self._p(
+                                        f"    Precinct {precinct_done}/{n_precincts} done."
+                                    )
+                            except Exception as exc:
+                                precinct_failed += 1
+                                self._p(
+                                    f"    WARNING: precinct scrape failed for "
+                                    f"{precinct_name_from_url(p_url)} ({cname}): {exc}"
+                                )
+
+                    if precinct_failed:
+                        self._p(
+                            f"    NOTE: {precinct_failed}/{n_precincts} precinct scrape(s) failed."
+                        )
+
         if failed:
             if len(failed) == len(elections):
                 names = ", ".join(f"'{e.name}'" for e, _ in failed[:3])
@@ -343,6 +501,15 @@ class ClarityPipeline:
                 f"returning {len(state_frames)} successful result(s)."
             )
 
+        # --- Finalise ---
+        precinct_df = finalize_df(
+            concat_or_empty(precinct_frames), CLARITY_PRECINCT_COLS, state=self.state_abbrev
+        )
+
+        if self.level == "precinct":
+            self._p(f"Done. {len(precinct_df):,} total precinct rows.")
+            return precinct_df
+
         _state_raw  = _supplement_state_from_county(
             concat_or_empty(state_frames),
             concat_or_empty(county_frames),
@@ -351,13 +518,15 @@ class ClarityPipeline:
         if _n_supplemented > 0:
             self._p(f"  Supplemented state_df with {_n_supplemented:,} row(s) aggregated from county data.")
 
-        state_df     = finalize_df(_state_raw,                          CLARITY_STATE_COLS,    state=self.state_abbrev)
-        county_df    = finalize_df(concat_or_empty(county_frames),      CLARITY_COUNTY_COLS,   state=self.state_abbrev)
-        vm_state_df  = finalize_df(concat_or_empty(vm_state_frames), CLARITY_VM_STATE_COLS, state=self.state_abbrev)
-        vm_county_df = finalize_df(concat_or_empty(vm_county_frames),CLARITY_VM_COUNTY_COLS,state=self.state_abbrev)
+        state_df     = finalize_df(_state_raw,                           CLARITY_STATE_COLS,    state=self.state_abbrev)
+        county_df    = finalize_df(concat_or_empty(county_frames),       CLARITY_COUNTY_COLS,   state=self.state_abbrev)
+        vm_state_df  = finalize_df(concat_or_empty(vm_state_frames),  CLARITY_VM_STATE_COLS, state=self.state_abbrev)
+        vm_county_df = finalize_df(concat_or_empty(vm_county_frames), CLARITY_VM_COUNTY_COLS, state=self.state_abbrev)
 
         self._p(
-            f"Done. {len(state_df):,} total state rows, {len(county_df):,} total county rows."
+            f"Done. {len(state_df):,} total state rows, "
+            f"{len(county_df):,} total county rows, "
+            f"{len(precinct_df):,} total precinct rows."
         )
 
         if self.level == "state":
@@ -371,7 +540,7 @@ class ClarityPipeline:
             return county_df
 
         # "all"
-        result = {"state": state_df, "county": county_df}
+        result = {"state": state_df, "county": county_df, "precinct": precinct_df}
         if self.include_vote_methods:
             result["vote_method_state"]  = vm_state_df
             result["vote_method_county"] = vm_county_df
@@ -408,7 +577,9 @@ def get_clarity_election_results(
     level : str
         ``'all'`` (default) — dict with ``'state'`` and ``'county'`` DataFrames;
         ``'state'`` — statewide totals only (skips county scraping);
-        ``'county'`` — county-level only.
+        ``'county'`` — county-level only;
+        ``'precinct'`` — precinct-level only (navigates county pages to find
+        precinct links, then scrapes each precinct page).
     max_county_workers : int
         Parallel Chromium browsers for county scraping (default 2).
     include_vote_methods : bool

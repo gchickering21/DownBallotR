@@ -125,6 +125,23 @@ class ClarityPlaywrightClient(BasePlaywrightClient):
         assert self.page is not None
         return self.page.content()
 
+    def get_county_page_with_precinct_links(self, url: str) -> str:
+        """Render a county election page and return its HTML for precinct link extraction.
+
+        The "View results by precinct" entries are plain ``<a>`` tags already
+        present in the county page HTML (one per contest/ballot item), so no
+        extra interaction is required beyond a normal page render.
+        """
+        return self.get_county_page(url)
+
+    def get_precinct_page(self, url: str) -> str:
+        """Render a per-precinct election results page and return the HTML."""
+        self._navigate(url)
+        self._wait_and_sleep(_PANEL_SEL, warn_on_timeout=False)
+        self._scroll_to_load_all()
+        assert self.page is not None
+        return self.page.content()
+
     # ── Internal helpers ───────────────────────────────────────────────────────
 
     def _scroll_to_load_all(

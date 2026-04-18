@@ -52,7 +52,12 @@
 #'   \code{state}, \code{election_id}, \code{candidate_id}, \code{county},
 #'   \code{precinct}, \code{candidate}, \code{votes}
 #'   (ElectionStats classic states: CO, MA, ID; v2 states: SC, NM, VA;
-#'   NC via \code{state="NC"});
+#'   NC via \code{state="NC"}; Georgia and Utah — navigates county pages to
+#'   find and scrape each precinct, columns: \code{state}, \code{election_name},
+#'   \code{election_type}, \code{election_year}, \code{election_date},
+#'   \code{office_level}, \code{office}, \code{district}, \code{county},
+#'   \code{precinct}, \code{candidate}, \code{party}, \code{votes},
+#'   \code{vote_pct}, \code{precinct_winner}, \code{url});
 #'   \code{"town"} returns town-level results only (Connecticut);
 #'   \code{"parish"} returns parish-level results only (Louisiana).
 #' @param parallel (\code{ElectionStats}) Use parallel county scraping for
@@ -70,7 +75,7 @@
 #'
 #' @return A \code{data.frame}, or a named list when \code{level = "all"}:
 #'   \code{$state} + \code{$county} (+ \code{$precinct} when available) for ElectionStats;
-#'   \code{$state} + \code{$county} for Georgia / Utah / Indiana;
+#'   \code{$state} + \code{$county} + \code{$precinct} for Georgia / Utah (or just \code{$state} / \code{$county} / \code{$precinct} alone when the corresponding \code{level} is specified); \code{$state} + \code{$county} for Indiana;
 #'   \code{$state} + \code{$town} for Connecticut;
 #'   \code{$state} + \code{$parish} for Louisiana;
 #'   \code{$precinct} + \code{$county} + \code{$state} for North Carolina.
@@ -194,9 +199,9 @@ scrape_elections <- function(
       paste0('"', valid_levels, '"', collapse = ", ")
     ), call. = FALSE)
 
-  if (isTRUE(include_vote_methods) && !source %in% c("georgia_results", "utah_results"))
+  if (isTRUE(include_vote_methods) && source != "georgia_results")
     stop(
-      "'include_vote_methods = TRUE' is only supported for Georgia and Utah.\n",
+      "'include_vote_methods = TRUE' is only supported for Georgia.\n",
       "  Remove this argument or set include_vote_methods = FALSE.",
       call. = FALSE
     )

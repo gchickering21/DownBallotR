@@ -161,7 +161,9 @@ nc <- scrape_elections(state = "NC", year_from = 2024, year_to = 2024)
 
 ---
 
-### Georgia
+### Georgia (includes precinct data)
+
+> **Note:** Georgia returns state, county, and precinct data. Precinct scraping navigates each county page and may take several minutes for a full year.
 
 ```r
 ga <- scrape_elections(state = "GA", year_from = 2022, year_to = 2022)
@@ -193,7 +195,9 @@ la <- scrape_elections(state = "LA", year_from = 2023, year_to = 2023)
 
 ---
 
-### Utah
+### Utah (includes precinct data)
+
+> **Note:** Utah returns state, county, and precinct data. Precinct scraping navigates each county page and may take several minutes for a full year.
 
 ```r
 ut <- scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
@@ -220,8 +224,12 @@ As you test, please note anything in these categories:
 
 **Data quality**
 - Do the results look roughly correct for the state and year? (You can spot-check against a quick Google search for that election.)
-- Are any columns missing values you'd expect?
-- Are column names confusing or inconsistent across states?
+- Are any columns missing values you'd expect to be there?
+- Are there columns present that you don't find useful or that seem redundant?
+- Are there additional columns you wish were included (e.g., additional candidate metadata, geographic identifiers, election type flags)?
+- Are column names clear, consistent, and useful across the states you tested? Would you rename any?
+- For states that return precinct data (CO, ID, NM, NC, GA, UT): do the precinct names look correct and human-readable?
+- Do vote percentages and winner flags look correct at each geographic level?
 
 **Usability**
 - Is there data you wished the package returned but doesn't?

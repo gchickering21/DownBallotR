@@ -21,10 +21,14 @@ The Utah scraper returns election results from `electionresults.utah.gov`. It
 covers all elections available on the site — generals, primaries, and special
 elections — currently from 2023 to 2025.
 
+Results are available at three levels: statewide candidate totals, county
+breakdowns, and precinct-level results. Precinct data is obtained by navigating
+each county page and following "View results by precinct" links for each contest.
+
 > **Note:** The Utah elections site uses the same Angular/PrimeNG framework as
 > the Georgia SOS site. All scraping uses a headless Chromium browser via
-> Playwright. County scraping is parallelised across up to `max_workers`
-> browsers (default 4). Utah has 29 counties.
+> Playwright. County and precinct scraping is parallelised across up to
+> `max_workers` browsers (default 4). Utah has 29 counties.
 
 ---
 
@@ -35,8 +39,8 @@ elections — currently from 2023 to 2025.
 | `state` | — | `"UT"`, `"utah"`, or `"Utah"` |
 | `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
 | `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
-| `level` | `"all"` | `"all"` — statewide + county; `"state"` — statewide only (much faster); `"county"` — county-level only |
-| `max_workers` | `4L` | Parallel Chromium browsers for county scraping |
+| `level` | `"all"` | `"all"` — statewide + county + precinct; `"state"` — statewide only (fastest); `"county"` — county-level only; `"precinct"` — precinct-level only |
+| `max_workers` | `4L` | Parallel Chromium browsers for county and precinct scraping |
 
 ---
 
@@ -79,6 +83,25 @@ res <- scrape_elections(
   year_from   = 2023,
   year_to     = 2025,
   level       = "state"
+)
+```
+
+### Precinct-level results
+
+```{r, purl=FALSE}
+# level = "all" includes precinct data automatically
+res <- scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
+res$precinct %>%
+  filter(office == "President of the United States", county == "Salt Lake") %>%
+  select(precinct, candidate, party, votes, vote_pct) %>%
+  arrange(precinct, desc(votes))
+
+# Precinct only (skips statewide + county scraping)
+precinct_df <- scrape_elections(
+  state     = "UT",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "precinct"
 )
 ```
 
@@ -136,12 +159,37 @@ res$county %>%
 | `county_winner` | `TRUE` if the candidate won within this county |
 | `url` | URL of the election results page scraped |
 
+### `$precinct` (when `level = "all"` or `"precinct"`)
+
+| Column | Description |
+|---|---|
+| `state` | State abbreviation (`"UT"`) |
+| `election_name` | Human-readable election name |
+| `election_type` | Election type (e.g. `"General"`, `"Primary"`) |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date string from the page header |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `district` | District identifier; `NA` when not applicable |
+| `county` | County name |
+| `precinct` | Precinct name |
+| `candidate` | Candidate name |
+| `party` | Party abbreviation |
+| `votes` | Precinct-level vote total |
+| `vote_pct` | Percentage of votes within the contest for this precinct |
+| `precinct_winner` | `TRUE` if the candidate won within this precinct |
+| `url` | URL of the precinct results page scraped |
+
 ---
 
 ## Performance notes
 
 - **`level = "state"` is much faster.** County scraping opens up to
   `max_workers` parallel Chromium browsers across Utah's 29 counties.
+- **Precinct scraping is significantly slower.** It navigates each county page,
+  fetches one ballot-item page per contest (in parallel), and then scrapes each
+  individual precinct page. Use `level = "county"` or `level = "state"` when
+  precinct data is not needed.
 - **Virtual scroll.** The site uses Angular virtual scrolling; the scraper
   automatically scrolls to load all panels before parsing.
 - **Limited history.** The Utah elections site currently lists elections from

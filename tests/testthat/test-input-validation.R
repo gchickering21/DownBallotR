@@ -132,20 +132,6 @@ test_that("scrape_elections: year cross-check fires for ElectionStats routing", 
 # Each scraper only supports a subset of level values; passing the wrong one
 # should produce an informative error BEFORE Python is called.
 
-test_that("scrape_elections: level=precinct invalid for GA", {
-  expect_error(
-    scrape_elections(state = "GA", level = "precinct"),
-    "not valid for"
-  )
-})
-
-test_that("scrape_elections: level=precinct invalid for UT", {
-  expect_error(
-    scrape_elections(state = "UT", level = "precinct"),
-    "not valid for"
-  )
-})
-
 test_that("scrape_elections: level=precinct invalid for IN", {
   expect_error(
     scrape_elections(state = "IN", level = "precinct"),
@@ -225,20 +211,6 @@ test_that("scrape_elections: level=parish invalid for IN", {
 
 # ── Cross-parameter errors ────────────────────────────────────────────────────
 
-test_that("scrape_elections: include_vote_methods=TRUE errors for non-GA/UT states", {
-  expect_error(
-    scrape_elections(state = "NC", include_vote_methods = TRUE),
-    "only supported for Georgia and Utah"
-  )
-  expect_error(
-    scrape_elections(state = "VA", include_vote_methods = TRUE),
-    "only supported for Georgia and Utah"
-  )
-  expect_error(
-    scrape_elections(state = "LA", include_vote_methods = TRUE),
-    "only supported for Georgia and Utah"
-  )
-})
 
 # ── parallel / max_workers inapplicable source errors ─────────────────────────
 

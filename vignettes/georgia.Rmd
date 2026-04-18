@@ -21,14 +21,18 @@ The Georgia scraper returns election results from the Georgia Secretary of State
 at `results.sos.ga.gov`. It covers all elections available on the site —
 primaries, runoffs, generals, and special elections — from 2000 to the present.
 
+Results are available at three levels: statewide candidate totals, county
+breakdowns, and precinct-level results. Precinct data is obtained by navigating
+each county page and following "View results by precinct" links for each contest.
+
 Optionally, it can also return a vote-method breakdown (Advance in Person,
 Election Day, Absentee by Mail, Provisional) for each contest.
 
 > **Note:** The Georgia SOS site is a JavaScript-rendered Angular SPA. All
-> scraping uses a headless Chromium browser via Playwright. County scraping is
-> parallelised across up to `max_workers` browsers (default 4). Georgia
-> has 159 counties; a full state + county scrape for one year typically takes
-> 20–60 minutes.
+> scraping uses a headless Chromium browser via Playwright. County and precinct
+> scraping is parallelised across up to `max_workers` browsers (default 4).
+> Georgia has 159 counties; a full state + county scrape for one year typically
+> takes 20–60 minutes. Adding precinct data significantly increases runtime.
 
 ---
 
@@ -39,8 +43,8 @@ Election Day, Absentee by Mail, Provisional) for each contest.
 | `state` | — | `"GA"`, `"georgia"`, or `"Georgia"` |
 | `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
 | `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
-| `level` | `"all"` | `"all"` — statewide + county; `"state"` — statewide only (much faster); `"county"` — county-level only |
-| `max_workers` | `4L` | Parallel Chromium browsers for county scraping |
+| `level` | `"all"` | `"all"` — statewide + county + precinct; `"state"` — statewide only (fastest); `"county"` — county-level only; `"precinct"` — precinct-level only |
+| `max_workers` | `4L` | Parallel Chromium browsers for county and precinct scraping |
 | `include_vote_methods` | `FALSE` | If `TRUE`, also return vote-method breakdown tables |
 
 ---
@@ -129,6 +133,25 @@ res <- scrape_elections(
 )
 ```
 
+### Precinct-level results
+
+```{r, purl=FALSE}
+# level = "all" includes precinct data automatically
+res <- scrape_elections(state = "GA", year_from = 2024, year_to = 2024)
+res$precinct %>%
+  filter(office == "President of the United States", county == "Fulton") %>%
+  select(precinct, candidate, party, votes, vote_pct) %>%
+  arrange(precinct, desc(votes))
+
+# Precinct only (skips statewide + county scraping)
+precinct_df <- scrape_elections(
+  state     = "GA",
+  year_from = 2024,
+  year_to   = 2024,
+  level     = "precinct"
+)
+```
+
 ### Filter to a specific county
 
 ```{r, purl=FALSE}
@@ -183,6 +206,27 @@ res$county %>%
 | `county_winner` | `TRUE` if the candidate won within this county |
 | `url` | URL of the election results page scraped |
 
+### `$precinct` (when `level = "all"` or `"precinct"`)
+
+| Column | Description |
+|---|---|
+| `state` | State abbreviation (`"GA"`) |
+| `election_name` | Human-readable election name |
+| `election_type` | Election type (e.g. `"General"`, `"Primary"`) |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date string from the page header |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `district` | District identifier; `NA` when not applicable |
+| `county` | County name |
+| `precinct` | Precinct name |
+| `candidate` | Candidate name |
+| `party` | Party abbreviation |
+| `votes` | Precinct-level vote total |
+| `vote_pct` | Percentage of votes within the contest for this precinct |
+| `precinct_winner` | `TRUE` if the candidate won within this precinct |
+| `url` | URL of the precinct results page scraped |
+
 ### `$vote_method_state` / `$vote_method_county` (when `include_vote_methods = TRUE`)
 
 Same identifying columns as above, with votes split by method instead of a
@@ -204,6 +248,11 @@ single `votes` + `pct`:
   `max_workers` parallel Chromium browsers across Georgia's 159 counties.
   A full state + county scrape for one year takes 20–60 minutes. Use
   `level = "state"` when county breakdowns are not needed.
+- **Precinct scraping is significantly slower.** It navigates each county page,
+  fetches one ballot-item page per contest (in parallel), and then scrapes each
+  individual precinct page. Expect a full state + county + precinct run to take
+  several hours for a general election year. Use `level = "county"` or
+  `level = "state"` when precinct data is not needed.
 - **`include_vote_methods` is significantly slower.** Each contest panel requires
   an extra Playwright click-and-re-render step. Budget an extra 5–15 minutes per
   election page.

@@ -2,6 +2,8 @@ url: https://gchickering21.github.io/DownBallotR/
 
 template:
   bootstrap: 5
+  params:
+    ganalytics: G-PQ23RGE15T   
 
 navbar:
   structure:
@@ -38,3 +40,4 @@ articles:
     contents:
       - data-dictionary
       - datasheet
+      

@@ -35,7 +35,6 @@ def get_ut_election_results(
     year_to: "int | None" = None,
     level: str = "all",
     max_county_workers: int = 2,
-    include_vote_methods: bool = False,
 ):
     """Return Utah election results.
 
@@ -47,12 +46,14 @@ def get_ut_election_results(
         End year, inclusive.  ``None`` applies no upper bound.
     level : str
         What to return:
-          - ``'all'``    (default) dict with keys ``'state'`` and ``'county'``
-                        (plus ``'vote_method_state'`` / ``'vote_method_county'``
-                        when ``include_vote_methods=True``);
-                        reticulate converts this to a named R list.
-          - ``'state'``  statewide totals only (skips county scraping).
-          - ``'county'`` county-level only.
+          - ``'all'``      (default) dict with keys ``'state'``, ``'county'``,
+                          and ``'precinct'``; reticulate converts this to a
+                          named R list.
+          - ``'state'``    statewide totals only (skips county/precinct scraping).
+          - ``'county'``   county-level only (skips precinct scraping).
+          - ``'precinct'`` precinct-level only; navigates each county page,
+                          clicks "View results by precinct", then scrapes every
+                          individual precinct page.
     max_county_workers : int
         Parallel Chromium browsers for county scraping (default 2).
     include_vote_methods : bool
@@ -71,6 +72,5 @@ def get_ut_election_results(
         year_to=year_to,
         level=level,
         max_county_workers=max_county_workers,
-        include_vote_methods=include_vote_methods,
     )
     return _drop_is_incumbent(result)

@@ -29,8 +29,8 @@ ElectionStats-specific options:
 Georgia-specific options:
     --ga-year-from INT      First year to download (default: 2012)
     --ga-year-to   INT      Last year to download (default: current year)
-    --ga-level     LEVEL    State-only, county-only, or both (default: all)
-                            Choices: all, state, county
+    --ga-level     LEVEL    What to scrape (default: all)
+                            Choices: all, state, county, precinct
     --ga-vote-methods       Also capture per-contest vote-method breakdowns
                             (Advance in Person / Election Day / Absentee / Provisional).
                             Adds extra Playwright clicks per page; significantly
@@ -40,9 +40,8 @@ Georgia-specific options:
 Utah-specific options:
     --ut-year-from INT      First year to download (default: 2023)
     --ut-year-to   INT      Last year to download (default: current year)
-    --ut-level     LEVEL    State-only, county-only, or both (default: all)
-                            Choices: all, state, county
-    --ut-vote-methods       Also capture per-contest vote-method breakdowns.
+    --ut-level     LEVEL    What to scrape (default: all)
+                            Choices: all, state, county, precinct
     --ut-county-workers INT Parallel Chromium browsers for UT county scraping (default: 2)
 
 Connecticut-specific options:
@@ -64,13 +63,13 @@ Output layout:
       georgia/
         ga_{year}_state.csv               (statewide candidate totals)
         ga_{year}_county.csv              (per-county candidate totals)
+        ga_{year}_precinct.csv            (per-precinct candidate totals)
         ga_{year}_vote_method_state.csv   (--ga-vote-methods: per-method statewide)
         ga_{year}_vote_method_county.csv  (--ga-vote-methods: per-method by county)
       utah/
         ut_{year}_state.csv               (statewide candidate totals)
         ut_{year}_county.csv              (per-county candidate totals)
-        ut_{year}_vote_method_state.csv   (--ut-vote-methods: per-method statewide)
-        ut_{year}_vote_method_county.csv  (--ut-vote-methods: per-method by county)
+        ut_{year}_precinct.csv            (per-precinct candidate totals)
       connecticut/
         ct_{year}_state.csv               (statewide totals: federal + aggregated state/local)
         ct_{year}_town.csv                (per-town candidate totals with election_level)
@@ -606,9 +605,11 @@ def download_georgia(
     def make_paths(base: Path, year: int) -> "dict[str, Path]":
         paths: dict[str, Path] = {}
         if ga_level in ("all", "state"):
-            paths["state"]  = base / f"ga_{year}_state.csv"
+            paths["state"]    = base / f"ga_{year}_state.csv"
         if ga_level in ("all", "county"):
-            paths["county"] = base / f"ga_{year}_county.csv"
+            paths["county"]   = base / f"ga_{year}_county.csv"
+        if ga_level in ("all", "precinct"):
+            paths["precinct"] = base / f"ga_{year}_precinct.csv"
         if ga_vote_methods:
             if ga_level in ("all", "state"):
                 paths["vote_method_state"]  = base / f"ga_{year}_vote_method_state.csv"
@@ -640,27 +641,21 @@ def download_utah(
     ut_year_from: int = UT_YEAR_RANGE[0],
     ut_year_to: int = UT_YEAR_RANGE[1],
     ut_level: str = "all",
-    ut_vote_methods: bool = False,
     ut_county_workers: int = 2,
     **_,
 ) -> "list[bool]":
     """Utah election results, one set of files per year."""
-    vm_suffix = " +vote-methods" if ut_vote_methods else ""
-
     def make_label(year: int) -> str:
-        return f"Utah  {year}  level={ut_level}{vm_suffix}"
+        return f"Utah  {year}  level={ut_level}"
 
     def make_paths(base: Path, year: int) -> "dict[str, Path]":
         paths: dict[str, Path] = {}
         if ut_level in ("all", "state"):
-            paths["state"]  = base / f"ut_{year}_state.csv"
+            paths["state"]    = base / f"ut_{year}_state.csv"
         if ut_level in ("all", "county"):
-            paths["county"] = base / f"ut_{year}_county.csv"
-        if ut_vote_methods:
-            if ut_level in ("all", "state"):
-                paths["vote_method_state"]  = base / f"ut_{year}_vote_method_state.csv"
-            if ut_level in ("all", "county"):
-                paths["vote_method_county"] = base / f"ut_{year}_vote_method_county.csv"
+            paths["county"]   = base / f"ut_{year}_county.csv"
+        if ut_level in ("all", "precinct"):
+            paths["precinct"] = base / f"ut_{year}_precinct.csv"
         return paths
 
     return _download_yearly(
@@ -673,10 +668,7 @@ def download_utah(
         dry_run=dry_run,
         make_label=make_label,
         make_paths=make_paths,
-        scrape_kwargs=dict(
-            include_vote_methods=ut_vote_methods,
-            max_county_workers=ut_county_workers,
-        ),
+        scrape_kwargs=dict(max_county_workers=ut_county_workers),
     )
 
 
@@ -977,9 +969,9 @@ def main() -> None:
     )
     ga_group.add_argument(
         "--ga-level",
-        choices=["all", "state", "county"],
+        choices=["all", "state", "county", "precinct"],
         default="all",
-        help="What to scrape for Georgia: state totals, county totals, or both (default: all).",
+        help="What to scrape for Georgia: all (default), state, county, or precinct.",
     )
     ga_group.add_argument(
         "--ga-vote-methods",
@@ -1019,18 +1011,9 @@ def main() -> None:
     )
     ut_group.add_argument(
         "--ut-level",
-        choices=["all", "state", "county"],
+        choices=["all", "state", "county", "precinct"],
         default="all",
-        help="What to scrape for Utah: state totals, county totals, or both (default: all).",
-    )
-    ut_group.add_argument(
-        "--ut-vote-methods",
-        action="store_true",
-        help=(
-            "Capture per-contest vote-method breakdowns for Utah "
-            "(Advance in Person / Election Day / Absentee / Provisional). "
-            "Requires extra Playwright clicks per page; significantly slower."
-        ),
+        help="What to scrape for Utah: all (default), state, county, or precinct.",
     )
     ut_group.add_argument(
         "--ut-county-workers",
@@ -1160,7 +1143,6 @@ def main() -> None:
     if args.section in ("utah", "all"):
         print(f"UT year range    : {args.ut_year_from}–{args.ut_year_to}")
         print(f"UT level         : {args.ut_level}")
-        print(f"UT vote methods  : {args.ut_vote_methods}")
         print(f"UT county workers: {args.ut_county_workers}")
     if args.section in ("connecticut", "all"):
         print(f"CT year range    : {args.ct_year_from}–{args.ct_year_to}")
@@ -1219,7 +1201,6 @@ def main() -> None:
             ut_year_from=args.ut_year_from,
             ut_year_to=args.ut_year_to,
             ut_level=args.ut_level,
-            ut_vote_methods=args.ut_vote_methods,
             ut_county_workers=args.ut_county_workers,
             # Connecticut-specific
             ct_year_from=args.ct_year_from,

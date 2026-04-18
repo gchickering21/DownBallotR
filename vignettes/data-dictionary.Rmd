@@ -110,6 +110,27 @@ Source: Georgia Secretary of State. Results available 2000–present.
 | `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `url` | character | URL of the election results page scraped |
 
+### `$precinct`
+
+| Column | Type | Description |
+|---|---|---|
+| `state` | character | State abbreviation (`"GA"`) |
+| `election_name` | character | Human-readable election name |
+| `election_type` | character | Election type (e.g. `"General"`, `"Primary"`) |
+| `election_year` | integer | Calendar year of the election |
+| `election_date` | character | Date string from the page header |
+| `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
+| `county` | character | County name |
+| `precinct` | character | Precinct name |
+| `candidate` | character | Candidate name |
+| `party` | character | Party abbreviation |
+| `votes` | integer | Precinct-level vote total |
+| `vote_pct` | numeric | Percentage of votes within the contest for this precinct |
+| `precinct_winner` | logical | `TRUE` if the candidate won within this precinct |
+| `url` | character | URL of the precinct results page scraped |
+
 ---
 
 ## Indiana
@@ -318,6 +339,27 @@ Source: Utah elections portal. Results available 2023–present.
 | `vote_pct` | numeric | Percentage of votes within the contest for this county |
 | `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `url` | character | URL of the election results page scraped |
+
+### `$precinct`
+
+| Column | Type | Description |
+|---|---|---|
+| `state` | character | State abbreviation (`"UT"`) |
+| `election_name` | character | Human-readable election name |
+| `election_type` | character | Election type (e.g. `"General"`, `"Primary"`) |
+| `election_year` | integer | Calendar year of the election |
+| `election_date` | character | Date string from the page header |
+| `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
+| `county` | character | County name |
+| `precinct` | character | Precinct name |
+| `candidate` | character | Candidate name |
+| `party` | character | Party abbreviation |
+| `votes` | integer | Precinct-level vote total |
+| `vote_pct` | numeric | Percentage of votes within the contest for this precinct |
+| `precinct_winner` | logical | `TRUE` if the candidate won within this precinct |
+| `url` | character | URL of the precinct results page scraped |
 
 ---
 

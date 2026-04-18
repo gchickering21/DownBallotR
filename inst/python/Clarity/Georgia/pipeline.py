@@ -36,12 +36,16 @@ def get_ga_election_results(
         End year, inclusive.  ``None`` applies no upper bound.
     level : str
         What to return:
-          - ``'all'``    (default) dict with keys ``'state'`` and ``'county'``
-                        (plus ``'vote_method_state'`` / ``'vote_method_county'``
-                        when ``include_vote_methods=True``);
-                        reticulate converts this to a named R list.
-          - ``'state'``  statewide totals only (skips county scraping).
-          - ``'county'`` county-level only.
+          - ``'all'``      (default) dict with keys ``'state'``, ``'county'``,
+                          and ``'precinct'`` (plus ``'vote_method_state'`` /
+                          ``'vote_method_county'`` when
+                          ``include_vote_methods=True``);
+                          reticulate converts this to a named R list.
+          - ``'state'``    statewide totals only (skips county/precinct scraping).
+          - ``'county'``   county-level only (skips precinct scraping).
+          - ``'precinct'`` precinct-level only; navigates each county page,
+                          clicks "View results by precinct", then scrapes every
+                          individual precinct page.
     max_county_workers : int
         Parallel Chromium browsers for county scraping (default 2).
     include_vote_methods : bool

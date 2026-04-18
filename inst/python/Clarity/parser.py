@@ -79,7 +79,7 @@ from lxml import html as lhtml
 from .models import ClarityElectionInfo
 from office_level_utils import classify_office_level
 from column_schemas import (
-    CLARITY_STATE_COLS, CLARITY_COUNTY_COLS,
+    CLARITY_STATE_COLS, CLARITY_COUNTY_COLS, CLARITY_PRECINCT_COLS,
     CLARITY_VM_STATE_COLS, CLARITY_VM_COUNTY_COLS,
     compute_vote_pct,
 )
@@ -90,9 +90,10 @@ from text_utils import normalize_party
 # Output column definitions
 # ---------------------------------------------------------------------------
 # Partial schemas (no "state") for intermediate DataFrame construction.
-_STATE_COLS    = [c for c in CLARITY_STATE_COLS    if c != "state"]
-_COUNTY_COLS   = [c for c in CLARITY_COUNTY_COLS   if c != "state"]
-_VM_STATE_COLS = [c for c in CLARITY_VM_STATE_COLS if c != "state"]
+_STATE_COLS     = [c for c in CLARITY_STATE_COLS     if c != "state"]
+_COUNTY_COLS    = [c for c in CLARITY_COUNTY_COLS    if c != "state"]
+_PRECINCT_COLS  = [c for c in CLARITY_PRECINCT_COLS  if c != "state"]
+_VM_STATE_COLS  = [c for c in CLARITY_VM_STATE_COLS  if c != "state"]
 _VM_COUNTY_COLS = [c for c in CLARITY_VM_COUNTY_COLS if c != "state"]
 
 _PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
@@ -391,7 +392,7 @@ def _fill_pct(df: pd.DataFrame) -> pd.DataFrame:
     calls use the per-county denominator rather than a statewide total.
     """
     group_cols = [
-        c for c in ("election_name", "election_year", "office", "district", "county")
+        c for c in ("election_name", "election_year", "office", "district", "county", "precinct")
         if c in df.columns
     ]
     return compute_vote_pct(df, group_cols, fill_missing_only=True)
@@ -571,6 +572,174 @@ def parse_county_results(
         if vm_rows else pd.DataFrame(columns=_VM_COUNTY_COLS)
     )
     return county_df, vote_method_df
+
+
+def parse_precinct_links(html_str: str, server_base: str) -> list[str]:
+    """Extract per-ballot-item precinct URLs from a county election page.
+
+    Each contest panel on a county election page contains an
+    ``<a class="text-decoration-none">`` link whose ``<span>`` reads
+    "View results by precinct".  The href follows the pattern::
+
+        /results/public/{county-slug}/elections/{slug}/ballot-items/{uuid}
+
+    One URL is returned per contest (ballot item) found on the page.
+
+    Parameters
+    ----------
+    html_str : str
+        Fully rendered HTML of a county election page.
+    server_base : str
+        Scheme + host used to absolutise relative ``href`` values.
+
+    Returns
+    -------
+    list[str]
+        Ordered list of ballot-item precinct URLs (one per contest).
+    """
+    doc = lhtml.fromstring(html_str)
+    links = doc.xpath(
+        "//a[.//span[contains(text(),'View results by precinct')]]"
+    )
+    urls = []
+    for a in links:
+        href = a.get("href", "")
+        if href.startswith("/"):
+            href = f"{server_base}{href}"
+        if href:
+            urls.append(href)
+    return urls
+
+
+def parse_ballot_item_precinct_links(html_str: str, server_base: str) -> list[str]:
+    """Extract individual precinct page URLs from a ballot-item precinct page.
+
+    After navigating to a ``/ballot-items/{uuid}`` URL, the page functions like
+    the county-level page: a locality dropdown lists individual precincts.
+    This function extracts those precinct links using the same dropdown-item
+    selector as :func:`parse_state_results` uses for county links.
+
+    Parameters
+    ----------
+    html_str : str
+        Fully rendered HTML of a ballot-item precinct page.
+    server_base : str
+        Scheme + host used to absolutise relative ``href`` values.
+
+    Returns
+    -------
+    list[str]
+        Ordered list of per-precinct page URLs.
+    """
+    doc = lhtml.fromstring(html_str)
+    # Same dropdown-item selector as county links on the state page
+    links = doc.xpath(
+        "//a[contains(@class,'dropdown-item') and contains(@href,'/elections/')]"
+    )
+    urls = []
+    for a in links:
+        href = a.get("href", "")
+        if href.startswith("/"):
+            href = f"{server_base}{href}"
+        if href:
+            urls.append(href)
+    return urls
+
+
+def parse_precinct_results(
+    html_str: str,
+    county_name: str,
+    precinct_name: str,
+    election_info: ClarityElectionInfo,
+    url: str = "",
+) -> pd.DataFrame:
+    """Parse one precinct's election results page.
+
+    The page structure is identical to a county election page
+    (``p-panel.ballot-item`` panels with ``div.ballot-option`` rows),
+    but represents a single precinct within a county.
+
+    Parameters
+    ----------
+    html_str : str
+        Fully rendered HTML of the precinct results page.
+    county_name : str
+        Human-readable county name the precinct belongs to.
+    precinct_name : str
+        Human-readable precinct name.
+    election_info : ClarityElectionInfo
+        Election metadata shared with the state/county parses.
+    url : str
+        The precinct page URL (stored in the output DataFrame).
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per candidate per contest, with columns matching
+        :data:`CLARITY_PRECINCT_COLS` (minus ``"state"``).
+    """
+    doc = lhtml.fromstring(html_str)
+    page_meta = _parse_page_meta(doc)
+    rows: list[dict] = []
+
+    panels = doc.xpath("//p-panel[contains(@class,'ballot-item')]")
+    for panel in panels:
+        raw_office = _panel_office(panel)
+        if not raw_office:
+            continue
+        office, district = _split_office_district(raw_office)
+        base = {
+            "election_name":  election_info.name,
+            "election_type":  _classify_election_type(election_info.name),
+            "election_year":  election_info.year,
+            "election_date":  page_meta["election_date"],
+            "county":         county_name,
+            "precinct":       precinct_name,
+            "office_level":   classify_office_level(raw_office),
+            "office":         office,
+            "district":       district,
+            "url":            url,
+        }
+        for cand in _parse_ballot_options(panel):
+            rows.append({**base, **cand})
+
+    precinct_df = (
+        pd.DataFrame(rows, columns=_PRECINCT_COLS)
+        if rows else pd.DataFrame(columns=_PRECINCT_COLS)
+    )
+    precinct_df = _fill_pct(precinct_df)
+    precinct_df = _fix_clarity_winners(
+        precinct_df,
+        ["election_name", "election_year", "office", "district", "county", "precinct"],
+        col="precinct_winner",
+    )
+    return precinct_df
+
+
+def precinct_name_from_url(url: str, county_suffix: str = "") -> str:
+    """Derive a human-readable precinct name from a Clarity precinct URL.
+
+    Precinct pages are reached via the ballot-item dropdown, which uses the
+    same ``/results/public/{slug}/elections/{slug}`` path structure as county
+    pages.  The precinct slug is the sub-domain portion of the path that is
+    left after stripping the county slug and ``county_suffix``.
+
+    Falls back to the last non-empty path segment if the pattern is not
+    recognised — this covers any URL structure the site may use.
+    """
+    # If a county_suffix is provided, try to extract the portion of the
+    # slug that differs from the county slug (i.e. the precinct identifier).
+    if county_suffix:
+        # e.g. /results/public/precinct-5-appling-county-ga/elections/...
+        # → strip suffix → "precinct-5-appling-county" → title-case last segment
+        m = re.search(rf"/results/public/([^/]+){re.escape(county_suffix)}/", url)
+        if m:
+            return m.group(1).replace("-", " ").title()
+
+    # Generic fallback: last non-empty path segment before any query string
+    path = url.split("?")[0].rstrip("/")
+    last = path.rsplit("/", 1)[-1]
+    return last.replace("-", " ").title() if last else ""
 
 
 def county_name_from_url(url: str, county_suffix: str) -> str:

@@ -24,8 +24,8 @@
   election_stats        = c("all", "state", "county", "precinct"),
   northcarolina_results = c("all", "precinct", "county", "state"),
   connecticut_results   = c("all", "state", "town"),
-  georgia_results       = c("all", "state", "county"),
-  utah_results          = c("all", "state", "county"),
+  georgia_results       = c("all", "state", "county", "precinct"),
+  utah_results          = c("all", "state", "county", "precinct"),
   indiana_results       = c("all", "state", "county"),
   louisiana_results     = c("all", "state", "parish")
 )
@@ -161,7 +161,7 @@
     level                = "all",
     max_county_workers   = 4L,
     include_vote_methods = FALSE) {
-  level <- match.arg(level, c("all", "state", "county"))
+  level <- match.arg(level, c("all", "state", "county", "precinct"))
   .db_registry()$scrape(
     "georgia_results",
     year_from            = year_from,
@@ -176,19 +176,17 @@
 #' Call the Utah election results scraper
 #' @keywords internal
 .scrape_ut <- function(
-    year_from            = NULL,
-    year_to              = NULL,
-    level                = "all",
-    max_county_workers   = 4L,
-    include_vote_methods = FALSE) {
-  level <- match.arg(level, c("all", "state", "county"))
+    year_from          = NULL,
+    year_to            = NULL,
+    level              = "all",
+    max_county_workers = 4L) {
+  level <- match.arg(level, c("all", "state", "county", "precinct"))
   .db_registry()$scrape(
     "utah_results",
-    year_from            = year_from,
-    year_to              = year_to,
-    level                = level,
-    max_county_workers   = as.integer(max_county_workers),
-    include_vote_methods = isTRUE(include_vote_methods)
+    year_from          = year_from,
+    year_to            = year_to,
+    level              = level,
+    max_county_workers = as.integer(max_county_workers)
   )
 }
 

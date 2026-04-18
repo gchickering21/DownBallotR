@@ -399,13 +399,16 @@ test_that("print.downballot_python_status: shows wrong interpreter warning", {
 # ── zzz.R: .onAttach missing-env branch ───────────────────────────────────────
 
 test_that(".onAttach: shows setup message when virtualenv missing", {
-  local_mocked_bindings(
-    virtualenv_exists   = function(...) FALSE,
-    py_available        = function(...) FALSE,
-    .package = "reticulate"
-  )
-  expect_message(
-    DownBallotR:::.onAttach("", "DownBallotR"),
-    "Python dependencies are not set up"
-  )
+  skip_on_cran()
+  withr::with_envvar(c(NOT_CRAN = "true"), {
+    local_mocked_bindings(
+      virtualenv_exists   = function(...) FALSE,
+      py_available        = function(...) FALSE,
+      .package = "reticulate"
+    )
+    expect_message(
+      DownBallotR:::.onAttach("", "DownBallotR"),
+      "Python dependencies are not set up"
+    )
+  })
 })

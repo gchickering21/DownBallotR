@@ -43,5 +43,7 @@ output_$
 ^inst/python/.*/inspect_.*\.py$
 ^inst/python/download_all_data\.py$
 TESTING.md
+^CRAN-SUBMISSION$
+^cran-comments\.md$
 ^doc$
 ^Meta$

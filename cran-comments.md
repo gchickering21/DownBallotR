@@ -1,5 +1,22 @@
 # CRAN Submission Comments — DownBallotR 0.1.0
 
+## R CMD check results
+
+### Local (macOS 13.7, R 4.5.3)
+0 errors | 0 warnings | 0 notes
+
+### Windows (win-builder, R 4.5.3 / x86_64-w64-mingw32)
+0 errors | 0 warnings | 2 notes (see Notes section below)
+
+### Debian (CRAN incoming pretest, R-devel)
+0 errors | 0 warnings | 3 notes (see Notes section below)
+
+## Notes
+
+### "New submission"
+This is the first submission of this package to CRAN.
+
+
 ## Motivation for the R + Python design
 
 State and local election data is published through a wide variety of government
@@ -21,20 +38,10 @@ write, modify, or even see any Python code. This allows researchers to go
 directly from raw government election portals to analysis-ready data without
 leaving R.
 
-## R CMD check results
-
-### Local (macOS 13.7, R 4.5.3)
-0 errors | 0 warnings | 0 notes
-
-### Windows (win-builder, R 4.5.3 / x86_64-w64-mingw32)
-0 errors | 0 warnings | 2 notes (see Notes section below).
-
 ## Python / reticulate dependency
 
 This package wraps state-specific Python web scrapers via the `reticulate`
 package. Python is declared under `SystemRequirements: Python (>= 3.10), pip`.
-
-### Technical notes
 
 **Python is not required to install or load the package.** All Python-dependent
 functionality is opt-in: users must explicitly call `downballot_install_python()`
@@ -80,18 +87,6 @@ All vignette code chunks that invoke scrapers or require Python are set to
 The `inst/python/` directory contains the Python scraper modules loaded at
 runtime via `reticulate::source_python()`. These are first-party Python source
 files (no compiled binaries) integral to the package's scraping functionality.
-
-## Notes
-
-### "Non-standard file/directory found at top level: 'cran-comments.md'"
-This is the standard CRAN submission comments file, included by convention per
-the devtools/usethis workflow. It is not part of the installed package.
-
-### "Package has a VignetteBuilder field but no prebuilt vignette index"
-Vignettes are pre-built locally and `inst/doc` is included in the package
-tarball. This note appeared on win-builder because Pandoc was unavailable in
-the check subprocess on that server; the vignette outputs themselves were
-accepted without error (`checking re-building of vignette outputs ... OK`).
 
 ## Spell check
 

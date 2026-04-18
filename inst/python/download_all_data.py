@@ -779,7 +779,7 @@ TRIAL_YEARS: dict[str, int] = {
     "south_carolina": 2024,
     "nc":             2025,
     "indiana":        2024,
-    "georgia":        2023,
+    "georgia":        2025,
     "utah":           2024,
     "connecticut":    2023,
     "louisiana":      2025,

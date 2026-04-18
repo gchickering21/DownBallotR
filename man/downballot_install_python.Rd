@@ -19,7 +19,11 @@ downballot_install_python(
 
 \item{reinstall}{If TRUE, reinstall packages even if already installed.}
 
-\item{install_chromium}{If TRUE, install Playwright Chromium browser.}
+\item{install_chromium}{If TRUE, install Playwright Chromium browser.
+In interactive sessions, the user will be prompted for explicit consent
+before the download (~100-200 MB) begins. In non-interactive sessions,
+the function will error if Chromium is missing; set
+\code{install_chromium = FALSE} to suppress this.}
 
 \item{quiet}{If TRUE, suppress progress messages.}
 }

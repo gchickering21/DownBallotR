@@ -6,9 +6,9 @@
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html)
 
 <!-- badges: end -->
+---
 
 `DownBallotR` is an R package for downloading and standardizing federal, state, and local election results data across U.S. jurisdictions. It provides a consistent interface for accessing election results from official state and local sources, which are often published in different formats and structures. The package harmonizes these data into a common, structured format, allowing users to more easily analyze and compare election results across states, offices, and levels of government. It is designed to reduce the time and effort required to collect and clean election data, enabling researchers, analysts, and practitioners to focus on analysis rather than data acquisition.
----
 
 ## Installation
 

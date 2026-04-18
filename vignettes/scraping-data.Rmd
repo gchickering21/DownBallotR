@@ -128,24 +128,24 @@ db_list_states("election_stats")
 
 ---
 
-## Detailed vignettes
+## Detailed articles
 
-Each scraper has its own vignette with full argument documentation,
-worked examples, and column descriptions:
+Each scraper has its own article with full argument documentation,
+worked examples, and column descriptions (available on the package website):
 
-- [ElectionStats states](election-stats.html) —
+- [ElectionStats states](https://gchickering21.github.io/DownBallotR/articles/election-stats.html) —
   VA, MA, CO, NH, ID, VT (classic) + SC, NM, NY (Playwright); candidate + county + precinct results
-- [North Carolina](north-carolina.html) —
+- [North Carolina](https://gchickering21.github.io/DownBallotR/articles/north-carolina.html) —
   NC State Board of Elections; precinct-level results
-- [Connecticut](connecticut.html) —
+- [Connecticut](https://gchickering21.github.io/DownBallotR/articles/connecticut.html) —
   CT CTEMS; statewide + town results, 2016–present
-- [Georgia](georgia.html) —
+- [Georgia](https://gchickering21.github.io/DownBallotR/articles/georgia.html) —
   GA Secretary of State; statewide + county + precinct results, 2000–present
-- [Utah](utah.html) —
+- [Utah](https://gchickering21.github.io/DownBallotR/articles/utah.html) —
   Utah elections site; statewide + county + precinct results, 2023–present
-- [Indiana](indiana.html) —
+- [Indiana](https://gchickering21.github.io/DownBallotR/articles/indiana.html) —
   Indiana voters portal; statewide + county General Election results, 2019–present
-- [Louisiana](louisiana.html) —
+- [Louisiana](https://gchickering21.github.io/DownBallotR/articles/louisiana.html) —
   Louisiana Secretary of State; statewide + parish results, 1982–present
 
 ---

@@ -1,5 +1,26 @@
 # CRAN Submission Comments — DownBallotR 0.1.0
 
+## Motivation for the R + Python design
+
+State and local election data is published through a wide variety of government
+web portals, many of which rely on dynamic JavaScript rendering that cannot be
+accessed with R's standard HTTP tools. Python's `playwright` library provides
+mature, well-maintained headless browser automation that handles these portals
+reliably across platforms.
+
+At the same time, the primary audience for this package — political scientists,
+public policy researchers, and students — works predominantly in R. Requiring
+users to write or maintain Python scraping code would create a significant
+barrier: they would need to learn a second language, manage a Python
+environment, and manually transfer data into R before any analysis could begin.
+
+The design goal of DownBallotR is to absorb that complexity entirely. Python
+handles the scraping layer internally; users interact only with a consistent R
+interface (`scrape_elections()`) and receive standard R data frames. They do not
+write, modify, or even see any Python code. This allows researchers to go
+directly from raw government election portals to analysis-ready data without
+leaving R.
+
 ## R CMD check results
 
 ### Local (macOS 13.7, R 4.5.3)
@@ -13,6 +34,8 @@
 This package wraps state-specific Python web scrapers via the `reticulate`
 package. Python is declared under `SystemRequirements: Python (>= 3.10), pip`.
 
+### Technical notes
+
 **Python is not required to install or load the package.** All Python-dependent
 functionality is opt-in: users must explicitly call `downballot_install_python()`
 to create a virtual environment and install Python dependencies, and
@@ -23,6 +46,12 @@ The required Python packages (`pandas`, `requests`, `lxml`, `beautifulsoup4`,
 `playwright`, `pyreadr`) are installed into an isolated `reticulate` virtual
 environment named `"downballotR"` and do not affect the user's system Python
 installation.
+
+Playwright Chromium (~100-200 MB) is downloaded as part of setup. In
+interactive sessions, `downballot_install_python()` prompts the user for
+explicit consent before the download begins and aborts if they decline. In
+non-interactive sessions, the function errors if Chromium is missing rather
+than downloading silently.
 
 ## Network access
 

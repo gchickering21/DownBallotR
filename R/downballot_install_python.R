@@ -277,6 +277,10 @@ db_install_plan <- function(pkgs, reinstall = FALSE, install_chromium = TRUE) {
 #' @param python Path to a python executable to use when creating the env (optional).
 #' @param reinstall If TRUE, reinstall packages even if already installed.
 #' @param install_chromium If TRUE, install Playwright Chromium browser.
+#'   In interactive sessions, the user will be prompted for explicit consent
+#'   before the download (~100-200 MB) begins. In non-interactive sessions,
+#'   the function will error if Chromium is missing; set
+#'   \code{install_chromium = FALSE} to suppress this.
 #' @param quiet If TRUE, suppress progress messages.
 #' @export
 downballot_install_python <- function(
@@ -329,6 +333,27 @@ downballot_install_python <- function(
 
   # Install Chromium if requested and missing
   if (isTRUE(install_chromium) && isTRUE(plan$chromium_missing)) {
+    if (!interactive()) {
+      stop(
+        "Playwright Chromium (~100-200 MB) needs to be downloaded but this is a ",
+        "non-interactive session.\n",
+        "To consent to the download, call this function interactively or pass ",
+        "install_chromium = FALSE and install Chromium manually via:\n",
+        "  reticulate::py_run_string(\"from playwright.__main__ import main; ",
+        "import sys; sys.argv = ['playwright', 'install', 'chromium']; main()\")",
+        call. = FALSE
+      )
+    }
+    message(
+      "\nPlaywright Chromium is not yet installed.\n",
+      "This will download approximately 100-200 MB to:\n",
+      "  ", reticulate::virtualenv_python(envname), "\n"
+    )
+    answer <- readline("Proceed with download? [y/N] ")
+    if (!tolower(trimws(answer)) %in% c("y", "yes")) {
+      message("Skipping Chromium installation. Scraping of dynamic sites will not work until Chromium is installed.")
+      return(invisible(FALSE))
+    }
     db_install_playwright_chromium()
 
     if (!isTRUE(db_playwright_chromium_is_installed())) {

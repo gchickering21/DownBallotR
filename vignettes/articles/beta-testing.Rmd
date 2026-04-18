@@ -1,10 +1,6 @@
 ---
 title: "Beta Testing Guide"
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Beta Testing Guide}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include=FALSE, purl=FALSE}

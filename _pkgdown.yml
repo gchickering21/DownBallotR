@@ -28,7 +28,7 @@ articles:
     navbar: ~
     contents:
       - python-setup
-      - beta-testing
+      - articles/beta-testing
   - title: Using the package
     navbar: ~
     contents:
@@ -36,13 +36,13 @@ articles:
   - title: Scraper reference
     navbar: ~
     contents:
-      - election-stats
-      - north-carolina
-      - connecticut
-      - georgia
-      - utah
-      - indiana
-      - louisiana
+      - articles/election-stats
+      - articles/north-carolina
+      - articles/connecticut
+      - articles/georgia
+      - articles/utah
+      - articles/indiana
+      - articles/louisiana
   - title: About the data
     navbar: ~
     contents:

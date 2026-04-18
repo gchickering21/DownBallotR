@@ -1,10 +1,6 @@
 ---
 title: "Utah elections"
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Utah elections}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include=FALSE, purl=FALSE}

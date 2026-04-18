@@ -96,10 +96,12 @@ _PRECINCT_COLS  = [c for c in CLARITY_PRECINCT_COLS  if c != "state"]
 _VM_STATE_COLS  = [c for c in CLARITY_VM_STATE_COLS  if c != "state"]
 _VM_COUNTY_COLS = [c for c in CLARITY_VM_COUNTY_COLS if c != "state"]
 
-_PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
-_DASH_PARTY_RE   = re.compile(r"\s+-\s+(\S+)\s*$")
-_REPORTING_RE    = re.compile(r"(\d+)\s*/\s*(\d+)")
-_DATE_RE         = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
+_PARTY_SUFFIX_RE  = re.compile(r"\s*\([^)]+\)\s*$")
+_DASH_PARTY_RE    = re.compile(r"\s+-\s+(\S+)\s*$")
+_REPORTING_RE     = re.compile(r"(\d+)\s*/\s*(\d+)")
+_DATE_RE          = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
+# Strips party-prefix headers like "Republican For", "Democrat For", "Nonpartisan For"
+_PARTY_FOR_RE     = re.compile(r"^\w+\s+for\s+", re.I)
 
 # Matches district info at the end of an office string, e.g.:
 #   "State House of Representatives - District 119"
@@ -646,6 +648,22 @@ def parse_ballot_item_precinct_links(html_str: str, server_base: str) -> list[st
     return urls
 
 
+def _parse_ballot_item_office(doc) -> tuple["str | None", "str | None"]:
+    """Extract (office, district) from the ballot-item card header on a precinct page.
+
+    The heading reads e.g. "Republican For US House 2"; we strip the party prefix
+    then delegate to _split_office_district.
+    """
+    h1s = doc.xpath("//div[contains(@class,'card-body')]/h1")
+    if not h1s:
+        return None, None
+    raw = _PARTY_FOR_RE.sub("", _clean(h1s[0].text_content())).strip()
+    if not raw:
+        return None, None
+    office, district = _split_office_district(raw)
+    return office or None, district
+
+
 def parse_precinct_results(
     html_str: str,
     county_name: str,
@@ -680,24 +698,24 @@ def parse_precinct_results(
     """
     doc = lhtml.fromstring(html_str)
     page_meta = _parse_page_meta(doc)
+    page_office, page_district = _parse_ballot_item_office(doc)
     rows: list[dict] = []
 
     panels = doc.xpath("//p-panel[contains(@class,'ballot-item')]")
     for panel in panels:
-        raw_office = _panel_office(panel)
-        if not raw_office:
+        panel_precinct = _panel_office(panel)
+        if not panel_precinct:
             continue
-        office, district = _split_office_district(raw_office)
         base = {
             "election_name":  election_info.name,
             "election_type":  _classify_election_type(election_info.name),
             "election_year":  election_info.year,
             "election_date":  page_meta["election_date"],
             "county":         county_name,
-            "precinct":       precinct_name,
-            "office_level":   classify_office_level(raw_office),
-            "office":         office,
-            "district":       district,
+            "precinct":       panel_precinct,
+            "office_level":   classify_office_level(page_office) if page_office else None,
+            "office":         page_office,
+            "district":       page_district,
             "url":            url,
         }
         for cand in _parse_ballot_options(panel):

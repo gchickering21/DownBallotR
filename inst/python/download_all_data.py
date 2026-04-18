@@ -91,6 +91,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import logging
 import os
 import sys
 import traceback
@@ -104,6 +105,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 
 import registry
+
+_logger = logging.getLogger("downballot")
 
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -213,6 +216,20 @@ def _all_valid(paths: "dict[str, Path]") -> bool:
     return all(_is_valid_csv(p) for p in paths.values())
 
 
+def _setup_file_logging(log_path: Path) -> None:
+    """Attach a FileHandler to the module logger, writing WARNING+ to *log_path*."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.setLevel(logging.WARNING)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-8s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    _logger.setLevel(logging.WARNING)
+    _logger.addHandler(handler)
+    print(f"Error log: {log_path}")
+
+
 def _run_task(
     label: str,
     path: Path,
@@ -239,6 +256,7 @@ def _run_task(
     except Exception:
         print("  ✗ ERROR during scrape:")
         traceback.print_exc()
+        _logger.error("[%s] scrape error:\n%s", label, traceback.format_exc())
         return False
 
     try:
@@ -261,6 +279,7 @@ def _run_task(
     except Exception:
         print("  ✗ ERROR while saving result:")
         traceback.print_exc()
+        _logger.error("[%s] save error:\n%s", label, traceback.format_exc())
         return False
 
     return True
@@ -370,6 +389,7 @@ def _download_yearly(
         except Exception:
             print("  ✗ ERROR during scrape:")
             traceback.print_exc()
+            _logger.error("[%s %d] scrape error:\n%s", source, year, traceback.format_exc())
             results.append(False)
             continue
 
@@ -762,7 +782,7 @@ TRIAL_YEARS: dict[str, int] = {
     "georgia":        2023,
     "utah":           2024,
     "connecticut":    2023,
-    "louisiana":      2026,
+    "louisiana":      2025,
 }
 
 
@@ -817,6 +837,7 @@ def trial_run(output_dir: Path, *, dry_run: bool = False, workers: int = os.cpu_
     all_results.extend(download_georgia(
         trial_dir, dry_run=dry_run,
         ga_year_from=TRIAL_YEARS["georgia"], ga_year_to=TRIAL_YEARS["georgia"],
+        ga_vote_methods=True,
         ga_county_workers=workers,
     ))
 
@@ -847,6 +868,109 @@ def trial_run(output_dir: Path, *, dry_run: bool = False, workers: int = os.cpu_
     all_results.extend(download_louisiana(
         trial_dir, dry_run=dry_run,
         la_year_from=TRIAL_YEARS["louisiana"], la_year_to=TRIAL_YEARS["louisiana"],
+        la_parish_workers=workers,
+    ))
+
+    return all_results
+
+
+def full_run(
+    output_dir: Path,
+    *,
+    dry_run: bool = False,
+    workers: "int | None" = None,
+) -> list[bool]:
+    """Download ALL available data for every state across their full year ranges.
+
+    Runs section by section, state by state.  Within each state, ``workers``
+    parallel Chromium browsers are used for county / precinct / parish scraping.
+    Errors are written to the log file configured before calling this function.
+
+    Parameters
+    ----------
+    workers : int | None
+        Parallel workers for county-level scraping.  Defaults to
+        ``max(os.cpu_count() or 1, 4)`` — at least 4, up to all available CPUs.
+    """
+    if workers is None:
+        workers = max(os.cpu_count() or 1, 4)
+    workers = max(workers, 4)   # enforce minimum of 4 for full run
+
+    print(f"Full run output directory: {output_dir}")
+    print(f"Workers per section      : {workers}")
+    all_results: list[bool] = []
+
+    # ── ElectionStats ──────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: ELECTION_STATS (full year ranges, state by state)")
+    print(f"{'─'*70}")
+    for state_key, (year_from, year_to) in ELECTION_STATS_STATES.items():
+        results = download_election_stats(
+            output_dir,
+            dry_run=dry_run,
+            state=state_key,
+            workers=1,          # each state is a single scrape call; parallelism
+            es_year_from=year_from,  # is not needed at the state level here
+            es_year_to=year_to,
+        )
+        all_results.extend(results)
+
+    # ── North Carolina ─────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: NC (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_nc(
+        output_dir, dry_run=dry_run,
+        nc_year_from=NC_YEAR_RANGE[0], nc_year_to=NC_YEAR_RANGE[1],
+    ))
+
+    # ── Indiana ────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: INDIANA (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_indiana(
+        output_dir, dry_run=dry_run,
+        in_year_from=IN_YEAR_RANGE[0], in_year_to=IN_YEAR_RANGE[1],
+    ))
+
+    # ── Georgia ────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: GEORGIA (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_georgia(
+        output_dir, dry_run=dry_run,
+        ga_year_from=GA_YEAR_RANGE[0], ga_year_to=GA_YEAR_RANGE[1],
+        ga_vote_methods=True,
+        ga_county_workers=workers,
+    ))
+
+    # ── Utah ───────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: UTAH (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_utah(
+        output_dir, dry_run=dry_run,
+        ut_year_from=UT_YEAR_RANGE[0], ut_year_to=UT_YEAR_RANGE[1],
+        ut_county_workers=workers,
+    ))
+
+    # ── Connecticut ────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: CONNECTICUT (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_connecticut(
+        output_dir, dry_run=dry_run,
+        ct_year_from=CT_YEAR_RANGE[0], ct_year_to=CT_YEAR_RANGE[1],
+        ct_town_workers=workers,
+    ))
+
+    # ── Louisiana ──────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: LOUISIANA (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_louisiana(
+        output_dir, dry_run=dry_run,
+        la_year_from=LA_YEAR_RANGE[0], la_year_to=LA_YEAR_RANGE[1],
         la_parish_workers=workers,
     ))
 
@@ -922,6 +1046,16 @@ def main() -> None:
         help=(
             "Run one representative year per state/section as a smoke test. "
             "Output goes to <output-dir>/trial/ so it never collides with a full run. "
+            "Ignores --section and all year-range flags."
+        ),
+    )
+    parser.add_argument(
+        "--full-run",
+        action="store_true",
+        help=(
+            "Download ALL available data for every state across their full year ranges. "
+            "Runs section by section, state by state, with maximum parallel workers. "
+            "Errors are logged to <output-dir>/logs/. "
             "Ignores --section and all year-range flags."
         ),
     )
@@ -1154,6 +1288,10 @@ def main() -> None:
         print(f"LA parish workers: {args.la_parish_workers}")
     print("=" * 70)
 
+    if args.trial_run and args.full_run:
+        print("ERROR: --trial-run and --full-run are mutually exclusive.")
+        sys.exit(1)
+
     if args.trial_run:
         print("\nMode: TRIAL RUN (one year per state, output → <output-dir>/trial/)")
         print("=" * 70)
@@ -1165,6 +1303,27 @@ def main() -> None:
         print(f"DONE  |  {n_success}/{n_total} tasks succeeded", end="")
         if n_failed:
             print(f"  |  {n_failed} failed (see errors above)")
+        else:
+            print()
+        print("=" * 70)
+        if n_failed:
+            sys.exit(1)
+        return
+
+    if args.full_run:
+        log_ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = output_dir / "logs" / f"full_run_{log_ts}.log"
+        _setup_file_logging(log_path)
+        print(f"\nMode: FULL RUN (all states, all years, output → {output_dir})")
+        print("=" * 70)
+        all_results = full_run(output_dir, dry_run=args.dry_run, workers=args.workers)
+        n_total   = len(all_results)
+        n_success = sum(all_results)
+        n_failed  = n_total - n_success
+        print(f"\n{'='*70}")
+        print(f"DONE  |  {n_success}/{n_total} tasks succeeded", end="")
+        if n_failed:
+            print(f"  |  {n_failed} failed — details in {log_path}")
         else:
             print()
         print("=" * 70)

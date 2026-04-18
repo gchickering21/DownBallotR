@@ -7,10 +7,7 @@
 
 <!-- badges: end -->
 
-`DownBallotR` is an R package for downloading and standardizing local and
-state election data. It wraps state-specific Python web scrapers via
-**reticulate** and exposes a single, consistent R interface.
-
+`DownBallotR` is an R package for downloading and standardizing federal, state, and local election results data across U.S. jurisdictions. It provides a consistent interface for accessing election results from official state and local sources, which are often published in different formats and structures. The package harmonizes these data into a common, structured format, allowing users to more easily analyze and compare election results across states, offices, and levels of government. It is designed to reduce the time and effort required to collect and clean election data, enabling researchers, analysts, and practitioners to focus on analysis rather than data acquisition.
 ---
 
 ## Installation
@@ -53,6 +50,12 @@ scrape_elections(state = "colorado", year_from = 2022, year_to = 2022, level = "
 # North Carolina precinct results
 scrape_elections(state = "NC", year_from = 2025, year_to = 2025)
 
+# Georgia statewide + county + precinct results
+scrape_elections(state = "GA", year_from = 2024, year_to = 2024)
+
+# Utah statewide + county + precinct results
+scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
+
 # Indiana General Election results (statewide + county)
 scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
 
@@ -89,18 +92,15 @@ and downloads Playwright Chromium (~100–200MB, first time only).
 
 ## About the data
 
-`DownBallotR` retrieves election results live from official and semi-official
-sources at the time of your request. No data is bundled with the package or
-hosted by the maintainers.
+`DownBallotR` retrieves election results live from official at the time of your request. 
+No data is bundled with the package or hosted by the maintainers. **Note:** We are currently working on creating a repository of validated datasets to accompany this package so users in the future do not need to run requests to download and validate the data themselves. 
 
-**Coverage:** 15 US states across 7 distinct sources (ElectionStats and state
-election portals for NC, CT, GA, UT, IN, LA). Historical depth varies from 1789
-(Vermont, Virginia via ElectionStats) to 2019(Indiana) to the present.
+**Current Coverage:** 15 US states. Historical depth varies from 1789
+(Vermont, Virginia) to 2019(Indiana) to the present.
 
 **What the data is:** Vote totals by candidate and contest at the statewide,
 county/parish/town, or precinct level, depending on source and the `level`
-argument. Results are returned as-collected; party labels, contest names, and
-geographic identifiers are not normalized to a common schema.
+argument.
 
 **What the data is not:** Certified results. Data should be verified against
 the original source before publication or high-stakes use.
@@ -112,6 +112,11 @@ responsible use is in the
 ---
 
 ## Vignettes
+**Datasheet** — overview of the package’s purpose, data sources, structure, and ethical considerations, including how election data are collected, standardized, and intended to be used:
+
+- Source: [vignettes/datasheet.Rmd](vignettes/datasheet.Rmd)
+- In R (after installing): `vignette("datasheet", package = "DownBallotR")`
+- Rendered HTML (pkgdown): <https://gchickering21.github.io/DownBallotR/articles/datasheet.html>
 
 **Python setup** — environment installation, session activation, and troubleshooting:
 

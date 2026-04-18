@@ -1,13 +1,11 @@
-citHeader("To cite DownBallotR in publications, please use:")
-
-citEntry(
-  entry = "Manual",
-  title = "DownBallotR: Access Federal, State, and Local Election Data",
-  author = personList(
+bibentry(
+  bibtype = "Manual",
+  title   = "DownBallotR: Access Federal, State, and Local Election Data",
+  author  = c(
     person("Graham", "Chickering"),
     person("Chris", "Warshaw")
   ),
-  year = "2026",
-  note = "R package version 0.1.0",
-  url = "https://github.com/gchickering21/DownBallotR"
+  year  = "2026",
+  note  = "R package version 0.1.0",
+  url   = "https://github.com/gchickering21/DownBallotR"
 )

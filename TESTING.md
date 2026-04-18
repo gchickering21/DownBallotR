@@ -246,6 +246,8 @@ Please send feedback to Graham Chickering, grahamchickering@gmail.com, or Chris 
 2. What happened (error message, unexpected output, or something confusing)
 3. Your operating system (Windows, Mac, Linux, etc.) and R version (`R.version$version.string`)
 
+**Note:** Are there any other specific elections or sites you would like to be added to the package? Please feel free to reach out directly if there are any elections your work would benefit from and we can work on adding these to the next version release. 
+
 You're also welcome to file issues directly at https://github.com/gchickering21/DownBallotR/issues
 
 **Thank you!!! — your feedback is extremely valuable and vital at this stage.**

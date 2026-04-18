@@ -55,7 +55,7 @@ Apache License 2.0.
 ### What does the package retrieve?
 
 `DownBallotR` retrieves **election results** — vote totals by candidate and
-contest — from official and semi-official sources. Depending on the source and
+contest — from official sources. Depending on the source and
 the `level` argument, results may be available at the **statewide**,
 **county/parish/town**, or **precinct** level.
 
@@ -66,8 +66,8 @@ the `level` argument, results may be available at the **statewide**,
 | ElectionStats | CO, ID, MA, NH, NM, NY, SC, VA, VT | 1789–2008 (varies) | County; precinct for CO, ID, MA, SC, NM, VA |
 | NC State Board of Elections | North Carolina | 2000 | Precinct |
 | Connecticut CTEMS | Connecticut | 2016 | Town |
-| Georgia Secretary of State | Georgia | 2000 | County |
-| Utah elections portal | Utah | 2023 | County |
+| Georgia Secretary of State | Georgia | 2000 | Precinct |
+| Utah elections portal | Utah | 2023 | Precinct |
 | Indiana voters portal | Indiana | 2019 | County |
 | Louisiana Secretary of State | Louisiana | 1982 | Parish |
 
@@ -167,14 +167,12 @@ The level of preprocessing varies substantially by source. In general:
 - **Office/contest names** are returned as they appear in the source and are
   not normalized to a common taxonomy across sources.
 - **Geographic units** (county, precinct, town, parish) are returned as they
-  appear in the source. No crosswalk to FIPS codes or standardized place names
-  is applied automatically.
+  appear in the source. No crosswalk to standardized place names is applied automatically.
 - **Party labels** may involve heuristic parsing when the source does not
   provide a distinct party field. Where heuristics are used, common
   abbreviations (e.g., "Dem", "Rep", "D", "R") are mapped to full party names,
   but edge cases may be mislabeled.
-- **Write-in candidates** may appear as a single aggregated row, individual
-  rows, or may be absent, depending on the source.
+- **Write-in candidates** have been removed at this time but could be added in based upon request.
 - **Election stages** (primary, general, runoff) are not consistently
   distinguished across sources.
 
@@ -188,7 +186,7 @@ the correct values.
 
 The package does not validate the substantive correctness of retrieved data
 against any external reference. It checks that scraping operations succeeded
-and returns what the source provided. We will be working to create a publically available dataset containing 
+and returns what the source provided. We will be working to create a publicly available dataset containing
 these results that will be validated and checked in the future.
 
 ---
@@ -288,29 +286,33 @@ will be reflected in the major or minor version number.
 
 ### Are there legal restrictions on the underlying data?
 
-Election results published by government entities are generally in the public
-domain in the United States, but users should verify this for their specific
-jurisdiction and use case.
+Election results published by government entities are generally in the public domain 
+in the United States, but users should verify any jurisdiction-specific restrictions, 
+licensing terms, or reuse conditions that may apply to particular sources or downstream uses.
 
 ### Does the package collect or transmit user data?
 
-No. The package does not collect, log, or transmit any information about the
-user, their queries, or the data they retrieve.
+The package itself does not collect, log, or transmit information about users,
+ their queries, or the data they retrieve. However, the package documentation website 
+ uses Google Analytics to measure aggregate site traffic and understand how the documentation 
+ is being used. This website-level analytics may collect information such as page views, referral sources, 
+ device/browser metadata, and general usage patterns in accordance with Google Analytics practices. 
+ This tracking applies only to visits to the documentation website, not to use of the package within R.
 
 ### Are there privacy concerns with the data?
 
-Election results as typically published aggregate votes by contest and geographic
-unit, and do not contain voter-level information. However, some sources publish
-candidate information that may include personal details (names, party affiliation)
-which are part of the public record.
+Election results as typically published are aggregated by contest and geographic unit 
+and do not contain voter-level information. Some sources may include candidate information 
+such as names or party affiliation, which are part of the public record. Separately, visitors 
+to the documentation website should be aware that web analytics tools may process limited usage 
+data as part of standard website traffic measurement.
 
 ### Could this package be used to suppress or manipulate election information?
 
-The package retrieves and presents data as published by official sources. It
-does not have any capability to alter, suppress, or submit election information
-to any authority. Misrepresentation of data retrieved by this package as
-official results would be a misuse of the tool by the user, not a property
-of the package itself.
+The package retrieves and presents data as published by official sources. 
+It does not have the ability to alter, suppress, or submit election information to any authority.
+ Misrepresenting data retrieved by this package as official results, or selectively presenting results in
+  misleading ways, would constitute misuse by the user rather than a feature of the package.
 
 ---
 
@@ -321,8 +323,7 @@ The following limitations are known and should be considered by users:
 1. **Coverage is incomplete.** Only the states listed in Section 2 are
    supported. Most states and all US territories are not currently covered.
 
-2. **Historical data quality is uneven.** Earlier years (particularly pre-2000
-   for ElectionStats sources) have not been systematically validated. Missing
+2. **Historical data quality is uneven.** Earlier years have not been systematically validated. Missing
    contests, inconsistent formatting, and partial results are more likely for
    older elections.
 
@@ -330,25 +331,20 @@ The following limitations are known and should be considered by users:
    release may break if the source website updates its structure. There is no
    guarantee of continued availability for any source.
 
-4. **Party labels are heuristic.** Where the source does not provide a
-   structured party field, party labels are parsed from candidate metadata
-   using pattern matching. Third-party, independent, and write-in candidates
-   are especially likely to have inconsistent or absent party labels.
-
-5. **Contest names are not normalized.** "City Council District 4" and
+4. **Contest names are not normalized.** "City Council District 4" and
    "City Council, Ward 4" may refer to the same or different races depending on
    the source and year. No ontology is applied to race names.
 
-6. **Sub-unit geographic names are not standardized.** County names, precinct
+5. **Sub-unit geographic names are not standardized.** County names, precinct
    IDs, and town names are returned as they appear in the source. These may not
    match standard geographic reference files without additional cleaning.
 
-7. **Results may not be final.** A scrape performed immediately after an
+6. **Results may not be final.** A scrape performed immediately after an
    election may retrieve unofficial or preliminary totals. Even well after
    election day, some sources may not clearly distinguish certified from
    uncertified results.
 
-8. **The package has no guaranteed uptime.** Because it depends on live
+7. **The package has no guaranteed uptime.** Because it depends on live
    external websites, it may fail at any time due to website downtime, bot
    mitigation, or network issues outside the maintainer's control.
 
@@ -374,8 +370,7 @@ Users working with data from this package should:
   a year range, and treat results for years beyond the confirmed end date as
   experimental.
 - **Respect the source infrastructure.** Avoid automated loops that issue
-  hundreds of requests in quick succession. Use the `max_workers` default (4)
-  rather than pushing toward the maximum.
+  hundreds of requests in quick succession.
 
 ---
 

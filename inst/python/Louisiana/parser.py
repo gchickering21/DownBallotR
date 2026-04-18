@@ -412,6 +412,8 @@ def parse_parish_results(
     if not html_str:
         return pd.DataFrame(columns=_PARISH_COLS)
 
+    parish_name = re.sub(r"\s*--.*$", "", parish_name).strip()
+
     doc = lhtml.fromstring(html_str)
     turnout_pct = _parse_turnout_pct(doc)
     rows = _parse_results_from_doc(doc, election, tab=None, parish=parish_name)

@@ -40,6 +40,7 @@ test_that("db_install_plan with reinstall=TRUE marks everything as missing", {
 
 test_that("db_install_plan with reinstall=FALSE and no Python: all packages missing", {
   # Without Python initialized, py_module_available returns FALSE for all
+  testthat::skip_if_not_installed("reticulate")
   skip_if(
     isTRUE(tryCatch(reticulate::py_available(initialize = FALSE), error = function(e) FALSE)),
     "Python already initialized; skipping cold-start check"

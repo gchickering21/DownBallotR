@@ -23,8 +23,8 @@ def test_parser_selection():
     parser_co = _choose_row_parser("colorado")
     print(f"Colorado parser: {parser_co.__name__}")
 
-    assert parser_va.__name__ == "_parse_search_row_vama"
-    assert parser_ma.__name__ == "_parse_search_row_vama"
+    assert parser_va.__name__ == "_parse_search_row_vtma"
+    assert parser_ma.__name__ == "_parse_search_row_vtma"
     assert parser_co.__name__ == "_parse_search_row_colorado"
 
     print("\n✓ All parsers selected correctly\n")

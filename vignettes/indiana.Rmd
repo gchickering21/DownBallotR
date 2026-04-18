@@ -52,11 +52,11 @@ res <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
 # Statewide candidate totals
 res$state %>%
   filter(office_level == "Federal") %>%
-  select(election_year, office_title, candidate, party, votes, vote_pct, winner)
+  select(election_year, office, candidate, party, votes, vote_pct, winner)
 
 # County-level breakdown
 res$county %>%
-  filter(office_title == "President of the United States") %>%
+  filter(office == "President of the United States") %>%
   select(county_name, candidate, party, votes, vote_pct) %>%
   arrange(county_name, desc(votes))
 ```
@@ -72,7 +72,7 @@ state_df <- scrape_elections(
 )
 
 state_df %>%
-  select(election_year, office_level, office_title, candidate, party, votes, vote_pct, winner)
+  select(election_year, office_level, office, candidate, party, votes, vote_pct, winner)
 ```
 
 ### Multi-year scrape
@@ -86,7 +86,7 @@ res <- scrape_elections(
 )
 
 res %>%
-  filter(office_title == "President of the United States") %>%
+  filter(office == "President of the United States") %>%
   select(election_year, candidate, party, votes, vote_pct, winner)
 ```
 
@@ -97,8 +97,8 @@ res <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
 
 res$county %>%
   filter(county_name == "Marion") %>%
-  select(office_title, candidate, party, votes, vote_pct) %>%
-  arrange(office_title, desc(votes))
+  select(office, candidate, party, votes, vote_pct) %>%
+  arrange(office, desc(votes))
 ```
 
 ### Filter by office level
@@ -109,12 +109,12 @@ res <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
 # Federal races only
 res$state %>%
   filter(office_level == "Federal") %>%
-  select(office_title, candidate, party, votes, vote_pct, winner)
+  select(office, candidate, party, votes, vote_pct, winner)
 
 # State races only
 res$state %>%
   filter(office_level == "State") %>%
-  select(office_title, candidate, party, votes, vote_pct, winner)
+  select(office, candidate, party, votes, vote_pct, winner)
 ```
 
 ---
@@ -130,30 +130,33 @@ res$state %>%
 | `election_date` | Date of the election |
 | `election_type` | Always `"General"` |
 | `office_level` | `"Federal"`, `"State"`, or `"Local"` |
-| `office_category` | Broad category name (e.g. `"County Offices"`) |
-| `office_title` | Specific office name (e.g. `"President of the United States"`) |
-| `office_id` | Internal office identifier |
-| `candidate` | Candidate name |
-| `candidate_name_on_ballot` | Name as printed on the ballot |
+| `office` | Office name (e.g. `"President of the United States"`) |
+| `district` | District identifier; `NA` when not applicable |
+| `candidate` | Candidate name as printed on the ballot |
 | `party` | Full party name (e.g. `"Republican"`, `"Democrat"`) |
 | `votes` | Statewide vote total |
 | `vote_pct` | Percentage of votes within the contest |
 | `winner` | `TRUE` if the candidate won |
 | `num_seats` | Number of seats available in the contest |
-| `precincts_reporting` | Total precincts reporting statewide |
-| `total_precincts` | Total precincts statewide |
 
 ### `$county` (when `level = "all"` or `"county"`)
 
-Same columns as `$state`, except `precincts_reporting` and `total_precincts`
-are absent, `winner` is replaced by `county_winner`, and two county-specific
-columns are added:
-
 | Column | Description |
 |---|---|
+| `state` | State abbreviation (`"IN"`) |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date of the election |
+| `election_type` | Always `"General"` |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `district` | District identifier; `NA` when not applicable |
 | `county_name` | County name |
-| `county_fips` | County FIPS code |
+| `candidate` | Candidate name as printed on the ballot |
+| `party` | Full party name |
+| `votes` | County-level vote total |
+| `vote_pct` | Percentage of votes within the contest for this county |
 | `county_winner` | `TRUE` if the candidate won within this county |
+| `num_seats` | Number of seats available in the contest |
 
 ---
 

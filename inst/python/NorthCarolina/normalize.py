@@ -12,6 +12,7 @@ import pandas as pd
 from .election_type_rules import ElectionTypeRules, add_election_type
 from .canonicalize import extract_jurisdiction_office_and_district
 from office_level_utils import classify_office_level
+from text_utils import normalize_party
 
 # =========================================================
 # Config model + loader
@@ -329,6 +330,7 @@ def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) 
     df["choice_party"] = df["choice_party"].fillna(
         df["contest_name"].str.extract(r"\(([^)]+)\)$", expand=False)
     )
+    df["choice_party"] = df["choice_party"].apply(normalize_party)
 
     # Reorder: state, election_year, … contest_name | jurisdiction office_level district | vote cols …
     cols = df.columns.tolist()

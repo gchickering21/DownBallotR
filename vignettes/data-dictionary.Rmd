@@ -35,8 +35,11 @@ Source: CT Election Management System (CTEMS). Results available 2016–present.
 | `election_name` | character | Human-readable election name (e.g. `"11/05/2024 -- November General Election"`) |
 | `election_year` | integer | Calendar year of the election |
 | `election_date` | character | Date of the election |
+| `election_type` | character | Election type extracted from `election_name` (e.g. `"General Election"`, `"August Primary"`) |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name |
+| `district` | character | County name for Local races; `NA` for statewide (Federal/State) races |
+| `town` | character | Town name for Local races; `NA` for statewide (Federal/State) races |
 | `candidate` | character | Candidate name |
 | `party` | character | Party name (e.g. `"Democratic"`, `"Republican"`) |
 | `votes` | integer | Total votes |
@@ -51,10 +54,11 @@ Source: CT Election Management System (CTEMS). Results available 2016–present.
 | `election_name` | character | Human-readable election name |
 | `election_year` | integer | Calendar year of the election |
 | `election_date` | character | Date of the election |
-| `county` | character | County name |
-| `town` | character | Town name |
+| `election_type` | character | Election type extracted from `election_name` (e.g. `"General Election"`, `"August Primary"`) |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name |
+| `district` | character | County name |
+| `town` | character | Town name |
 | `candidate` | character | Candidate name |
 | `party` | character | Party name |
 | `votes` | integer | Votes cast in this town |
@@ -73,15 +77,17 @@ Source: Georgia Secretary of State. Results available 2000–present.
 |---|---|---|
 | `state` | character | State abbreviation (`"GA"`) |
 | `election_name` | character | Human-readable election name (e.g. `"November General Election"`) |
+| `election_type` | character | Election type (e.g. `"General"`, `"Primary"`) |
 | `election_year` | integer | Calendar year of the election |
 | `election_date` | character | Date string from the page header |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
-| `winner` | logical | `TRUE` if the candidate won the statewide contest |
 | `votes` | integer | Total votes |
 | `vote_pct` | numeric | Percentage of votes within the contest |
+| `winner` | logical | `TRUE` if the candidate won the statewide contest |
 | `url` | character | URL of the election results page scraped |
 
 ### `$county`
@@ -90,16 +96,18 @@ Source: Georgia Secretary of State. Results available 2000–present.
 |---|---|---|
 | `state` | character | State abbreviation (`"GA"`) |
 | `election_name` | character | Human-readable election name |
+| `election_type` | character | Election type (e.g. `"General"`, `"Primary"`) |
 | `election_year` | integer | Calendar year of the election |
 | `election_date` | character | Date string from the page header |
-| `county` | character | County name |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
+| `county` | character | County name |
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
-| `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `votes` | integer | County-level vote total |
 | `vote_pct` | numeric | Percentage of votes within the contest for this county |
+| `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `url` | character | URL of the election results page scraped |
 
 ---
@@ -118,6 +126,7 @@ Source: Indiana Election Division. General Elections only, 2019–present.
 | `election_type` | character | Always `"General"` |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name (e.g. `"County Offices"`) |
+| `district` | character | District identifier; `NA` when not applicable |
 | `candidate` | character | Candidate name as printed on the ballot |
 | `party` | character | Full party name (e.g. `"Republican"`, `"Democrat"`) |
 | `votes` | integer | Statewide vote total |
@@ -135,8 +144,8 @@ Source: Indiana Election Division. General Elections only, 2019–present.
 | `election_type` | character | Always `"General"` |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
 | `county_name` | character | County name |
-| `county_fips` | character | 5-digit county FIPS code |
 | `candidate` | character | Candidate name as printed on the ballot |
 | `party` | character | Full party name |
 | `votes` | integer | County-level vote total |
@@ -176,10 +185,10 @@ Source: Louisiana Secretary of State. Results available 1982–present.
 | `election_name` | character | Human-readable election name |
 | `election_year` | integer | Calendar year of the election |
 | `election_date` | character | Date of the election |
-| `parish` | character | Parish name (e.g. `"Orleans Parish"`) |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office title |
 | `district` | character | Court, district, or seat qualifier; `NA` when not present |
+| `parish` | character | Parish name (e.g. `"Orleans Parish"`) |
 | `candidate` | character | Candidate name |
 | `party` | character | Full party name |
 | `votes` | integer | Parish-level vote total |
@@ -277,15 +286,17 @@ Source: Utah elections portal. Results available 2023–present.
 |---|---|---|
 | `state` | character | State abbreviation (`"UT"`) |
 | `election_name` | character | Human-readable election name |
+| `election_type` | character | Election type (e.g. `"General"`, `"Primary"`) |
 | `election_year` | integer | Calendar year of the election |
 | `election_date` | character | Date string from the page header |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
-| `winner` | logical | `TRUE` if the candidate won the statewide contest |
 | `votes` | integer | Total votes |
 | `vote_pct` | numeric | Percentage of votes within the contest |
+| `winner` | logical | `TRUE` if the candidate won the statewide contest |
 | `url` | character | URL of the election results page scraped |
 
 ### `$county`
@@ -294,16 +305,18 @@ Source: Utah elections portal. Results available 2023–present.
 |---|---|---|
 | `state` | character | State abbreviation (`"UT"`) |
 | `election_name` | character | Human-readable election name |
+| `election_type` | character | Election type (e.g. `"General"`, `"Primary"`) |
 | `election_year` | integer | Calendar year of the election |
 | `election_date` | character | Date string from the page header |
-| `county` | character | County name |
 | `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
+| `county` | character | County name |
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
-| `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `votes` | integer | County-level vote total |
 | `vote_pct` | numeric | Percentage of votes within the contest for this county |
+| `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `url` | character | URL of the election results page scraped |
 
 ---
@@ -318,12 +331,12 @@ coverage varies by state. Precinct-level data available for ID, NM, SC, and VA.
 | Column | Type | Description |
 |---|---|---|
 | `state` | character | State abbreviation (e.g. `"CO"`, `"VA"`) |
-| `election_id` | integer | Internal ElectionStats election identifier |
 | `election_year` | integer | Calendar year of the election |
-| `office` | character | Office name |
-| `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
-| `district` | character | District identifier; `NA` when not applicable |
+| `election_id` | integer | Internal ElectionStats election identifier |
 | `election_type` | character | Election stage (e.g. `"General"`, `"Primary"`) |
+| `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
 | `candidate_id` | integer | Internal ElectionStats candidate identifier |
 | `candidate` | character | Candidate name |
 | `party` | character | Party name as returned by ElectionStats |
@@ -339,24 +352,39 @@ coverage varies by state. Precinct-level data available for ID, NM, SC, and VA.
 | `state` | character | State abbreviation |
 | `election_year` | integer | Calendar year of the election |
 | `election_id` | integer | Internal ElectionStats election identifier |
-| `candidate_id` | integer | Internal ElectionStats candidate identifier |
+| `election_type` | character | Election stage (e.g. `"General"`, `"Primary"`) |
+| `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
 | `county_or_city` | character | County or independent city name |
+| `candidate_id` | integer | Internal ElectionStats candidate identifier |
 | `candidate` | character | Candidate name |
+| `party` | character | Party name |
 | `votes` | integer | Vote total for this county or city |
+| `vote_pct` | numeric | Percentage of votes within the contest for this county/city |
 | `county_winner` | logical | `TRUE` for the top vote-getter within each county/city |
+| `url` | character | URL for the candidate detail page on ElectionStats |
 
 ### `$precinct` (ID, NM, SC, VA only)
 
 | Column | Type | Description |
 |---|---|---|
 | `state` | character | State abbreviation |
+| `election_year` | integer | Calendar year of the election |
 | `election_id` | integer | Internal ElectionStats election identifier |
-| `candidate_id` | integer | Internal ElectionStats candidate identifier |
+| `election_type` | character | Election stage (e.g. `"General"`, `"Primary"`) |
+| `office_level` | character | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | character | Office name |
+| `district` | character | District identifier; `NA` when not applicable |
 | `county` | character | County name |
 | `precinct` | character | Precinct name or identifier |
+| `candidate_id` | integer | Internal ElectionStats candidate identifier |
 | `candidate` | character | Candidate name |
+| `party` | character | Party name |
 | `votes` | integer | Vote total for this precinct |
+| `vote_pct` | numeric | Percentage of votes within the contest for this precinct |
 | `precinct_winner` | logical | `TRUE` for the top vote-getter within each precinct |
+| `url` | character | URL for the candidate detail page on ElectionStats |
 
 ---
 

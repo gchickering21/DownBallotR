@@ -58,9 +58,22 @@ from lxml import html as lhtml
 from .models import CtElectionInfo
 
 from office_level_utils import classify_office_level as classify_election_level
+from column_schemas import CT_STATE_COLS, CT_TOWN_COLS
+from text_utils import normalize_party
 
 
 _CT_DATE_FMTS = ("%m/%d/%Y", "%B %d, %Y", "%B %Y", "%Y")
+
+
+def _parse_ct_election_type(election_name: str) -> "str | None":
+    """Extract the election type from a CT election name.
+
+    "November 8, 2022 -- General Election" → "General Election"
+    Returns None if the ' -- ' separator is absent.
+    """
+    if " -- " in election_name:
+        return election_name.split(" -- ", 1)[1].strip() or None
+    return None
 
 
 def _parse_ct_election_date(election_name: str) -> "date | None":
@@ -83,38 +96,16 @@ def _parse_ct_election_date(election_name: str) -> "date | None":
 
 
 # ── Output column definitions ─────────────────────────────────────────────────
+# Partial schemas (no "state") used for intermediate DataFrame construction.
+# The pipeline adds "state" and reindexes to the full CT_STATE_COLS/CT_TOWN_COLS
+# from column_schemas via finalize_df().
 
-_STATE_COLS = [
-    "election_name",
-    "election_year",
-    "election_date",
-    "office_level",
-    "office",
-    "district",
-    "candidate",
-    "party",
-    "votes",
-    "vote_pct",
-    "winner",
-]
+_STATE_COLS = [c for c in CT_STATE_COLS if c != "state"]
 
-_TOWN_COLS = [
-    "election_name",
-    "election_year",
-    "election_date",
-    "district",
-    "town",
-    "office_level",
-    "office",
-    "candidate",
-    "party",
-    "votes",
-    "vote_pct",
-    "town_winner",
-]
+_TOWN_COLS = [c for c in CT_TOWN_COLS if c != "state"]
 
 # Columns that define a unique contest at the state level.
-_CONTEST_STATE_COLS = ["election_name", "office", "district"]
+_CONTEST_STATE_COLS = ["election_name", "office", "district", "town"]
 # Columns that define a unique contest at the town level.
 _CONTEST_TOWN_COLS = ["election_name", "district", "town", "office"]
 
@@ -155,10 +146,6 @@ def _is_hidden(el) -> bool:
             return True
     return False
 
-
-def _clean_party(img_title: str) -> str:
-    """Strip trailing ' Party' from img title attributes (e.g. 'Democratic Party' → 'Democratic')."""
-    return re.sub(r"\s+Party\s*$", "", img_title, flags=re.IGNORECASE).strip()
 
 
 def _add_winner(
@@ -252,7 +239,7 @@ def _extract_races(doc) -> list[tuple[str, list[dict]]]:
 
                 # Party from img title in first td.
                 party_imgs = tds[0].xpath('.//img/@title')
-                party = _clean_party(party_imgs[0]) if party_imgs else ""
+                party = normalize_party(party_imgs[0]) if party_imgs else ""
 
                 # Candidate name from span.ng-binding in first td.
                 name_spans = tds[0].xpath('.//span[@class="ng-binding"]/text()')
@@ -317,6 +304,7 @@ def parse_statewide_results(
         return pd.DataFrame(columns=_STATE_COLS)
 
     election_date_str = _parse_ct_election_date(election.name)
+    election_type_str = _parse_ct_election_type(election.name)
     rows: list[dict] = []
 
     for race_name, cr in race_rows:
@@ -324,9 +312,11 @@ def parse_statewide_results(
             "election_name": election.name,
             "election_year": election.year,
             "election_date": election_date_str,
+            "election_type": election_type_str,
             "office_level":  classify_election_level(race_name),
             "office":        race_name,
             "district":      cr["district"] or None,
+            "town":          None,
             "candidate":     cr["candidate"],
             "party":         cr["party"],
             "votes":         _parse_votes(cr["votes_raw"]),
@@ -374,6 +364,7 @@ def parse_town_results(
         return pd.DataFrame(columns=_TOWN_COLS)
 
     election_date_str = _parse_ct_election_date(election.name)
+    election_type_str = _parse_ct_election_type(election.name)
     rows: list[dict] = []
 
     for race_name, cr in race_rows:
@@ -381,6 +372,7 @@ def parse_town_results(
             "election_name": election.name,
             "election_year": election.year,
             "election_date": election_date_str,
+            "election_type": election_type_str,
             "district":      county_name,
             "town":          town_name,
             "office_level":  classify_election_level(race_name),

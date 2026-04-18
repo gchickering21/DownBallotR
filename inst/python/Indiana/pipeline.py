@@ -48,6 +48,7 @@ from .parser import (
     parse_county_results,
 )
 from df_utils import concat_or_empty
+from column_schemas import IN_STATE_COLS, IN_COUNTY_COLS, finalize_df
 
 
 class InElectionPipeline:
@@ -142,10 +143,13 @@ class InElectionPipeline:
             lo = year_from or "–"
             hi = year_to or "–"
             print(f"[IN] No General Elections found for range {lo}–{hi}.")
-            empty = pd.DataFrame()
-            return {"state": empty, "county": empty} if self.level == "all" else empty
+            if self.level == "all":
+                return {"state": pd.DataFrame(columns=IN_STATE_COLS), "county": pd.DataFrame(columns=IN_COUNTY_COLS)}
+            if self.level == "state":
+                return pd.DataFrame(columns=IN_STATE_COLS)
+            return pd.DataFrame(columns=IN_COUNTY_COLS)
 
-        print(f"[IN] Scraping {len(elections)} election(s)...")
+        print(f"[IN] Scraping {len(elections)} election row(s)...")
         all_state:  list[pd.DataFrame] = []
         all_county: list[pd.DataFrame] = []
         failed = 0
@@ -175,12 +179,8 @@ class InElectionPipeline:
                     f"See the error messages printed above for details."
                 )
 
-        state_df  = concat_or_empty(all_state)
-        county_df = concat_or_empty(all_county)
-
-        for _df in [state_df, county_df]:
-            if not _df.empty:
-                _df.insert(0, "state", "IN")
+        state_df  = finalize_df(concat_or_empty(all_state),  IN_STATE_COLS,  state="IN")
+        county_df = finalize_df(concat_or_empty(all_county), IN_COUNTY_COLS, state="IN")
 
         print(
             f"[IN] Done. {len(state_df):,} total state rows, {len(county_df):,} total county rows."

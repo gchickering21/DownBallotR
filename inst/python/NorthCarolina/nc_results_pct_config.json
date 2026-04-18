@@ -22,21 +22,21 @@
     "join_cols": [
       "county","election_date","election_type", "precinct","contest_group_id","contest_type","contest_name",
       "choice","choice_party","vote_for",
-      "election_day","early_voting","absentee_by_mail","absentee_or_early","provisional","total_votes"
+      "election_day","early_voting","absentee_by_mail","provisional","total_votes"
     ],
     "numeric_cols": [
-      "vote_for","election_day","early_voting","absentee_by_mail","absentee_or_early","provisional","total_votes"
+      "vote_for","election_day","early_voting","absentee_by_mail","provisional","total_votes"
     ],
     "string_cols": [
       "county","precinct","contest_group_id","contest_type","contest_name","choice","choice_party"
     ],
     "county_cols":[
       "state","election_year","county","election_date","full_office_name","office","jurisdiction","office_level","district","candidate","party",
-      "election_day","early_voting","absentee_by_mail","absentee_or_early","provisional","votes","vote_pct","county_winner"
+      "election_day","early_voting","absentee_by_mail","provisional","votes","vote_pct","county_winner"
     ],
     "state_cols":[
       "state","election_year","election_date","full_office_name","office","jurisdiction","office_level","district","candidate","party",
-      "election_day","early_voting","absentee_by_mail","absentee_or_early","provisional","votes","vote_pct","winner"
+      "election_day","early_voting","absentee_by_mail","provisional","votes","vote_pct","winner"
     ]
   },
   "col_map": {

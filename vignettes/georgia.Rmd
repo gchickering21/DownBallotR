@@ -55,12 +55,12 @@ res <- scrape_elections(state = "GA", year_from = 2024, year_to = 2024)
 # Statewide candidate totals
 res$state %>%
   filter(office == "President of the United States") %>%
-  select(election_name, candidate, party, votes, pct, is_incumbent)
+  select(election_name, candidate, party, votes, vote_pct)
 
 # County-level breakdown
 res$county %>%
   filter(office == "President of the United States") %>%
-  select(county, candidate, party, votes, pct) %>%
+  select(county, candidate, party, votes, vote_pct) %>%
   arrange(county, desc(votes))
 ```
 
@@ -75,7 +75,7 @@ state_df <- scrape_elections(
 )
 
 state_df %>%
-  select(election_name, office, candidate, party, votes, pct, is_incumbent)
+  select(election_name, office, candidate, party, votes, vote_pct)
 ```
 
 ### With vote-method breakdown
@@ -136,7 +136,7 @@ res <- scrape_elections(state = "GA", year_from = 2022, year_to = 2022)
 
 res$county %>%
   filter(county == "Fulton") %>%
-  select(election_name, office, candidate, party, votes, pct) %>%
+  select(election_name, office, candidate, party, votes, vote_pct) %>%
   arrange(office, desc(votes))
 ```
 
@@ -148,28 +148,40 @@ res$county %>%
 
 | Column | Description |
 |---|---|
+| `state` | State abbreviation (`"GA"`) |
 | `election_name` | Human-readable election name (e.g. `"November General Election"`) |
+| `election_type` | Election type (e.g. `"General"`, `"Primary"`) |
 | `election_year` | Calendar year of the election |
-| `election_slug` | URL slug (e.g. `"2024NovGen"`) |
 | `election_date` | Date string from the page header |
-| `result_status` | Reporting status (e.g. `"OFFICIAL RESULTS"`) |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | Office name |
-| `localities_reporting` | `"X/Y"` localities reporting string |
-| `candidate` | Candidate name (cleaned — `(I)` and party suffix stripped) |
+| `district` | District identifier; `NA` when not applicable |
+| `candidate` | Candidate name |
 | `party` | Party abbreviation |
-| `is_incumbent` | `TRUE` if `(I)` appears in raw candidate name |
-| `is_winner` | Always `NA` — winner marker absent from GA SOS HTML |
 | `votes` | Vote total |
-| `pct` | Percentage of votes |
-| `url` | URL of the election page |
+| `vote_pct` | Percentage of votes within the contest |
+| `winner` | `TRUE` if the candidate won the statewide contest |
+| `url` | URL of the election results page scraped |
 
 ### `$county` (when `level = "all"` or `"county"`)
 
-Same columns as `$state`, plus:
-
 | Column | Description |
 |---|---|
+| `state` | State abbreviation (`"GA"`) |
+| `election_name` | Human-readable election name |
+| `election_type` | Election type (e.g. `"General"`, `"Primary"`) |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date string from the page header |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `district` | District identifier; `NA` when not applicable |
 | `county` | County name |
+| `candidate` | Candidate name |
+| `party` | Party abbreviation |
+| `votes` | County-level vote total |
+| `vote_pct` | Percentage of votes within the contest for this county |
+| `county_winner` | `TRUE` if the candidate won within this county |
+| `url` | URL of the election results page scraped |
 
 ### `$vote_method_state` / `$vote_method_county` (when `include_vote_methods = TRUE`)
 

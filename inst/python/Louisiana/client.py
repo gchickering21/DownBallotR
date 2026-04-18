@@ -120,7 +120,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         """
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
-        self._select_election(election_option_value)
+        if not self._select_election(election_option_value):
+            return None
         if not self._wait_for_results():
             return None
         assert self.page is not None
@@ -143,7 +144,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         """
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
-        self._select_election(election_option_value)
+        if not self._select_election(election_option_value):
+            return ""
         if not self._wait_for_results():
             return ""
         self._click_tab(tab_label)
@@ -168,7 +170,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         """
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
-        self._select_election(election_option_value)
+        if not self._select_election(election_option_value):
+            return None
         if not self._wait_for_results():
             return None  # site has no results for this election
         self._click_tab(_PARISH_TAB_LABEL)
@@ -199,7 +202,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         """
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
-        self._select_election(election_option_value)
+        if not self._select_election(election_option_value):
+            return ""
         self._wait_for_results()
         self._click_tab(_PARISH_TAB_LABEL)
         self._wait_for_parish_dropdown()
@@ -232,7 +236,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         """
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
-        self._select_election(election_option_value)
+        if not self._select_election(election_option_value):
+            return []
         if not self._wait_for_results():
             return []
 
@@ -268,7 +273,8 @@ class LaPlaywrightClient(BasePlaywrightClient):
         """
         self._navigate(LA_BASE_URL)
         self._wait_for_election_options()
-        self._select_election(election_option_value)
+        if not self._select_election(election_option_value):
+            return []
         if not self._wait_for_results():
             return []
         self._click_tab(_PARISH_TAB_LABEL)
@@ -304,15 +310,51 @@ class LaPlaywrightClient(BasePlaywrightClient):
         if self.sleep_s:
             time.sleep(self.sleep_s)
 
-    def _select_election(self, option_value: str) -> None:
-        """Select an election from the main dropdown by option value."""
+    def _wait_for_specific_option(
+        self, option_value: str, timeout_ms: int = 20_000
+    ) -> bool:
+        """Wait until a specific option value exists in the election dropdown.
+
+        Returns True when found, False on timeout.  Calling this before
+        ``select_option`` avoids a 30-second Playwright timeout when the
+        option is simply not yet rendered (AngularJS loads options
+        asynchronously) or genuinely absent (future / no-results election).
+        """
         assert self.page is not None
+        try:
+            self.page.wait_for_function(
+                "([sel, val]) => { "
+                "  const s = document.querySelector(sel); "
+                "  if (!s) return false; "
+                "  return Array.from(s.options).some(o => o.value === val); "
+                "}",
+                arg=[_ELECTION_SELECT_SEL, option_value],
+                timeout=timeout_ms,
+            )
+            return True
+        except PlaywrightTimeoutError:
+            return False
+
+    def _select_election(self, option_value: str) -> bool:
+        """Select an election from the main dropdown by option value.
+
+        Returns True on success, False if the option is not found in the
+        dropdown within the wait timeout (election may not have results yet).
+        """
+        assert self.page is not None
+        if not self._wait_for_specific_option(option_value):
+            print(
+                f"[LA] NOTE: Option {option_value!r} not found in election dropdown "
+                "— election may not have results published yet."
+            )
+            return False
         selects = self.page.query_selector_all(_ELECTION_SELECT_SEL)
         if not selects:
             print("[LA] WARNING: No <select> found — cannot select election.")
-            return
+            return False
         selects[0].select_option(value=option_value)
         time.sleep(self.sleep_s)
+        return True
 
     def _wait_for_results(self) -> bool:
         """Wait for result content to appear after selecting an election.

@@ -8,7 +8,7 @@ Questions or issues? Email grahamchickering@gmail.com or file a GitHub issue at 
 
 ## What is DownBallotR?
 
-`DownBallotR` is an R package that downloads and standardizes election results from 15 US states. It pulls data live from official state sources and returns clean data frames — no manual downloading required. All data retrieval goes through a single function: `scrape_elections()`. This is
+`DownBallotR` is an R package that downloads and standardizes election results from 15 US states. It pulls data live from official state sources and returns clean data frames — no manual downloading required. All data retrieval goes through a single function: `scrape_elections()`. **Currently 15 states are available to pull data from but over future versions we plan to continue to add more to continue to expand the usefullness of this package.**
 
 ---
 
@@ -240,4 +240,4 @@ Please send feedback to Graham Chickering, grahamchickering@gmail.com, or Chris 
 
 You're also welcome to file issues directly at https://github.com/gchickering21/DownBallotR/issues
 
-**Thank you — your feedback is genuinely valuable at this stage.**
+**Thank you!!! — your feedback is extremely valuable and vital at this stage.**

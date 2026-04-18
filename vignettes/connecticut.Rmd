@@ -60,7 +60,7 @@ res$state %>%
 # Town-level results
 res$town %>%
   filter(office == "President of the United States") %>%
-  select(town, county, candidate, party, votes)
+  select(district, town, candidate, party, votes)
 ```
 
 ### Statewide totals only (faster — skips town scraping)
@@ -91,9 +91,9 @@ town_df <- scrape_elections(
 # Summarise votes by county for a specific race
 town_df %>%
   filter(office == "United States Senator") %>%
-  group_by(county, candidate, party) %>%
+  group_by(district, town, candidate, party) %>%
   summarise(votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
-  arrange(county, desc(votes))
+  arrange(district, town, desc(votes))
 ```
 
 ### Multi-year scrape with more parallel workers
@@ -127,32 +127,38 @@ res$state %>%
 
 | Column | Description |
 |---|---|
+| `state` | State abbreviation (`"CT"`) |
 | `election_name` | Human-readable election name (e.g. `"11/05/2024 -- November General Election"`) |
 | `election_year` | Calendar year |
 | `election_date` | ISO date string when parseable; `NA` otherwise |
-| `election_level` | `"Federal"`, `"State"`, or `"Local"` |
-| `office` | Office name (includes district when present) |
+| `election_type` | Election type extracted from `election_name` (e.g. `"General Election"`, `"August Primary"`) |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `district` | County name for Local races; `NA` for statewide (Federal/State) races |
+| `town` | Town name for Local races; `NA` for statewide (Federal/State) races |
 | `candidate` | Candidate name |
 | `party` | Party name (e.g. `"Democratic"`, `"Republican"`) |
 | `votes` | Total votes (integer) |
-| `vote_pct` | Percentage of votes in contest (recomputed from town totals for State/Local) |
+| `vote_pct` | Percentage of votes in contest |
 | `winner` | `TRUE` if the candidate won the statewide contest |
 
 ### `$town` (when `level = "all"` or `"town"`)
 
 | Column | Description |
 |---|---|
+| `state` | State abbreviation (`"CT"`) |
 | `election_name` | Human-readable election name |
 | `election_year` | Calendar year |
 | `election_date` | Date of the election |
-| `county` | County name |
-| `town` | Town name |
+| `election_type` | Election type extracted from `election_name` (e.g. `"General Election"`, `"August Primary"`) |
 | `office_level` | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | Office name |
+| `district` | County name |
+| `town` | Town name |
 | `candidate` | Candidate name |
 | `party` | Party name |
 | `votes` | Votes in this town (integer) |
-| `vote_pct` | Percentage as reported by CTEMS for this town |
+| `vote_pct` | Percentage of votes within this town |
 | `town_winner` | `TRUE` if the candidate won within this town |
 
 ---

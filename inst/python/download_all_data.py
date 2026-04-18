@@ -504,7 +504,7 @@ def download_nc(
     """NC State Board of Elections, all three aggregation levels in a single pipeline run."""
     from datetime import date
 
-    base  = output_dir / "northcarolina_results"
+    base  = output_dir / "northcarolina"
     stem  = f"nc_{nc_year_from}_{nc_year_to}"
     label = f"NC State Board of Elections  {nc_year_from}–{nc_year_to}  (precinct + county + state)"
     paths = {

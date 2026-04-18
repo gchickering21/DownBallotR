@@ -49,11 +49,11 @@ res <- scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
 
 # Statewide candidate totals
 res$state %>%
-  select(election_name, office, candidate, party, votes, pct)
+  select(election_name, office, candidate, party, votes, vote_pct)
 
 # County-level breakdown
 res$county %>%
-  select(county, office, candidate, party, votes, pct) %>%
+  select(county, office, candidate, party, votes, vote_pct) %>%
   arrange(county, office, desc(votes))
 ```
 
@@ -68,7 +68,7 @@ state_df <- scrape_elections(
 )
 
 state_df %>%
-  select(election_name, office, candidate, party, votes, pct)
+  select(election_name, office, candidate, party, votes, vote_pct)
 ```
 
 ### All available years
@@ -89,7 +89,7 @@ res <- scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
 
 res$county %>%
   filter(county == "Salt Lake") %>%
-  select(election_name, office, candidate, party, votes, pct) %>%
+  select(election_name, office, candidate, party, votes, vote_pct) %>%
   arrange(office, desc(votes))
 ```
 
@@ -101,28 +101,40 @@ res$county %>%
 
 | Column | Description |
 |---|---|
+| `state` | State abbreviation (`"UT"`) |
 | `election_name` | Human-readable election name |
+| `election_type` | Election type (e.g. `"General"`, `"Primary"`) |
 | `election_year` | Calendar year of the election |
-| `election_slug` | URL slug identifying the election |
 | `election_date` | Date string from the page header |
-| `result_status` | Reporting status (e.g. `"OFFICIAL RESULTS"`) |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
 | `office` | Office name |
-| `localities_reporting` | `"X/Y"` localities reporting string |
-| `candidate` | Candidate name (cleaned — `(I)` and party suffix stripped) |
+| `district` | District identifier; `NA` when not applicable |
+| `candidate` | Candidate name |
 | `party` | Party abbreviation |
-| `is_incumbent` | `TRUE` if `(I)` appears in raw candidate name |
-| `is_winner` | Always `NA` — winner marker absent from the site HTML |
 | `votes` | Vote total |
-| `pct` | Percentage of votes |
-| `url` | URL of the election page |
+| `vote_pct` | Percentage of votes within the contest |
+| `winner` | `TRUE` if the candidate won the statewide contest |
+| `url` | URL of the election results page scraped |
 
 ### `$county` (when `level = "all"` or `"county"`)
 
-Same columns as `$state`, plus:
-
 | Column | Description |
 |---|---|
+| `state` | State abbreviation (`"UT"`) |
+| `election_name` | Human-readable election name |
+| `election_type` | Election type (e.g. `"General"`, `"Primary"`) |
+| `election_year` | Calendar year of the election |
+| `election_date` | Date string from the page header |
+| `office_level` | `"Federal"`, `"State"`, or `"Local"` |
+| `office` | Office name |
+| `district` | District identifier; `NA` when not applicable |
 | `county` | County name |
+| `candidate` | Candidate name |
+| `party` | Party abbreviation |
+| `votes` | County-level vote total |
+| `vote_pct` | Percentage of votes within the contest for this county |
+| `county_winner` | `TRUE` if the candidate won within this county |
+| `url` | URL of the election results page scraped |
 
 ---
 

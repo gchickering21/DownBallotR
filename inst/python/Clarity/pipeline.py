@@ -36,6 +36,70 @@ from .models import ClarityElectionInfo
 from .parser import parse_state_results, parse_county_results, county_name_from_url
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
+from column_schemas import (
+    CLARITY_STATE_COLS, CLARITY_COUNTY_COLS,
+    CLARITY_VM_STATE_COLS, CLARITY_VM_COUNTY_COLS,
+    finalize_df, compute_vote_pct,
+)
+
+
+_CONTEST_ID = [
+    "election_name", "election_type", "election_year", "election_date",
+    "office", "district",
+]
+
+
+def _supplement_state_from_county(
+    state_df: pd.DataFrame,
+    county_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Append statewide aggregates for contests present in county_df but absent from state_df.
+
+    The state-level page only shows races the SOS chose to display there.
+    Local races that appear on county pages but not the state page would
+    otherwise be silently missing from state output.
+    """
+    if county_df.empty:
+        return state_df
+
+    present = [c for c in _CONTEST_ID if c in county_df.columns]
+
+    if state_df.empty:
+        missing_county = county_df
+    else:
+        state_keys = set(
+            map(tuple, state_df[present].drop_duplicates().values.tolist())
+        )
+        mask = ~county_df[present].apply(lambda r: tuple(r), axis=1).isin(state_keys)
+        missing_county = county_df[mask]
+
+    if missing_county.empty:
+        return state_df
+
+    group_cols = [
+        c for c in
+        ["election_name", "election_type", "election_year", "election_date",
+         "office_level", "office", "district", "candidate", "party"]
+        if c in missing_county.columns
+    ]
+    agg = missing_county.groupby(group_cols, as_index=False, dropna=False)["votes"].sum()
+
+    contest_cols = [c for c in _CONTEST_ID if c in agg.columns]
+    agg = compute_vote_pct(agg, contest_cols)
+    max_votes = agg.groupby(contest_cols, dropna=False)["votes"].transform("max")
+    agg["winner"] = agg["votes"] == max_votes
+
+    # Carry the election-level URL from the first county row for each contest.
+    if "url" in missing_county.columns:
+        url_map = (
+            missing_county
+            .groupby(contest_cols, dropna=False)["url"]
+            .first()
+            .reset_index()
+        )
+        agg = agg.merge(url_map, on=contest_cols, how="left")
+
+    return concat_or_empty([state_df, agg])
 
 
 class ClarityPipeline:
@@ -95,6 +159,26 @@ class ClarityPipeline:
             headless=self.headless,
             sleep_s=self.sleep_s,
         )
+
+    def _empty_result(self) -> "pd.DataFrame | dict":
+        """Return a correctly-schemed empty result for this pipeline's level."""
+        s = pd.DataFrame(columns=CLARITY_STATE_COLS)
+        c = pd.DataFrame(columns=CLARITY_COUNTY_COLS)
+        vms = pd.DataFrame(columns=CLARITY_VM_STATE_COLS)
+        vmc = pd.DataFrame(columns=CLARITY_VM_COUNTY_COLS)
+        if self.level == "state":
+            if self.include_vote_methods:
+                return {"state": s, "vote_method_state": vms}
+            return s
+        if self.level == "county":
+            if self.include_vote_methods:
+                return {"county": c, "vote_method_county": vmc}
+            return c
+        result = {"state": s, "county": c}
+        if self.include_vote_methods:
+            result["vote_method_state"]  = vms
+            result["vote_method_county"] = vmc
+        return result
 
     def _p(self, msg: str) -> None:
         """Print with the state log prefix."""
@@ -180,14 +264,7 @@ class ClarityPipeline:
                 "to save the rendered HTML and verify selector assumptions.",
                 stacklevel=2,
             )
-            empty = pd.DataFrame()
-            if self.level == "all":
-                result = {"state": empty, "county": empty}
-                if self.include_vote_methods:
-                    result["vote_method_state"] = empty
-                    result["vote_method_county"] = empty
-                return result
-            return empty
+            return self._empty_result()
 
         elections = self._filter(all_elections, start_date, end_date)
 
@@ -195,16 +272,9 @@ class ClarityPipeline:
             lo = start_date.isoformat() if start_date else "–"
             hi = end_date.isoformat()   if end_date   else "–"
             self._p(f"No elections found for range {lo} – {hi}.")
-            empty = pd.DataFrame()
-            if self.level == "all":
-                result = {"state": empty, "county": empty}
-                if self.include_vote_methods:
-                    result["vote_method_state"] = empty
-                    result["vote_method_county"] = empty
-                return result
-            return empty
+            return self._empty_result()
 
-        self._p(f"Scraping {len(elections)} election(s)...")
+        self._p(f"Scraping {len(elections)} election row(s)...")
         state_frames: list[pd.DataFrame] = []
         county_frames: list[pd.DataFrame] = []
         vm_state_frames: list[pd.DataFrame] = []
@@ -273,14 +343,18 @@ class ClarityPipeline:
                 f"returning {len(state_frames)} successful result(s)."
             )
 
-        state_df     = concat_or_empty(state_frames)
-        county_df    = concat_or_empty(county_frames)
-        vm_state_df  = concat_or_empty(vm_state_frames)
-        vm_county_df = concat_or_empty(vm_county_frames)
+        _state_raw  = _supplement_state_from_county(
+            concat_or_empty(state_frames),
+            concat_or_empty(county_frames),
+        )
+        _n_supplemented = len(_state_raw) - sum(len(f) for f in state_frames)
+        if _n_supplemented > 0:
+            self._p(f"  Supplemented state_df with {_n_supplemented:,} row(s) aggregated from county data.")
 
-        for _df in [state_df, county_df, vm_state_df, vm_county_df]:
-            if not _df.empty:
-                _df.insert(0, "state", self.state_abbrev)
+        state_df     = finalize_df(_state_raw,                          CLARITY_STATE_COLS,    state=self.state_abbrev)
+        county_df    = finalize_df(concat_or_empty(county_frames),      CLARITY_COUNTY_COLS,   state=self.state_abbrev)
+        vm_state_df  = finalize_df(concat_or_empty(vm_state_frames), CLARITY_VM_STATE_COLS, state=self.state_abbrev)
+        vm_county_df = finalize_df(concat_or_empty(vm_county_frames),CLARITY_VM_COUNTY_COLS,state=self.state_abbrev)
 
         self._p(
             f"Done. {len(state_df):,} total state rows, {len(county_df):,} total county rows."

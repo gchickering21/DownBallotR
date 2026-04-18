@@ -12,7 +12,7 @@ from .electionStats_client import StateHttpClient
 from .electionStats_models import ElectionSearchRow
 from .state_config import get_scraper_type
 from office_level_utils import lookup_office_level
-from text_utils import clean_text as _clean_ws, parse_int as _parse_int, parse_percentage as _parse_percentage
+from text_utils import clean_text as _clean_ws, parse_int as _parse_int, parse_percentage as _parse_percentage, normalize_party
 
 # Accept both VA/MA: election-id-#### and CO: contest-id-####
 _ROW_ID_RE = re.compile(r"^(?:election|contest)-id-(\d+)$")
@@ -57,8 +57,7 @@ def _is_write_in_party(party: str) -> bool:
 
 
 def _normalize_party(party: Optional[str], stage: str) -> str:
-    """
-    If party missing OR party is write-in marker, infer from stage when possible.
+    """If party missing OR party is write-in marker, infer from stage when possible.
     Returns a non-null string ("" if nothing available).
     """
     party_clean = (party or "").strip()
@@ -67,7 +66,7 @@ def _normalize_party(party: Optional[str], stage: str) -> str:
     if inferred and (not party_clean or _is_write_in_party(party_clean)):
         return inferred
 
-    return party_clean
+    return normalize_party(party_clean)
 
 
 # =============================
@@ -255,9 +254,9 @@ def _parse_search_row_colorado(tr) -> Optional[Tuple[int, int, str, str, str, ob
     return election_id, year, stage, office, district, candidates_cell
 
 
-def _parse_search_row_vama(tr) -> Optional[Tuple[int, int, str, str, str, object]]:
+def _parse_search_row_vtma(tr) -> Optional[Tuple[int, int, str, str, str, object]]:
     """
-    VA/MA row structure:
+    VT/MA row structure:
       td[0]=year, td[1]=office, td[2]=district, td[3]=stage, td[4]=candidates
     Returns:
       (election_id, year, stage, office, district, candidates_cell)
@@ -291,58 +290,110 @@ def _parse_search_row_vama(tr) -> Optional[Tuple[int, int, str, str, str, object
 
     return election_id, year, stage, office, district, candidates_cell
 
-
 def _parse_v2_results_text(results_text: str) -> List[Tuple[str, Optional[str], int, Optional[str], str]]:
     """
     Parse v2 results summary text into candidate records.
 
-    Example format:
-    "Rusty Streetman won the race (51%) against Susan Hill Smith."
-    "John McManus won the race (52%) against Ed Leese."
-
     Returns list of:
       (candidate_name, party, vote_count, vote_percentage, contest_outcome)
 
-    Note: v2 summary text doesn't provide vote counts, only percentages.
-    We'll mark vote_count as 0 as placeholder.
+    Notes
+    -----
+    - v2 summary text usually does not include vote counts, so vote_count is 0.
+    - This parser is intentionally conservative:
+      * it extracts clearly named winners/losers when possible
+      * it avoids inventing fake candidate names from phrases like
+        "2 other candidates" or "3 opponents"
     """
     results: List[Tuple[str, Optional[str], int, Optional[str], str]] = []
 
-    # Pattern: "Name1 won the race (XX%) against Name2"
-    # Or: "Name1 (XX%) and Name2 (YY%)"
-    # Extract all name-percentage pairs
+    if not results_text:
+        return results
 
-    # Try "won the race" pattern first
-    winner_pattern = r"([^(]+)\s+won the race\s+\((\d+)%\)\s+against\s+(.+)"
-    match = re.match(winner_pattern, results_text)
+    text = " ".join(results_text.split()).strip()
+    text = text.rstrip(".")
 
-    if match:
-        winner_name = match.group(1).strip()
-        winner_pct = match.group(2).strip() + "%"
-        loser_names = match.group(3).strip()
+    # ---------- helper ----------
+    def _clean_name(name: str) -> str:
+        name = name.strip().rstrip(".").strip()
+        name = re.sub(r"\s+", " ", name)
+        # remove trailing action phrases if they leaked in
+        name = re.sub(r"\b(won the race|ran)\b.*$", "", name, flags=re.IGNORECASE).strip()
+        return name
 
-        # Add winner
-        results.append((winner_name, None, 0, winner_pct, "Winner"))
+    # ---------- case 1: winner/runner with optional pct against a named opponent ----------
+    # Examples:
+    # "Kevin B. Wright won the race (51%) against Jonathan D. "Jon" Arnburg"
+    # "Tammy Brankley MulchiR ran (63%) against Tina Wyatt YoungerD"
+    m = re.match(
+        r'^(?P<winner>.+?)\s+(?:won the race|ran)\s+\((?P<pct>\d+)%\)\s+against\s+(?P<opp>.+)$',
+        text,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        winner = _clean_name(m.group("winner"))
+        pct = f'{m.group("pct")}%'
+        opp = m.group("opp").strip()
 
-        # Extract loser(s) - may have multiple "Name and Name2 and Name3"
-        # Clean up trailing punctuation
-        loser_names = loser_names.rstrip(".").strip()
+        if winner:
+            results.append((winner, None, 0, pct, "Winner"))
 
-        # Split by "and" or ","
-        for loser in re.split(r"\s+and\s+|,\s*", loser_names):
-            loser = loser.strip()
-            if loser:
-                results.append((loser, None, 0, None, "Loser"))
+        # Only add opponent if it is an actual named person, not "3 opponents"
+        if not re.fullmatch(r'\d+\s+opponents?', opp, flags=re.IGNORECASE):
+            opp = _clean_name(opp)
+            if opp:
+                results.append((opp, None, 0, None, "Loser"))
 
-    # If no match, try to extract any name-percentage pairs
-    else:
-        # Pattern: Name (XX%)
-        pct_pattern = r"([^(]+?)\s+\((\d+)%\)"
-        for match in re.finditer(pct_pattern, results_text):
-            name = match.group(1).strip()
-            pct = match.group(2).strip() + "%"
-            outcome = "Winner" if int(match.group(2)) > 50 else "Loser"
-            results.append((name, None, 0, pct, outcome))
+        return results
+
+    # ---------- case 2: unopposed winner with pct ----------
+    # Example:
+    # "William J. "Bill" Harris won the race (100%), unopposed"
+    m = re.match(
+        r'^(?P<winner>.+?)\s+(?:won the race|ran)\s+\((?P<pct>\d+)%\)\s*,?\s*unopposed$',
+        text,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        winner = _clean_name(m.group("winner"))
+        pct = f'{m.group("pct")}%'
+        if winner:
+            results.append((winner, None, 0, pct, "Winner"))
+        return results
+
+    # ---------- case 3: multi-winner summary ----------
+    # Examples:
+    # "Sara E. Bowles and 2 other candidates won the race against John W. Mills, Jr."
+    # "Andrea D. Fox and 5 other candidates won the race , unopposed"
+    # "Caleb J. Stought and 2 other candidates won the race against 3 opponents"
+    m = re.match(
+        r'^(?P<first>.+?)\s+and\s+\d+\s+other candidates?\s+won the race(?:\s+against\s+(?P<opp>.+)|\s*,?\s*unopposed)?$',
+        text,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        first = _clean_name(m.group("first"))
+        opp = (m.group("opp") or "").strip()
+
+        if first:
+            # We at least keep the first named winner
+            results.append((first, None, 0, None, "Winner"))
+
+        # Only include explicitly named opponent, not "3 opponents"
+        if opp and not re.fullmatch(r'\d+\s+opponents?', opp, flags=re.IGNORECASE):
+            opp = _clean_name(opp)
+            if opp:
+                results.append((opp, None, 0, None, "Loser"))
+
+        return results
+
+    # ---------- case 4: fallback for any clearly formed "Name (XX%)" ----------
+    # Conservative fallback: do not try to infer too much.
+    for m in re.finditer(r'(.+?)\s+\((\d+)%\)', text):
+        name = _clean_name(m.group(1))
+        pct = f'{m.group(2)}%'
+        if name:
+            results.append((name, None, 0, pct, "Winner" if int(m.group(2)) >= 50 else "Loser"))
 
     return results
 
@@ -410,30 +461,23 @@ def _choose_row_parser(state_key: str):
     if s in ("colorado", "idaho"):
         return _parse_search_row_colorado
 
-    # Default classic (VA/MA)
-    return _parse_search_row_vama
+    # Default classic (VT/MA)
+    return _parse_search_row_vtma
 
 
 # =============================
 # Main parser
 # =============================
-def parse_search_results(page_html: str, client, state_name: str, url:str) -> List[ElectionSearchRow]:
+def parse_search_results(page_html: str, client, state_name: str, url: str) -> List[ElectionSearchRow]:
     """
     Parse search results HTML for both classic and v2 states.
-
-    Classic states (MA/CO/NH/ID/VT): table#search_results_table with rows having ID attributes
-    V2 states (SC/NM/NY/VA): table#contestCollectionTable without row IDs
     """
     doc = html.fromstring(page_html)
-
-    # Determine scraper type to use appropriate XPath
     scraper_type = get_scraper_type(state_name)
 
     if scraper_type == "v2":
-        # V2: contestCollectionTable tbody rows
         trs = doc.xpath("//table[@id='contestCollectionTable']//tbody/tr")
     else:
-        # Classic: search_results_table with ID attributes on rows
         trs = doc.xpath(
             "//table[@id='search_results_table']//tr["
             "starts-with(@id,'election-id-') or starts-with(@id,'contest-id-')"
@@ -441,24 +485,19 @@ def parse_search_results(page_html: str, client, state_name: str, url:str) -> Li
         )
 
     parse_row = _choose_row_parser(state_name)
-
     out: List[ElectionSearchRow] = []
 
-    for tr in trs:
+    for row_num, tr in enumerate(trs, start=1):
         parsed = parse_row(tr)
+
         if parsed is None:
             continue
 
-        # Classic parsers return: (election_id, year, stage, office, district, candidates_cell)
-        # V2 parser returns: (election_id, year, stage, office, district, results_text)
-
         if scraper_type == "v2":
             election_id, year, stage, office, district, results_text = parsed
-            # Parse candidates from text summary
             candidate_rows = _parse_v2_results_text(results_text)
         else:
             election_id, year, stage, office, district, candidates_cell = parsed
-            # Extract candidates from nested table
             candidate_rows = _extract_candidates_table(candidates_cell)
 
         if not candidate_rows:
@@ -471,26 +510,31 @@ def parse_search_results(page_html: str, client, state_name: str, url:str) -> Li
             vote_percentage,
             contest_outcome,
         ) in enumerate(candidate_rows, start=1):
-            out.append(
-                ElectionSearchRow(
-                    state=state_name or client.state,  # keep client as source of truth for state label
+            office_level = lookup_office_level(office, state_name)
+            normalized_party = _normalize_party(party, stage)
+            winner_flag = (contest_outcome == "Winner")
+
+            try:
+                row = ElectionSearchRow(
+                    state=state_name or client.state,
                     election_id=election_id,
                     election_year=year,
                     office=office,
-                    office_level=lookup_office_level(office, state_name),
+                    office_level=office_level,
                     district=district,
                     election_type=stage,
                     candidate_id=candidate_id,
                     candidate=candidate_name,
-                    party=_normalize_party(party, stage),
+                    party=normalized_party,
                     votes=total_vote_count,
                     vote_pct=(vote_percentage or "").strip(),
-                    winner=(contest_outcome == "Winner"),
+                    winner=winner_flag,
                 )
-            )
+                out.append(row)
+            except Exception as e:
+                print(f"[row {row_num} candidate {candidate_id}] ERROR creating/appending row: {e}")
 
     return out
-
 
 # =============================
 # Fetch helpers

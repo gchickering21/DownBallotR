@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-import pandas as pd
+from column_schemas import compute_vote_pct, drop_writeins
 
 def aggregate_county_to_state(df_county: pd.DataFrame) -> pd.DataFrame:
     # df_county is already county-level (with renamed candidate/party/votes columns);
@@ -22,7 +22,6 @@ def aggregate_county_to_state(df_county: pd.DataFrame) -> pd.DataFrame:
         "election_day",
         "early_voting",
         "absentee_by_mail",
-        "absentee_or_early",
         "provisional",
         "votes",
     ]
@@ -35,7 +34,7 @@ def aggregate_county_to_state(df_county: pd.DataFrame) -> pd.DataFrame:
             f"Columns={list(df_county.columns)}"
         )
 
-    work = df_county.copy()
+    work = drop_writeins(df_county.copy())
 
     # Ensure vote columns are numeric integers
     work[vote_cols] = (
@@ -56,8 +55,7 @@ def aggregate_county_to_state(df_county: pd.DataFrame) -> pd.DataFrame:
     contest_cols = ["state", "election_date", "contest_name", "jurisdiction", "office_level", "district"]
 
     # 2) Vote share within contest
-    contest_total = out.groupby(contest_cols, dropna=False)["votes"].transform("sum")
-    out["vote_pct"] = ((out["votes"] / contest_total) * 100).round(2)
+    out = compute_vote_pct(out, contest_cols)
 
     # 3) Boolean winner: True for highest-voted candidate(s) per contest (ties share True)
     max_votes = out.groupby(contest_cols, dropna=False)["votes"].transform("max")
@@ -86,7 +84,6 @@ def aggregate_to_county_level(df: pd.DataFrame) -> pd.DataFrame:
         "election_day",
         "early_voting",
         "absentee_by_mail",
-        "absentee_or_early",
         "provisional",
         "total_votes",
     ]
@@ -99,7 +96,7 @@ def aggregate_to_county_level(df: pd.DataFrame) -> pd.DataFrame:
             f"Columns={list(df.columns)}"
         )
 
-    work = df.copy()
+    work = drop_writeins(df.copy(), candidate_col="choice")
 
     # Ensure vote columns are numeric integers
     work[vote_cols] = (
@@ -123,8 +120,7 @@ def aggregate_to_county_level(df: pd.DataFrame) -> pd.DataFrame:
     })
 
     contest_cols = ["state", "election_date", "county", "contest_name", "jurisdiction", "office_level", "district"]
-    contest_total = out.groupby(contest_cols, dropna=False)["votes"].transform("sum")
-    out["vote_pct"] = ((out["votes"] / contest_total) * 100).round(2)
+    out = compute_vote_pct(out, contest_cols)
     max_votes = out.groupby(contest_cols, dropna=False)["votes"].transform("max")
     out["county_winner"] = out["votes"].eq(max_votes)
 

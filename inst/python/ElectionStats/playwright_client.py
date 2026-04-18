@@ -159,6 +159,34 @@ class PlaywrightClient(BasePlaywrightClient):
             if no_results.count() > 0:
                 return self.page.content()
 
+            if self.sleep_s:
+                time.sleep(self.sleep_s)
+
+            # Paginate through all pages by clicking "Go to next page" until disabled,
+            # collecting tbody rows from each page into one synthetic HTML document.
+            from lxml import html as _lhtml
+            all_row_htmls: list[str] = []
+
+            while True:
+                doc = _lhtml.fromstring(self.page.content())
+                for tr in doc.xpath("//table[@id='contestCollectionTable']//tbody/tr"):
+                    all_row_htmls.append(_lhtml.tostring(tr, encoding="unicode"))
+
+                next_btn = self.page.locator(
+                    'button[aria-label="Go to next page"]:not([disabled])'
+                )
+                if next_btn.count() == 0:
+                    break
+
+                next_btn.first.click()
+                time.sleep(self.sleep_s or 1.5)
+
+            return (
+                '<table id="contestCollectionTable"><tbody>'
+                + "".join(all_row_htmls)
+                + "</tbody></table>"
+            )
+
         if self.sleep_s:
             time.sleep(self.sleep_s)
 
@@ -199,6 +227,48 @@ class PlaywrightClient(BasePlaywrightClient):
             raise RuntimeError("Browser not initialized. Use context manager (with statement).")
         response = self.context.request.get(url)
         return response.text()
+
+    def fetch_contest_csv_and_type(self, election_id: int) -> "tuple[str, str]":
+        """Navigate to a contest page, extract election_type, and fetch the CSV.
+
+        Navigating the page establishes Cloudflare clearance; the CSV is then
+        fetched via ``page.evaluate`` so it inherits the browser session's cookies.
+        This is required for NY where ``context.request`` does not share CF tokens.
+
+        Parameters
+        ----------
+        election_id : int
+            Contest ID (e.g. 5859).
+
+        Returns
+        -------
+        (csv_text, election_type)
+            ``csv_text``     — raw CSV string from the download endpoint.
+            ``election_type`` — stage parsed from the page title, e.g. ``"General"``.
+                               Empty string if the title format is unrecognised.
+        """
+        if self.page is None:
+            raise RuntimeError("Browser not initialized. Use context manager (with statement).")
+
+        self._navigate(f"{self.base_url}/contest/{election_id}")
+        if self.sleep_s:
+            time.sleep(self.sleep_s)
+
+        # Title format: "2025 Nov 4 • General • Office Name • District | State Name"
+        # Strip the "| ..." suffix before splitting on bullets.
+        title = self.page.title().split("|")[0].strip()
+        parts = [p.strip() for p in title.split("•")]
+        election_type = parts[1] if len(parts) > 1 else ""
+        office        = parts[2] if len(parts) > 2 else ""
+        district      = parts[3] if len(parts) > 3 else ""
+
+        csv_text = self.page.evaluate(
+            f"async () => {{"
+            f"  const r = await fetch('/api/download_contest/{election_id}_table.csv?split_party=false');"
+            f"  return await r.text();"
+            f"}}"
+        )
+        return csv_text, {"election_type": election_type, "office": office, "district": district}
 
     def get_detail_page(self, election_id: int) -> str:
         """Navigate to election detail page and return HTML after JS loads.

@@ -14,6 +14,7 @@ from .normalize import normalize_northcarolina_results_cols, get_config, extract
 from .aggregate import aggregate_to_county_level, aggregate_county_to_state
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
+from column_schemas import compute_vote_pct, drop_writeins
 
 
 def _get_attr(obj, name: str):
@@ -88,7 +89,7 @@ class NcElectionPipeline:
         state_frames : list[pd.DataFrame] = []
         failed: list[tuple[object, Exception]] = []
 
-        print(f"[NC] Scraping {len(supported)} election(s)...")
+        print(f"[NC] Scraping {len(supported)} election row(s)...")
         for e in supported:
             election_date = _get_attr(e, "election_date")
             print(f"[NC]   {election_date}: downloading ZIP...", flush=True)
@@ -178,10 +179,11 @@ class NcElectionPipeline:
         })
         norm["office"] = norm["full_office_name"].apply(extract_office_short)
 
+        norm = drop_writeins(norm)
+
         # Compute precinct-level vote_pct and precinct_winner
         contest_cols = ["state", "election_date", "county", "precinct", "full_office_name"]
-        contest_total = norm.groupby(contest_cols, dropna=False)["votes"].transform("sum")
-        norm["vote_pct"] = ((norm["votes"] / contest_total) * 100).round(2)
+        norm = compute_vote_pct(norm, contest_cols)
         max_votes = norm.groupby(contest_cols, dropna=False)["votes"].transform("max")
         norm["precinct_winner"] = norm["votes"].eq(max_votes)
 

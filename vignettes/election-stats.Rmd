@@ -195,20 +195,26 @@ res_seq <- scrape_elections(
 
 ### `level = "state"` (candidate-level)
 
-- `state`, `election_year`, `election_id`, `candidate_id`
-- `office`, `district`, `election_type` (General, Primary, etc.)
-- `candidate`, `party`
+- `state`, `election_year`, `election_id`, `election_type`
+- `office_level`, `office`, `district`
+- `candidate_id`, `candidate`, `party`
 - `votes`, `vote_pct`, `winner`
 - `url`
 
 ### `level = "county"`
 
-- `state`, `election_year`, `election_id`, `candidate_id`
-- `county_or_city`, `candidate`, `votes`
-- `county_winner` — `TRUE` for the top vote-getter within each county/city + election
+- `state`, `election_year`, `election_id`, `election_type`
+- `office_level`, `office`, `district`, `county_or_city`
+- `candidate_id`, `candidate`, `party`
+- `votes`, `vote_pct`
+- `county_winner` — `TRUE` for the top vote-getter within each county/city
+- `url`
 
 ### `level = "precinct"` (CO, MA, ID, SC, NM, VA)
 
-- `state`, `election_id`, `candidate_id`
-- `county`, `precinct`, `candidate`, `votes`
-- `precinct_winner` — `TRUE` for the top vote-getter within each precinct + election
+- `state`, `election_year`, `election_id`, `election_type`
+- `office_level`, `office`, `district`, `county`, `precinct`
+- `candidate_id`, `candidate`, `party`
+- `votes`, `vote_pct`
+- `precinct_winner` — `TRUE` for the top vote-getter within each precinct
+- `url`

@@ -34,9 +34,10 @@ import pandas as pd
 from .client import LaPlaywrightClient, _KNOWN_STATE_TABS, _PARISH_TAB_LABEL
 from .discovery import parse_election_options
 from .models import LaElectionInfo
-from .parser import parse_tab_results, parse_parish_results, _STATE_COLS, _PARISH_COLS
+from .parser import parse_tab_results, parse_parish_results
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
+from column_schemas import LA_STATE_COLS, LA_PARISH_COLS, finalize_df, compute_vote_pct
 
 
 class LaElectionPipeline:
@@ -143,7 +144,7 @@ class LaElectionPipeline:
             tabs_to_scrape = sorted(tabs_to_scrape_unsorted, key=_tab_priority)
 
             if not tabs_to_scrape:
-                return pd.DataFrame(columns=_STATE_COLS)
+                return pd.DataFrame(columns=LA_STATE_COLS)
 
             # Capture all tabs in a single browser session.
             tab_htmls = client.get_all_state_tabs_html(
@@ -197,7 +198,7 @@ class LaElectionPipeline:
             return None  # site has no results for this election
         if not parishes:
             print(f"[LA]   No parishes with > 0 reporting found.")
-            return pd.DataFrame(columns=_PARISH_COLS)
+            return pd.DataFrame(columns=LA_PARISH_COLS)
 
         n = len(parishes)
         w = self.max_parish_workers
@@ -271,10 +272,11 @@ class LaElectionPipeline:
                 "the rendered HTML and verify the election dropdown selector assumptions.",
                 stacklevel=2,
             )
-            empty = pd.DataFrame()
             if self.level == "all":
-                return {"state": empty, "parish": empty}
-            return empty
+                return {"state": pd.DataFrame(columns=LA_STATE_COLS), "parish": pd.DataFrame(columns=LA_PARISH_COLS)}
+            if self.level == "state":
+                return pd.DataFrame(columns=LA_STATE_COLS)
+            return pd.DataFrame(columns=LA_PARISH_COLS)
 
         elections = self._filter(all_elections, start_date, end_date)
 
@@ -282,15 +284,17 @@ class LaElectionPipeline:
             lo = start_date.isoformat() if start_date else "–"
             hi = end_date.isoformat() if end_date else "–"
             print(f"[LA] No elections found for range {lo} – {hi}.")
-            empty = pd.DataFrame()
             if self.level == "all":
-                return {"state": empty, "parish": empty}
-            return empty
+                return {"state": pd.DataFrame(columns=LA_STATE_COLS), "parish": pd.DataFrame(columns=LA_PARISH_COLS)}
+            if self.level == "state":
+                return pd.DataFrame(columns=LA_STATE_COLS)
+            return pd.DataFrame(columns=LA_PARISH_COLS)
 
-        print(f"[LA] Scraping {len(elections)} election(s)...")
+        print(f"[LA] Scraping {len(elections)} election row(s)...")
         state_frames:  list[pd.DataFrame] = []
         parish_frames: list[pd.DataFrame] = []
-        failed = 0
+        error_count = 0      # elections that threw unexpected exceptions
+        no_results_count = 0  # elections where site returned no data (not yet published)
 
         for election in elections:
             date_str = election.election_date.isoformat() if election.election_date else str(election.year)
@@ -315,7 +319,7 @@ class LaElectionPipeline:
                     print(f"[LA]   ERROR scraping state tabs for {election.name!r}: {exc}")
 
             if no_results:
-                failed += 1
+                no_results_count += 1
                 continue
 
             if self.level in ("all", "parish"):
@@ -333,22 +337,34 @@ class LaElectionPipeline:
                     print(f"[LA]   ERROR scraping parish tab for {election.name!r}: {exc}")
 
             if election_failed:
-                failed += 1
+                error_count += 1
 
         if not state_frames and not parish_frames:
-            if failed == len(elections):
+            if error_count > 0 and error_count + no_results_count == len(elections):
                 raise RuntimeError(
                     f"[LA] All {len(elections)} election(s) failed to scrape. "
                     f"This usually means the site is unreachable or its structure has changed. "
                     f"See the error messages printed above for details."
                 )
+            if no_results_count == len(elections):
+                warnings.warn(
+                    f"[LA] No results found for any of the {len(elections)} requested election(s). "
+                    "Elections may not have results published yet (future or pre-publication elections).",
+                    stacklevel=3,
+                )
 
-        state_all  = concat_or_empty(state_frames)
-        parish_all = concat_or_empty(parish_frames)
-
-        for _df in [state_all, parish_all]:
-            if not _df.empty:
-                _df.insert(0, "state", "LA")
+        _state_raw  = compute_vote_pct(
+            concat_or_empty(state_frames),
+            ["election_name", "election_year", "election_date", "office", "district"],
+            fill_missing_only=True,
+        )
+        _parish_raw = compute_vote_pct(
+            concat_or_empty(parish_frames),
+            ["election_name", "election_year", "election_date", "office", "district", "parish"],
+            fill_missing_only=True,
+        )
+        state_all  = finalize_df(_state_raw,  LA_STATE_COLS,  state="LA")
+        parish_all = finalize_df(_parish_raw, LA_PARISH_COLS, state="LA")
 
         print(
             f"[LA] Done. {len(state_all):,} total state rows, {len(parish_all):,} total parish rows."

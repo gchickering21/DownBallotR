@@ -42,63 +42,81 @@ from .discovery import parse_election_options
 from .models import CtElectionInfo
 from .parser import (
     parse_statewide_results, parse_town_results,
-    _STATE_COLS, _TOWN_COLS,
+    _STATE_COLS,
     _add_winner, _CONTEST_STATE_COLS,
 )
 from df_utils import concat_or_empty
 from date_utils import year_to_date_range
+from column_schemas import CT_STATE_COLS, CT_TOWN_COLS, finalize_df, compute_vote_pct
 
-# Grouping columns used when aggregating town data to state level.
-_AGG_GROUP_COLS = [
+# Grouping columns for statewide (Federal/State) aggregation — no geography.
+_AGG_GROUP_COLS_STATEWIDE = [
     "election_name",
     "election_year",
     "election_date",
+    "election_type",
     "office_level",
     "office",
     "candidate",
     "party",
 ]
 
-# Columns that identify a unique contest (for recomputing vote_pct).
-_CONTEST_COLS = ["election_name", "election_year", "election_date", "office"]
+# Grouping columns for Local aggregation — keep county (district) and town.
+_AGG_GROUP_COLS_LOCAL = [
+    "election_name",
+    "election_year",
+    "election_date",
+    "election_type",
+    "office_level",
+    "office",
+    "district",
+    "town",
+    "candidate",
+    "party",
+]
+
+# Contest columns for vote_pct recomputation at each level.
+_CONTEST_COLS_STATEWIDE = ["election_name", "election_year", "election_date", "office"]
+_CONTEST_COLS_LOCAL     = ["election_name", "election_year", "election_date", "office", "district", "town"]
 
 
 def _aggregate_towns_to_state(town_df: pd.DataFrame) -> pd.DataFrame:
-    """Sum town-level vote counts up to statewide totals and recompute vote_pct.
+    """Aggregate town-level rows to state-level, preserving geography for local races.
 
-    Parameters
-    ----------
-    town_df : pd.DataFrame
-        Town-level results (output of ``parse_town_results``), optionally
-        pre-filtered to a subset of election levels.
-
-    Returns
-    -------
-    pd.DataFrame
-        One row per candidate per office for the whole state, with columns
-        matching ``_STATE_COLS``.  ``vote_pct`` is recomputed from the
-        aggregated vote totals.
+    - Federal / State races: summed across all towns; district and town set to NA.
+    - Local races: summed within each county+town; district and town preserved.
     """
     if town_df.empty:
         return pd.DataFrame(columns=_STATE_COLS)
 
-    # Sum votes across all towns for each (election, level, office, candidate, party).
-    agg = (
-        town_df
-        .groupby(_AGG_GROUP_COLS, dropna=False)["votes"]
-        .sum()
-        .reset_index()
-    )
+    parts: list[pd.DataFrame] = []
 
-    # Recompute vote_pct: candidate_votes / total_votes_in_contest × 100.
-    contest_totals = agg.groupby(_CONTEST_COLS, dropna=False)["votes"].transform("sum")
-    agg["vote_pct"] = (agg["votes"] / contest_totals * 100).round(2)
+    statewide = town_df[town_df["office_level"].isin(["Federal", "State"])]
+    if not statewide.empty:
+        agg = (
+            statewide
+            .groupby(_AGG_GROUP_COLS_STATEWIDE, dropna=False)["votes"]
+            .sum()
+            .reset_index()
+        )
+        agg["district"] = pd.NA
+        agg["town"]     = pd.NA
+        agg = compute_vote_pct(agg, _CONTEST_COLS_STATEWIDE)
+        parts.append(agg)
 
-    # winner is added later by _build_state_df after all parts are combined.
-    # district from town_df is county_name; aggregated statewide rows have no district.
-    agg["district"] = pd.NA
+    local = town_df[town_df["office_level"] == "Local"]
+    if not local.empty:
+        agg = (
+            local
+            .groupby(_AGG_GROUP_COLS_LOCAL, dropna=False)["votes"]
+            .sum()
+            .reset_index()
+        )
+        agg = compute_vote_pct(agg, _CONTEST_COLS_LOCAL)
+        parts.append(agg)
+
     base_cols = [c for c in _STATE_COLS if c != "winner"]
-    return agg[base_cols]
+    return concat_or_empty(parts)[base_cols]
 
 
 class CtElectionPipeline:
@@ -277,10 +295,11 @@ class CtElectionPipeline:
                 "to verify the election dropdown selector assumptions.",
                 stacklevel=2,
             )
-            empty = pd.DataFrame()
             if self.level == "all":
-                return {"state": empty, "town": empty}
-            return empty
+                return {"state": pd.DataFrame(columns=CT_STATE_COLS), "town": pd.DataFrame(columns=CT_TOWN_COLS)}
+            if self.level == "state":
+                return pd.DataFrame(columns=CT_STATE_COLS)
+            return pd.DataFrame(columns=CT_TOWN_COLS)
 
         elections = self._filter(all_elections, start_date, end_date)
 
@@ -288,12 +307,13 @@ class CtElectionPipeline:
             lo = start_date.isoformat() if start_date else "–"
             hi = end_date.isoformat()   if end_date   else "–"
             print(f"[CT] No elections found for range {lo} – {hi}.")
-            empty = pd.DataFrame()
             if self.level == "all":
-                return {"state": empty, "town": empty}
-            return empty
+                return {"state": pd.DataFrame(columns=CT_STATE_COLS), "town": pd.DataFrame(columns=CT_TOWN_COLS)}
+            if self.level == "state":
+                return pd.DataFrame(columns=CT_STATE_COLS)
+            return pd.DataFrame(columns=CT_TOWN_COLS)
 
-        print(f"[CT] Scraping {len(elections)} election(s)...")
+        print(f"[CT] Scraping {len(elections)} election row(s)...")
         state_frames: list[pd.DataFrame] = []
         town_frames:  list[pd.DataFrame] = []
         failed = 0
@@ -381,12 +401,18 @@ class CtElectionPipeline:
                     f"See the warning messages printed above for details."
                 )
 
-        final_state_df = concat_or_empty(state_frames)
-        final_town_df  = concat_or_empty(town_frames)
-
-        for _df in [final_state_df, final_town_df]:
-            if not _df.empty:
-                _df.insert(0, "state", "CT")
+        _state_raw = compute_vote_pct(
+            concat_or_empty(state_frames),
+            ["election_name", "election_year", "election_date", "office", "district", "town"],
+            fill_missing_only=True,
+        )
+        _town_raw = compute_vote_pct(
+            concat_or_empty(town_frames),
+            ["election_name", "election_year", "election_date", "office", "district", "town"],
+            fill_missing_only=True,
+        )
+        final_state_df = finalize_df(_state_raw, CT_STATE_COLS, state="CT")
+        final_town_df  = finalize_df(_town_raw,  CT_TOWN_COLS,  state="CT")
 
         print(
             f"[CT] Done. {len(final_state_df):,} total state rows, {len(final_town_df):,} total town rows."

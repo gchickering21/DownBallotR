@@ -80,6 +80,8 @@ _KNOWN_PARTIES: list[str] = sorted(
 )
 
 from office_level_utils import classify_office_level as _classify_office_level_by_name
+from column_schemas import LA_STATE_COLS, LA_PARISH_COLS
+from text_utils import normalize_party
 
 
 def _classify_election_level(tab_label: Optional[str], office: str) -> str:
@@ -104,74 +106,25 @@ def _classify_election_level(tab_label: Optional[str], office: str) -> str:
 
 
 # ── Output column schemas ──────────────────────────────────────────────────────
+# Partial schemas (no "state") used for intermediate DataFrame construction.
+# The pipeline adds "state" and reindexes to LA_STATE_COLS/LA_PARISH_COLS via finalize_df().
 
-_STATE_COLS = [
-    "election_name",
-    "election_year",
-    "election_date",
-    "office_level",
-    "office",
-    "district",
-    "candidate",
-    "party",
-    "votes",
-    "vote_pct",
-    "winner",
-    "voter_turnout_pct",
-]
-
-_PARISH_COLS = [
-    "election_name",
-    "election_year",
-    "election_date",
-    "parish",
-    "office_level",
-    "office",
-    "district",
-    "candidate",
-    "party",
-    "votes",
-    "vote_pct",
-    "parish_winner",
-    "parish_voter_turnout_pct",
-]
+_STATE_COLS  = [c for c in LA_STATE_COLS  if c != "state"]
+_PARISH_COLS = [c for c in LA_PARISH_COLS if c != "state"]
 
 # ── Party normalization ────────────────────────────────────────────────────────
 
-# Maps abbreviated/parenthesized party codes (as they appear on the LA SOS site)
-# to the canonical full-name form used in the rest of the dataset.
-_PARTY_ABBREV_MAP: dict[str, Optional[str]] = {
-    "DEM":    "Democratic",
-    "REP":    "Republican",
-    "IND":    "Independent",
-    "NOPTY":  "No Party",
-    "NOP":    "No Party",
-    "LIB":    "Libertarian",
-    "GRN":    "Green",
-    "CON":    "Constitution Party",
-    "BLANKS": None,   # blank ballots — not a party
-}
-
-
 def _normalize_party(party: Optional[str]) -> Optional[str]:
-    """Strip parentheses and expand abbreviations in a party string.
-
-    Examples
-    --------
-    "(DEM)"    → "Democratic"
-    "(REP)"    → "Republican"
-    "(NOPTY)"  → "No Party"
-    "(Blanks)" → None
-    "Republican" → "Republican"  (unchanged)
-    """
+    """Normalize a party string, returning None for blank-ballot markers."""
     if not party:
         return party
-    # Strip surrounding parentheses, e.g. "(DEM)" → "DEM"
     stripped = party.strip()
     if stripped.startswith("(") and stripped.endswith(")"):
         stripped = stripped[1:-1].strip()
-    # Look up the normalised form (case-insensitive key check).
-    return _PARTY_ABBREV_MAP.get(stripped.upper(), stripped) if stripped else None
+    if stripped.upper() in ("BLANKS", "BLANK"):
+        return None  # blank ballots — not a candidate party
+    result = normalize_party(stripped)
+    return result if result else None
 
 
 # ── Voter turnout ──────────────────────────────────────────────────────────────

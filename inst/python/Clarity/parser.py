@@ -70,6 +70,7 @@ Per-contest panel (vote-method expanded view)::
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from urllib.parse import urlparse
 
 import pandas as pd
@@ -77,38 +78,22 @@ from lxml import html as lhtml
 
 from .models import ClarityElectionInfo
 from office_level_utils import classify_office_level
+from column_schemas import (
+    CLARITY_STATE_COLS, CLARITY_COUNTY_COLS,
+    CLARITY_VM_STATE_COLS, CLARITY_VM_COUNTY_COLS,
+    compute_vote_pct,
+)
+from text_utils import normalize_party
 
 
 # ---------------------------------------------------------------------------
 # Output column definitions
 # ---------------------------------------------------------------------------
-_STATE_COLS = [
-    "election_name", "election_type", "election_year", "election_date",
-    "office_level", "office", "district",
-    "candidate", "party", "winner", "votes", "vote_pct", "url",
-]
-
-_COUNTY_COLS = [
-    "election_name", "election_type", "election_year", "election_date",
-    "county", "office_level", "office", "district",
-    "candidate", "party", "county_winner", "votes", "vote_pct", "url",
-]
-
-_VM_STATE_COLS = [
-    "election_name", "election_type", "election_year", "election_date",
-    "office_level", "office", "district",
-    "candidate", "party",
-    "votes_advance_in_person", "votes_election_day",
-    "votes_absentee", "votes_provisional", "votes_total", "url",
-]
-
-_VM_COUNTY_COLS = [
-    "election_name", "election_type", "election_year", "election_date",
-    "county", "office_level", "office", "district",
-    "candidate", "party",
-    "votes_advance_in_person", "votes_election_day",
-    "votes_absentee", "votes_provisional", "votes_total", "url",
-]
+# Partial schemas (no "state") for intermediate DataFrame construction.
+_STATE_COLS    = [c for c in CLARITY_STATE_COLS    if c != "state"]
+_COUNTY_COLS   = [c for c in CLARITY_COUNTY_COLS   if c != "state"]
+_VM_STATE_COLS = [c for c in CLARITY_VM_STATE_COLS if c != "state"]
+_VM_COUNTY_COLS = [c for c in CLARITY_VM_COUNTY_COLS if c != "state"]
 
 _PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]+\)\s*$")
 _DASH_PARTY_RE   = re.compile(r"\s+-\s+(\S+)\s*$")
@@ -207,12 +192,27 @@ def _parse_pct(text: str) -> float | None:
         return None
 
 
+def _format_election_date(raw: str | None) -> str | None:
+    """Parse a date string like 'November 5, 2024' and return 'MM/DD/YY'."""
+    if not raw:
+        return None
+    # Normalize multi-space and strip so "November  5, 2024" works too.
+    normalized = re.sub(r"\s+", " ", raw).strip()
+    for fmt in ("%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(normalized, fmt).strftime("%m/%d/%y")
+        except ValueError:
+            continue
+    return raw  # fall back to raw if unparseable
+
+
 def _parse_page_meta(doc) -> dict:
     """Extract election_date and result_status from the page header."""
     date_spans = doc.xpath(
         "//*[contains(@class,'election-header')]//*[contains(@class,'h6')]"
     )
-    election_date = _clean(date_spans[0].text_content()) if date_spans else None
+    raw_date = _clean(date_spans[0].text_content()) if date_spans else None
+    election_date = _format_election_date(raw_date)
 
     status_h4s = doc.xpath(
         "//*[contains(@class,'status-info')]//*[self::h4 or self::h3 or self::h2]"
@@ -282,9 +282,7 @@ def _parse_ballot_options(panel) -> list[dict]:
         party_divs = opt.xpath(
             ".//*[contains(@class,'text-muted') and contains(@class,'small')]"
         )
-        party = _clean(party_divs[0].text_content()) if party_divs else ""
-        if not party:
-            party = inline_party
+        party = normalize_party(_clean(party_divs[0].text_content()) if party_divs else "") or normalize_party(inline_party)
 
         pct_spans = opt.xpath(
             ".//*[contains(@class,'percentage')]"
@@ -344,9 +342,7 @@ def _parse_contest_table(panel) -> list[dict]:
         party_div = cells[0].xpath(
             ".//*[contains(@class,'text-muted') and contains(@class,'small')]"
         )
-        party = _clean(party_div[0].text_content()) if party_div else ""
-        if not party:
-            party = inline_party
+        party = normalize_party(_clean(party_div[0].text_content()) if party_div else "") or normalize_party(inline_party)
 
         results.append({
             "candidate": candidate,
@@ -389,25 +385,16 @@ def _fix_clarity_winners(
 
 
 def _fill_pct(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute ``vote_pct`` from votes where the HTML did not provide it.
+    """Fill missing vote_pct values within the correct contest+geography scope.
 
-    Some candidates (write-ins, uncontested races) have votes but no
-    percentage in the rendered HTML.  When ``vote_pct`` is null we compute it
-    as ``votes / contest_total_votes * 100``, rounded to two decimal places.
-    Rows where both ``vote_pct`` and ``votes`` are null are left as-is.
+    Includes county and district in the grouping when present so that county-level
+    calls use the per-county denominator rather than a statewide total.
     """
-    if df.empty or "vote_pct" not in df.columns or "votes" not in df.columns:
-        return df
-    missing = df["vote_pct"].isna() & df["votes"].notna()
-    if not missing.any():
-        return df
-    contest_cols = [c for c in ("election_name", "election_year", "office") if c in df.columns]
-    if contest_cols:
-        totals = df.groupby(contest_cols, dropna=False)["votes"].transform("sum")
-        computed = (df["votes"] / totals * 100).round(2)
-        df = df.copy()
-        df.loc[missing, "vote_pct"] = computed[missing]
-    return df
+    group_cols = [
+        c for c in ("election_name", "election_year", "office", "district", "county")
+        if c in df.columns
+    ]
+    return compute_vote_pct(df, group_cols, fill_missing_only=True)
 
 
 # ---------------------------------------------------------------------------

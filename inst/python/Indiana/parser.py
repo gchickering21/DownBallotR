@@ -18,83 +18,24 @@ num_seats
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pandas as pd
 
 from .models import InElectionInfo
+from column_schemas import IN_STATE_COLS, IN_COUNTY_COLS, compute_vote_pct
+from text_utils import normalize_party
 
 # ── Output column schemas ──────────────────────────────────────────────────────
+# Partial schemas (no "state") used for intermediate DataFrame construction.
 
-_STATE_COLS = [
-    "election_year",
-    "election_date",
-    "election_type",
-    "office_level",
-    "office",
-    "district",
-    "candidate",
-    "party",
-    "votes",
-    "vote_pct",
-    "winner",
-    "num_seats",
-]
-
-_COUNTY_COLS = [
-    "election_year",
-    "election_date",
-    "election_type",
-    "office_level",
-    "office",
-    "district",
-    "county_name",
-    "candidate",
-    "party",
-    "votes",
-    "vote_pct",
-    "county_winner",
-    "num_seats",
-]
+_STATE_COLS  = [c for c in IN_STATE_COLS  if c != "state"]
+_COUNTY_COLS = [c for c in IN_COUNTY_COLS if c != "state"]
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-_PARTY_MAP: dict[str, str] = {
-    "D":          "Democrat",
-    "R":          "Republican",
-    "I":          "Independent",
-    "L":          "Libertarian",
-    "G":          "Green",
-    "CP":         "Citizens Party",
-    "N":          "NonPartisan",
-    "O":          "Other",
-    "LB":         "Long Beach Party",
-    "Amer Solid": "American Solidarity",
-    "COM":        "Communist Party",
-    "C":          "Constitution",
-    "EP":         "Elkhart Party",
-    "PP":         "People's Party",
-    "PI":         "Pirate Party",
-    "P":          "Progressive",
-    "SP":         "Socialist Party USA",
-    "T":          "Taxpayers",
-    "W":          "Workers",
-}
-
-
-def _expand_party(abbrev: str) -> str:
-    """Return full party name for *abbrev*, falling back to the raw value."""
-    return _PARTY_MAP.get(abbrev.strip(), abbrev)
-
-
-def _compute_vote_pct(df: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
-    """Compute vote_pct as candidate votes / total votes in contest, rounded to 2dp."""
-    if df.empty:
-        return df
-    contest_totals = df.groupby(group_cols, dropna=False)["votes"].transform("sum")
-    df["vote_pct"] = (df["votes"] / contest_totals * 100).round(2).fillna(0.0)
-    return df
 
 
 def _fix_winners(df: pd.DataFrame, group_cols: list[str], col: str = "winner") -> pd.DataFrame:
@@ -109,6 +50,14 @@ def _fix_winners(df: pd.DataFrame, group_cols: list[str], col: str = "winner") -
     rank = df.groupby(group_cols, dropna=False)["votes"].rank(method="min", ascending=False)
     df[col] = rank <= df["num_seats"]
     return df
+
+
+_JURISDICTION_RE = re.compile(r'^(.+?\s+(?:County|Township|Town|City))\b', re.IGNORECASE)
+
+def _extract_jurisdiction(office_title: str) -> "str | None":
+    """Extract a leading jurisdiction name (e.g. 'Bartholomew County') from OFFICE_TITLE."""
+    m = _JURISDICTION_RE.match(office_title)
+    return m.group(1).strip() if m else None
 
 
 def _extract_district(office_title: str) -> "str | None":
@@ -207,7 +156,7 @@ def parse_state_results(
 
     for race in _ensure_list(summary.get("Race")):
         office_title = race.get("OFFICE_TITLE", "")
-        district     = _extract_district(office_title)
+        district     = _extract_district(office_title) or (office_level == "Local" and _extract_jurisdiction(office_title)) or None
         num_seats    = _safe_int(race.get("NumofSeats", 1))
 
         for cand in _ensure_list(race.get("Candidates", {}).get("Candidate")):
@@ -219,7 +168,7 @@ def parse_state_results(
                 "office":         category_name,
                 "district":       district,
                 "candidate":      cand.get("NAME_ON_BALLOT", "") or cand.get("CandidateName", ""),
-                "party":          _expand_party(cand.get("PARTY", "")),
+                "party":          normalize_party(cand.get("PARTY", "")),
                 "votes":          _safe_int(cand.get("TOTAL", 0)),
                 "vote_pct":       0.0,
                 "winner":         cand.get("isWinner", "") == "T",
@@ -229,7 +178,7 @@ def parse_state_results(
     if not rows:
         return pd.DataFrame(columns=_STATE_COLS)
     df = pd.DataFrame(rows)
-    df = _compute_vote_pct(df, ["election_year", "election_date", "office", "district"])
+    df = compute_vote_pct(df, ["election_year", "election_date", "office", "district"])
     df = _fix_winners(df, ["election_year", "election_date", "office", "district"])
     return df[_STATE_COLS]
 
@@ -263,6 +212,10 @@ def parse_county_results(
     regions_container = root.get("OfficeCategory", {}).get("Regions", {})
 
     for region in _ensure_list(regions_container.get("Region")):
+        # Skip district-type regions (congressional/legislative races) — those
+        # are not county breakdowns and would be misclassified.
+        if region.get("MAP_JURISDICTION_TYPE", "").lower() != "locality":
+            continue
         county_name = region.get("MAP_JURISDICTION_NAME", "")
         county_fips = region.get("MAP_FIPS", "")
 
@@ -278,7 +231,7 @@ def parse_county_results(
 
         for race in races:
             office_title = race.get("OFFICE_TITLE", "")
-            district     = _extract_district(office_title)
+            district     = _extract_district(office_title) or (office_level == "Local" and _extract_jurisdiction(office_title)) or None
             num_seats    = _safe_int(race.get("NumofSeats", 1))
 
             for cand in _ensure_list(race.get("Candidates", {}).get("Candidate")):
@@ -291,7 +244,7 @@ def parse_county_results(
                     "district":        district,
                     "county_name":     county_name,
                     "candidate":       cand.get("NAME_ON_BALLOT", "") or cand.get("CandidateName", ""),
-                    "party":           _expand_party(cand.get("PARTY") or cand.get("PARTY_ABBREV", "")),
+                    "party":           normalize_party(cand.get("PARTY") or cand.get("PARTY_ABBREV", "")),
                     "votes":           _safe_int(cand.get(vote_field, 0)),
                     "vote_pct":        0.0,
                     "county_winner":   cand.get("isWinner", "") == "T",
@@ -301,6 +254,6 @@ def parse_county_results(
     if not rows:
         return pd.DataFrame(columns=_COUNTY_COLS)
     df = pd.DataFrame(rows)
-    df = _compute_vote_pct(df, ["election_year", "election_date", "office", "district", "county_name"])
+    df = compute_vote_pct(df, ["election_year", "election_date", "office", "district", "county_name"])
     df = _fix_winners(df, ["election_year", "election_date", "office", "district", "county_name"], col="county_winner")
     return df[_COUNTY_COLS]

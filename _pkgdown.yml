@@ -2,8 +2,16 @@ url: https://gchickering21.github.io/DownBallotR/
 
 template:
   bootstrap: 5
-  params:
-    ganalytics: G-PQ23RGE15T
+  includes:
+    in_header: |
+      <!-- Google tag (gtag.js) -->
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-PQ23RGE15T"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-PQ23RGE15T');
+      </script>
 
 navbar:
   structure:
@@ -40,5 +48,3 @@ articles:
     contents:
       - data-dictionary
       - datasheet
-
-

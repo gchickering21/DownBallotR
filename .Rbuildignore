@@ -35,8 +35,6 @@ output_$
 
 ^data/
 ^inst/python/Ballotpedia
-^build$
-^build/
 ^inst/python/.*/tests$
 ^inst/python/.*/tests/
 ^inst/python/.*/test_.*\.py$
@@ -46,4 +44,4 @@ TESTING.md
 ^CRAN-SUBMISSION$
 ^cran-comments\.md$
 ^doc$
-^Meta$
+

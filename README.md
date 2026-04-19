@@ -60,6 +60,11 @@ scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
 
 # Louisiana statewide + parish results
 scrape_elections(state = "LA", year_from = 2024, year_to = 2024)
+
+# Summarize a results data frame — auto-detects state, counts elections,
+# candidates, and offices broken down by Federal / State / Local
+ga_results <- scrape_elections(state = "GA", year_from = 2024, year_to = 2024, level = "state")
+summarize_results(ga_results)
 ```
 
 ---

@@ -1,6 +1,6 @@
 # DownBallotR Beta Testing Guide
 
-Thank you for helping test `DownBallotR`! This guide walks you through installation and a set of test calls. We're looking for feedback on anything that's confusing, broken, or could work better — no particular experience level required.
+Thank you for helping test `DownBallotR`! This guide walks you through installation and a set of test calls. We're looking for feedback on anything that's confusing, broken, or could work better, no particular experience level required.
 
 Questions or issues? Email grahamchickering@gmail.com or file a GitHub issue at https://github.com/gchickering21/DownBallotR/issues
 

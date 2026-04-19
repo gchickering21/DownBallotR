@@ -314,9 +314,6 @@ def _scrape_election_stats(
     parallel : bool
         Enable parallel county scraping for classic (requests-based) states.
     """
-    year_from = _to_year(year_from) if year_from is not None else 1789
-    year_to   = _to_year(year_to)
-
     from ElectionStats.state_config import get_state_config, STATE_CONFIGS
     from ElectionStats.run_scrape_yearly import (
         scrape_one_year,
@@ -330,18 +327,21 @@ def _scrape_election_stats(
             f"Available: {sorted(STATE_CONFIGS.keys())}"
         )
 
+    state_config = get_state_config(state_key)
+    min_year  = state_config["min_year"]
+    year_from = _to_year(year_from, min_year=min_year) if year_from is not None else min_year
+    year_to   = _to_year(year_to)
+
     if year_to is None:
         year_to = datetime.date.today().year
 
     n_years = year_to - year_from + 1
-    method  = get_state_config(state_key)["scraping_method"]
+    method  = state_config["scraping_method"]
     print(
         f"[ElectionStats] Starting: {state_key} | "
         f"{year_from}–{year_to} ({n_years} year(s)) | "
         f"method={method}"
     )
-
-    config = get_state_config(state_key)
 
     state_frames: list[pd.DataFrame] = []
     county_frames: list[pd.DataFrame] = []
@@ -354,12 +354,12 @@ def _scrape_election_stats(
             s_df, c_df, p_df = scrape_one_year(
                 state_key=state_key,
                 state_name=state_key,
-                base_url=config["base_url"],
-                search_path=config["search_path"],
+                base_url=state_config["base_url"],
+                search_path=state_config["search_path"],
                 year=year,
                 parallel=parallel,
-                scraping_method=config["scraping_method"],
-                url_style=config.get("url_style", "path_params"),
+                scraping_method=state_config["scraping_method"],
+                url_style=state_config.get("url_style", "path_params"),
                 level=level,
             )
         except Exception as exc:

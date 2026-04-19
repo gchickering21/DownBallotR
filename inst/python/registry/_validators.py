@@ -15,7 +15,7 @@ _VALID_LEVELS_LA = ("all", "state", "parish")
 _R_WORKERS_CAP = 4
 
 
-def _to_year(v) -> "int | None":
+def _to_year(v, min_year: int = 1900) -> "int | None":
     """Coerce *v* to an integer year, accepting int/float/str/None."""
     if v is None:
         return None
@@ -23,8 +23,8 @@ def _to_year(v) -> "int | None":
         year = int(float(v))
     except (TypeError, ValueError):
         raise ValueError(f"Cannot convert {v!r} to a year integer.")
-    if not (1900 <= year <= 2100):
-        raise ValueError(f"Year must be between 1900 and 2100; got {year}.")
+    if not (min_year <= year <= 2100):
+        raise ValueError(f"Year must be between {min_year} and 2100; got {year}.")
     return year
 
 

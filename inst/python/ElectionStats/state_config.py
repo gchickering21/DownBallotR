@@ -19,6 +19,7 @@ class StateConfig(TypedDict):
     scraper_type: ScraperType
     scraping_method: ScrapingMethod
     url_style: UrlStyle
+    min_year: int
 
 
 STATE_CONFIGS: dict[str, StateConfig] = {
@@ -28,6 +29,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "v2",
         "scraping_method": "playwright",
         "url_style": "query_params",
+        "min_year": 1789,
     },
     "massachusetts": {
         "base_url": "https://electionstats.state.ma.us/elections",
@@ -35,6 +37,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "classic",
         "scraping_method": "requests",
         "url_style": "path_params",
+        "min_year": 1970,
     },
     "colorado": {
         "base_url": "https://co.elstats2.civera.com/eng/contests",
@@ -43,6 +46,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraping_method": "requests",
         "url_style": "query_params",
         "timeout_s": 120,
+        "min_year": 1902,
     },
     "new_hampshire": {
         "base_url": "https://nh.electionstats.com/elections",
@@ -50,6 +54,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "classic",
         "scraping_method": "requests",
         "url_style": "path_params",
+        "min_year": 1970,
     },
     "south_carolina": {
         "base_url": "https://electionhistory.scvotes.gov",
@@ -57,6 +62,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "v2",
         "scraping_method": "playwright",
         "url_style": "query_params",
+        "min_year": 2008,
     },
     "new_mexico": {
         "base_url": "https://electionstats.sos.nm.gov",
@@ -64,6 +70,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "v2",
         "scraping_method": "playwright",
         "url_style": "query_params",
+        "min_year": 2000,
     },
     "new_york": {
         "base_url": "https://results.elections.ny.gov",
@@ -73,6 +80,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "url_style": "query_params",
         "county_method": "csv",
         "csv_requires_browser": True,  # CSV API is behind Cloudflare; must fetch via browser session
+        "min_year": 1994,
     },
     "idaho": {
         "base_url": "https://canvass.sos.idaho.gov/eng/contests",
@@ -80,6 +88,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "classic",
         "scraping_method": "requests",
         "url_style": "path_params",
+        "min_year": 1990,
     },
     "vermont": {
         "base_url": "https://electionarchive.vermont.gov/elections",
@@ -87,6 +96,7 @@ STATE_CONFIGS: dict[str, StateConfig] = {
         "scraper_type": "classic",
         "scraping_method": "requests",
         "url_style": "path_params",
+        "min_year": 1789,
     },
 }
 

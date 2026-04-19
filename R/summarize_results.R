@@ -90,8 +90,8 @@ summarize_results <- function(df, state = NULL) {
 .count_distinct_elections <- function(df) {
   has <- function(...) all(c(...) %in% names(df))
 
-  if (has("election_name", "election_year"))
-    return(dplyr::n_distinct(df$election_name, df$election_year, na.rm = TRUE))
+  if (has("election_name", "election_date", "office"))
+    return(dplyr::n_distinct(df$election_name, df$election_date, df$office, na.rm = TRUE))
   if (has("election_id"))
     return(dplyr::n_distinct(df$election_id, na.rm = TRUE))
   if (has("election_year", "election_type", "office"))

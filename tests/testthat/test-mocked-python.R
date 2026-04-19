@@ -3,6 +3,11 @@
 # Tests for Python-interaction code using testthat::local_mocked_bindings().
 # No real Python virtualenv is required — reticulate calls are replaced with
 # controlled fakes for each test.
+#
+# Skipped on CRAN: local_mocked_bindings(.package = "reticulate") forces
+# reticulate to load, triggering background Python discovery that causes
+# CPU time to exceed the CRAN 2x elapsed-time threshold.
+skip_on_cran()
 
 # ── .db_norm_path ─────────────────────────────────────────────────────────────
 

@@ -57,7 +57,8 @@
 #'   \code{election_type}, \code{election_year}, \code{election_date},
 #'   \code{office_level}, \code{office}, \code{district}, \code{county},
 #'   \code{precinct}, \code{candidate}, \code{party}, \code{votes},
-#'   \code{vote_pct}, \code{precinct_winner}, \code{url});
+#'   \code{vote_pct} (write-ins are excluded, so column may not sum to 100\%),
+#'   \code{precinct_winner}, \code{url});
 #'   \code{"town"} returns town-level results only (Connecticut);
 #'   \code{"parish"} returns parish-level results only (Louisiana).
 #' @param parallel (\code{ElectionStats}) Use parallel county scraping for

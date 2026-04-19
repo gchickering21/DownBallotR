@@ -6,17 +6,45 @@
 0 errors | 0 warnings | 0 notes
 
 ### Windows (win-builder, R 4.5.3 / x86_64-w64-mingw32)
-0 errors | 0 warnings | 2 notes (see Notes section below)
+0 errors | 0 warnings | 1 notes (see Notes section below)
 
-### Debian (CRAN incoming pretest, R-devel)
-0 errors | 0 warnings | 3 notes (see Notes section below)
+### Windows (win-builder, R-devel / x86_64-w64-mingw32)
+0 errors | 0 warnings | 1 note (see Notes section below)
+
+### Windows (win-builder, R 4.4.3 Patched / x86_64-w64-mingw32, old-release)
+0 errors | 0 warnings | 1 note (see Notes section below)
+
+### R-hub (linux, macos, macos-arm64, m1-san, windows, atlas)
+0 errors | 0 warnings | 0 notes
 
 ## Notes
 
 ### "New submission"
-This is the first submission of this package to CRAN.
+This is a new submission, so the NOTE is expected:
 
+* checking CRAN incoming feasibility ... NOTE
+  Maintainer: 'Graham Chickering <grahamchickering@gmail.com>'
+  New submission
 
+### Vignette fix (resubmission)
+The first submission triggered:
+  "Package has a VignetteBuilder field but no prebuilt vignette index."
+Fixed by removing the VignetteBuilder field from DESCRIPTION entirely.
+The vignettes require Python and an active virtual environment to run, so all
+code chunks are eval=FALSE. They are available via the pkgdown site at
+https://gchickering21.github.io/DownBallotR/ but are not shipped as built
+vignettes with the CRAN package.
+
+### CPU time NOTE (resubmission)
+The Debian check flagged: "Running R code in 'testthat.R' had CPU time
+2.7 times elapsed time." The cause was test-mocked-python.R, which contains
+~40 tests using local_mocked_bindings(.package = "reticulate"). This forces
+reticulate to load, triggering background Python discovery that runs
+concurrently with R and pushes CPU time above the 2x elapsed threshold.
+Fixed by adding a file-level skip_on_cran() to test-mocked-python.R, and
+skip_on_cran() to the db_install_plan test in test-install-helpers.R that
+calls py_module_available() for each Python package.
+  
 ## Motivation for the R + Python design
 
 State and local election data is published through a wide variety of government

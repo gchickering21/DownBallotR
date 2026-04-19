@@ -43,7 +43,7 @@ Source: CT Election Management System (CTEMS). Results available 2016–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party name (e.g. `"Democratic"`, `"Republican"`) |
 | `votes` | integer | Total votes |
-| `vote_pct` | numeric | Percentage of votes within the contest |
+| `vote_pct` | numeric | Percentage of votes within the contest; write-ins are excluded, so may not sum to 100% |
 | `winner` | logical | `TRUE` if the candidate won the statewide contest |
 
 ### `$town`
@@ -62,7 +62,7 @@ Source: CT Election Management System (CTEMS). Results available 2016–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party name |
 | `votes` | integer | Votes cast in this town |
-| `vote_pct` | numeric | Percentage of votes within this town |
+| `vote_pct` | numeric | Percentage of votes within this town; write-ins are excluded, so may not sum to 100% |
 | `town_winner` | logical | `TRUE` if the candidate won within this town |
 
 ---
@@ -86,7 +86,7 @@ Source: Georgia Secretary of State. Results available 2000–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
 | `votes` | integer | Total votes |
-| `vote_pct` | numeric | Percentage of votes within the contest |
+| `vote_pct` | numeric | Percentage of votes within the contest; write-ins are excluded, so may not sum to 100% |
 | `winner` | logical | `TRUE` if the candidate won the statewide contest |
 | `url` | character | URL of the election results page scraped |
 
@@ -106,7 +106,7 @@ Source: Georgia Secretary of State. Results available 2000–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
 | `votes` | integer | County-level vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest for this county |
+| `vote_pct` | numeric | Percentage of votes within the contest for this county; write-ins are excluded, so may not sum to 100% |
 | `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `url` | character | URL of the election results page scraped |
 
@@ -127,7 +127,7 @@ Source: Georgia Secretary of State. Results available 2000–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
 | `votes` | integer | Precinct-level vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest for this precinct |
+| `vote_pct` | numeric | Percentage of votes within the contest for this precinct; write-ins are excluded, so may not sum to 100% |
 | `precinct_winner` | logical | `TRUE` if the candidate won within this precinct |
 | `url` | character | URL of the precinct results page scraped |
 
@@ -151,7 +151,7 @@ Source: Indiana Election Division. General Elections only, 2019–present.
 | `candidate` | character | Candidate name as printed on the ballot |
 | `party` | character | Full party name (e.g. `"Republican"`, `"Democrat"`) |
 | `votes` | integer | Statewide vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest |
+| `vote_pct` | numeric | Percentage of votes within the contest; write-ins are excluded, so may not sum to 100% |
 | `winner` | logical | `TRUE` if the candidate won |
 | `num_seats` | integer | Number of seats available in the contest |
 
@@ -170,7 +170,7 @@ Source: Indiana Election Division. General Elections only, 2019–present.
 | `candidate` | character | Candidate name as printed on the ballot |
 | `party` | character | Full party name |
 | `votes` | integer | County-level vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest for this county |
+| `vote_pct` | numeric | Percentage of votes within the contest for this county; write-ins are excluded, so may not sum to 100% |
 | `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `num_seats` | integer | Number of seats available in the contest |
 
@@ -194,7 +194,7 @@ Source: Louisiana Secretary of State. Results available 1982–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Full party name (e.g. `"Republican"`, `"Democratic"`) |
 | `votes` | integer | Vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest |
+| `vote_pct` | numeric | Percentage of votes within the contest; write-ins are excluded, so may not sum to 100% |
 | `winner` | logical | `TRUE` if the candidate won |
 | `voter_turnout_pct` | numeric | Statewide voter turnout percentage; `NA` when not published |
 
@@ -213,7 +213,7 @@ Source: Louisiana Secretary of State. Results available 1982–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Full party name |
 | `votes` | integer | Parish-level vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest for this parish |
+| `vote_pct` | numeric | Percentage of votes within the contest for this parish; write-ins are excluded, so may not sum to 100% |
 | `parish_winner` | logical | `TRUE` if the candidate won within this parish |
 | `parish_voter_turnout_pct` | numeric | Parish-level voter turnout percentage; `NA` when not published |
 
@@ -292,7 +292,7 @@ Source: NC State Board of Elections. Results available 2000–present.
 | `absentee_or_early` | integer | Combined absentee/early votes (older files) |
 | `provisional` | integer | Provisional votes aggregated statewide |
 | `votes` | integer | Total votes |
-| `vote_pct` | numeric | Percentage of votes within the contest |
+| `vote_pct` | numeric | Percentage of votes within the contest; write-ins are excluded, so may not sum to 100% |
 | `winner` | logical | `TRUE` for the highest-voted candidate(s) per contest |
 
 ---
@@ -316,7 +316,7 @@ Source: Utah elections portal. Results available 2023–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
 | `votes` | integer | Total votes |
-| `vote_pct` | numeric | Percentage of votes within the contest |
+| `vote_pct` | numeric | Percentage of votes within the contest; write-ins are excluded, so may not sum to 100% |
 | `winner` | logical | `TRUE` if the candidate won the statewide contest |
 | `url` | character | URL of the election results page scraped |
 
@@ -336,7 +336,7 @@ Source: Utah elections portal. Results available 2023–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
 | `votes` | integer | County-level vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest for this county |
+| `vote_pct` | numeric | Percentage of votes within the contest for this county; write-ins are excluded, so may not sum to 100% |
 | `county_winner` | logical | `TRUE` if the candidate won within this county |
 | `url` | character | URL of the election results page scraped |
 
@@ -357,7 +357,7 @@ Source: Utah elections portal. Results available 2023–present.
 | `candidate` | character | Candidate name |
 | `party` | character | Party abbreviation |
 | `votes` | integer | Precinct-level vote total |
-| `vote_pct` | numeric | Percentage of votes within the contest for this precinct |
+| `vote_pct` | numeric | Percentage of votes within the contest for this precinct; write-ins are excluded, so may not sum to 100% |
 | `precinct_winner` | logical | `TRUE` if the candidate won within this precinct |
 | `url` | character | URL of the precinct results page scraped |
 
@@ -383,7 +383,7 @@ coverage varies by state. Precinct-level data available for ID, NM, SC, and VA.
 | `candidate` | character | Candidate name |
 | `party` | character | Party name as returned by ElectionStats |
 | `votes` | integer | Total votes |
-| `vote_pct` | numeric | Percentage of votes within the contest |
+| `vote_pct` | numeric | Percentage of votes within the contest; write-ins are excluded, so may not sum to 100% |
 | `winner` | logical | `TRUE` if the candidate won |
 | `url` | character | URL for the candidate detail page on ElectionStats |
 
@@ -403,7 +403,7 @@ coverage varies by state. Precinct-level data available for ID, NM, SC, and VA.
 | `candidate` | character | Candidate name |
 | `party` | character | Party name |
 | `votes` | integer | Vote total for this county or city |
-| `vote_pct` | numeric | Percentage of votes within the contest for this county/city |
+| `vote_pct` | numeric | Percentage of votes within the contest for this county/city; write-ins are excluded, so may not sum to 100% |
 | `county_winner` | logical | `TRUE` for the top vote-getter within each county/city |
 | `url` | character | URL for the candidate detail page on ElectionStats |
 
@@ -424,7 +424,7 @@ coverage varies by state. Precinct-level data available for ID, NM, SC, and VA.
 | `candidate` | character | Candidate name |
 | `party` | character | Party name |
 | `votes` | integer | Vote total for this precinct |
-| `vote_pct` | numeric | Percentage of votes within the contest for this precinct |
+| `vote_pct` | numeric | Percentage of votes within the contest for this precinct; write-ins are excluded, so may not sum to 100% |
 | `precinct_winner` | logical | `TRUE` for the top vote-getter within each precinct |
 | `url` | character | URL for the candidate detail page on ElectionStats |
 

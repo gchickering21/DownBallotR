@@ -36,7 +36,8 @@ Depends:
 Imports:
     dplyr,
     purrr,
-    reticulate
+    reticulate,
+    rlang
 Suggests:
     knitr,
     pak,

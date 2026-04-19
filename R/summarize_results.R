@@ -29,6 +29,7 @@
 #' summarize_results(ga_results)
 #' }
 #'
+#' @importFrom rlang .data
 #' @export
 summarize_results <- function(df, state = NULL) {
   if (!is.data.frame(df)) stop("`df` must be a data frame.", call. = FALSE)

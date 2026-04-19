@@ -83,8 +83,10 @@ summarize_results <- function(df, state = NULL) {
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 # Not all states have the same id columns, so we fall back through options:
-#   election_name + year  (Clarity states: GA, UT, CT, LA)
-#   election_id           (ElectionStats states: CO, ID, MA, etc.)
+#   election_name + year        (Clarity states: GA, UT, CT, LA)
+#   election_id                 (ElectionStats states: CO, ID, MA, etc.)
+#   election_year + type + office  (Indiana — no name or id, but the combination
+#                                   of year, type, and office uniquely identifies elections)
 .count_distinct_elections <- function(df) {
   has <- function(...) all(c(...) %in% names(df))
 
@@ -92,6 +94,8 @@ summarize_results <- function(df, state = NULL) {
     return(dplyr::n_distinct(df$election_name, df$election_year, na.rm = TRUE))
   if (has("election_id"))
     return(dplyr::n_distinct(df$election_id, na.rm = TRUE))
+  if (has("election_year", "election_type", "office"))
+    return(dplyr::n_distinct(df$election_year, df$election_type, df$office, na.rm = TRUE))
   NA_integer_
 }
 
@@ -145,7 +149,7 @@ summarize_results <- function(df, state = NULL) {
 
 .print_summary <- function(s) {
   # Helper so we don't repeat the singular/plural logic inline
-  plur <- function(n, word) paste0(n, " ", word, if (n == 1L) "" else "s")
+  plur <- function(n, word) paste0(if (is.na(n)) "NA" else n, " ", word, if (!is.na(n) && n == 1L) "" else "s")
 
   year_range <- if (length(s$years)) paste(range(s$years), collapse = "\u2013") else "N/A"
 

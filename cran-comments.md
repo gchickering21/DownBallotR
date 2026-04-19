@@ -29,11 +29,11 @@ This is a new submission, so the NOTE is expected:
 ### Vignette fix (resubmission)
 The first submission triggered:
   "Package has a VignetteBuilder field but no prebuilt vignette index."
-Fixed by removing the VignetteBuilder field from DESCRIPTION entirely.
-The vignettes require Python and an active virtual environment to run, so all
-code chunks are eval=FALSE. They are available via the pkgdown site at
-https://gchickering21.github.io/DownBallotR/ but are not shipped as built
-vignettes with the CRAN package.
+Fixed by removing the VignetteBuilder field from DESCRIPTION and adding
+^vignettes$ to .Rbuildignore so the vignettes/ directory is excluded from
+the built tarball. The vignettes require Python and an active virtual
+environment to run (all code chunks are eval=FALSE) and are available via
+the pkgdown site at https://gchickering21.github.io/DownBallotR/.
 
 ### CPU time NOTE (resubmission)
 The Debian check flagged: "Running R code in 'testthat.R' had CPU time

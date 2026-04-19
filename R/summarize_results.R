@@ -96,8 +96,8 @@ summarize_results <- function(df, state = NULL) {
     return(dplyr::n_distinct(df$election_id, na.rm = TRUE))
   if (has("election_year", "election_type", "office"))
     return(dplyr::n_distinct(df$election_year, df$election_type, df$office, na.rm = TRUE))
-  if (has("election_year", "election_date", "office"))
-    return(dplyr::n_distinct(df$election_year, df$election_date, df$office, na.rm = TRUE))
+  if (has("election_date", "office"))
+    return(dplyr::n_distinct(df$election_date, df$office, na.rm = TRUE))
   NA_integer_
 }
 

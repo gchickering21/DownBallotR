@@ -2,7 +2,8 @@ library(tidyverse)
 library(DownBallotR)
 
 # ---- user inputs ----
-folder_path <- "data/election_stats/colorado/"
+#election_stats/colorado/
+folder_path <- "data/northcarolina"
 file_pattern <- "\\.csv$"
 
 # ---- get all files ----

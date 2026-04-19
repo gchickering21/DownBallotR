@@ -351,10 +351,10 @@ def _parse_contest_table(panel) -> list[dict]:
         results.append({
             "candidate": candidate,
             "party":     party,
-            "votes_advance_voting": _get_col(cells, "Advance in Person", "Advance Voting"),
-            "votes_election_day":      _get_col(cells, "Election Day"),
-            "votes_absentee":          _get_col(cells, "Absentee by Mail"),
-            "votes_provisional":       _get_col(cells, "Provisional"),
+            "votes_advance_voting": _get_col(cells, "Advance in Person", "Advance Voting", "Advance Voting Votes"),
+            "votes_election_day":      _get_col(cells, "Election Day", "Election Day Votes"),
+            "votes_absentee":          _get_col(cells, "Absentee by Mail", "Absentee by Mail Votes"),
+            "votes_provisional":       _get_col(cells, "Provisional", "Provisional Votes"),
             "votes_total":             _get_col(cells, "Total Votes"),
         })
     return results

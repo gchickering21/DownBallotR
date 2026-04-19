@@ -44,4 +44,4 @@ TESTING.md
 ^CRAN-SUBMISSION$
 ^cran-comments\.md$
 ^doc$
-
+aggregation_stats.R

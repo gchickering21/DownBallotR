@@ -95,13 +95,13 @@ res <- scrape_elections(
 # Statewide vote-method totals
 res$vote_method_state %>%
   filter(office == "United States Senator") %>%
-  select(candidate, party, votes_advance_in_person, votes_election_day,
+  select(candidate, party, votes_advance_voting, votes_election_day,
          votes_absentee, votes_provisional, votes_total)
 
 # County vote-method breakdown
 res$vote_method_county %>%
   filter(office == "United States Senator", county == "Fulton") %>%
-  select(candidate, votes_advance_in_person, votes_election_day,
+  select(candidate, votes_advance_voting, votes_election_day,
          votes_absentee, votes_provisional, votes_total)
 ```
 
@@ -234,7 +234,7 @@ single `votes` + `pct`:
 
 | Column | Description |
 |---|---|
-| `votes_advance_in_person` | Advance in Person ballots |
+| `votes_advance_voting` | Advance in Person ballots |
 | `votes_election_day` | Election Day ballots |
 | `votes_absentee` | Absentee by Mail ballots |
 | `votes_provisional` | Provisional ballots |

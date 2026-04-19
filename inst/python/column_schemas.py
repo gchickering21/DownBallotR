@@ -114,7 +114,7 @@ CLARITY_VM_STATE_COLS: list[str] = [
     "state", "election_name", "election_type", "election_year", "election_date",
     "office_level", "office", "district",
     "candidate", "party",
-    "votes_advance_in_person", "votes_election_day",
+    "votes_advance_voting", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total",
     "url",
 ]
@@ -123,7 +123,7 @@ CLARITY_VM_COUNTY_COLS: list[str] = [
     "state", "election_name", "election_type", "election_year", "election_date",
     "office_level", "office", "district", "county",
     "candidate", "party",
-    "votes_advance_in_person", "votes_election_day",
+    "votes_advance_voting", "votes_election_day",
     "votes_absentee", "votes_provisional", "votes_total",
     "url",
 ]

@@ -319,11 +319,12 @@ def _parse_contest_table(panel) -> list[dict]:
     headers = [_clean(th.text_content()) for th in table.xpath(".//thead//th")]
     col_map = {h.lower(): i for i, h in enumerate(headers)}
 
-    def _get_col(cells, name: str) -> int | None:
-        idx = col_map.get(name.lower())
-        if idx is None or idx >= len(cells):
-            return None
-        return _parse_votes(_clean(cells[idx].text_content()))
+    def _get_col(cells, *names: str) -> int | None:
+        for name in names:
+            idx = col_map.get(name.lower())
+            if idx is not None and idx < len(cells):
+                return _parse_votes(_clean(cells[idx].text_content()))
+        return None
 
     results = []
     for tr in table.xpath(".//tbody/tr"):
@@ -350,7 +351,7 @@ def _parse_contest_table(panel) -> list[dict]:
         results.append({
             "candidate": candidate,
             "party":     party,
-            "votes_advance_in_person": _get_col(cells, "Advance in Person"),
+            "votes_advance_voting": _get_col(cells, "Advance in Person", "Advance Voting"),
             "votes_election_day":      _get_col(cells, "Election Day"),
             "votes_absentee":          _get_col(cells, "Absentee by Mail"),
             "votes_provisional":       _get_col(cells, "Provisional"),

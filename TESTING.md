@@ -220,7 +220,7 @@ As you test, please note anything in these categories:
 
 **Errors or crashes**
 - Did any `scrape_elections()` call return an error? Please copy the full error message.
-- Did it hang or take unexpectedly long (more than 5 minutes for a single year)?
+- Did any ever completely crash or stop at unexpected points?
 
 **Data quality**
 - Do the results look roughly correct for the state and year? (You can spot-check against a quick Google search for that election.)
@@ -233,6 +233,7 @@ As you test, please note anything in these categories:
 
 **Usability**
 - Is there data you wished the package returned but doesn't?
+- Are there built in functions you wish the package had that would make it easier to work with this data?
 - Is there a state or time period you tried that didn't work?
 - Any other suggestions for improvement?
 

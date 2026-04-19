@@ -7,8 +7,7 @@
 #' state is detected automatically from the \code{state} column when present,
 #' or from the variable name (e.g. \code{ga_results} -> "Georgia").
 #'
-#' @param df A data frame returned by \code{\link{scrape_elections}} or
-#'   \code{\link{query_elections}}.
+#' @param df A data frame returned by \code{\link{scrape_elections}}.
 #' @param state Optional two-letter state abbreviation or full state name.
 #'   Overrides auto-detection when supplied.
 #'
@@ -52,7 +51,7 @@ summarize_results <- function(df, state = NULL) {
     level_stats <- purrr::map(
       purrr::set_names(known_levels),
       function(lvl) {
-        sub <- dplyr::filter(df, office_level == lvl)
+        sub <- dplyr::filter(df, .data$office_level == lvl)
         list(
           n_elections = .count_distinct_elections(sub),
           offices     = sort(unique(sub$office))

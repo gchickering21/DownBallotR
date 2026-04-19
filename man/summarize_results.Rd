@@ -7,8 +7,7 @@
 summarize_results(df, state = NULL)
 }
 \arguments{
-\item{df}{A data frame returned by \code{\link{scrape_elections}} or
-\code{\link{query_elections}}.}
+\item{df}{A data frame returned by \code{\link{scrape_elections}}.}
 
 \item{state}{Optional two-letter state abbreviation or full state name.
 Overrides auto-detection when supplied.}

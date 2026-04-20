@@ -45,3 +45,4 @@ TESTING.md
 ^cran-comments\.md$
 ^doc$
 aggregation_stats.R
+total_aggregation_stats.R

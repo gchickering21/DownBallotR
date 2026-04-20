@@ -3,7 +3,7 @@ library(DownBallotR)
 
 # ---- user inputs ----
 #election_stats/colorado/
-folder_path <- "data/northcarolina"
+folder_path <- "data/georgia"
 file_pattern <- "\\.csv$"
 
 # ---- get all files ----
@@ -56,7 +56,3 @@ state_result <- run_summary(state_data)
 county_result <- run_summary(county_data)
 precinct_result <- run_summary(precinct_data)
 
-# ---- optional: inspect ----
-print(state_result)
-print(county_result)
-print(precinct_result)

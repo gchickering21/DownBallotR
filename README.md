@@ -23,7 +23,7 @@ pak::pak("gchickering21/Downballot")
 
 `DownBallotR` requires a one-time Python setup and exposes all data retrieval
 through a single function, `scrape_elections()`. The appropriate backend scraper
-is selected **automatically** based on the `state` and `office` arguments — no
+is selected **automatically** based on the `state` and `level` arguments — no
 need to specify a source by name.
 
 | `state` | Scraper | Coverage |

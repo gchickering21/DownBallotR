@@ -21,6 +21,26 @@ supported state and level. **Not every column is present for every state** — t
 schema depends on the underlying source. Each section below covers one source,
 with a table per output level.
 
+## Data Sources
+
+| State(s) | Source | URL |
+|---|---|---|
+| Connecticut | CT Election Management System (CTEMS) | <https://ctemspublic.tgstg.net/#/home> |
+| Georgia | Georgia Secretary of State (Clarity) | <https://results.sos.ga.gov/results/public/Georgia> |
+| Indiana | Indiana Election Division | <https://www.in.gov/sos/elections/election-commission/election-results/> |
+| Louisiana | Louisiana Secretary of State | <https://voterportal.sos.la.gov/Graphical> |
+| North Carolina | NC State Board of Elections | <https://www.ncsbe.gov/results-data/election-results/historical-election-results-data> |
+| Utah | Utah Elections Portal (Clarity) | <https://electionresults.utah.gov/results/public/Utah> |
+| Colorado | Colorado ElectionStats | <https://co.elstats2.civera.com/eng/contests> |
+| Idaho | Idaho ElectionStats | <https://canvass.sos.idaho.gov/eng/contests> |
+| Massachusetts | Massachusetts ElectionStats | <https://electionstats.state.ma.us/elections> |
+| New Hampshire | New Hampshire ElectionStats | <https://nh.electionstats.com/elections> |
+| New Mexico | New Mexico ElectionStats | <https://electionstats.sos.nm.gov> |
+| New York | New York ElectionStats | <https://results.elections.ny.gov> |
+| South Carolina | South Carolina ElectionStats | <https://electionhistory.scvotes.gov> |
+| Vermont | Vermont ElectionStats | <https://electionarchive.vermont.gov/elections> |
+| Virginia | Virginia ElectionStats | <https://historical.elections.virginia.gov> |
+
 ---
 
 ## Connecticut

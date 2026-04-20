@@ -186,6 +186,9 @@ scrape_elections <- function(
   source <- .route_to_source(state)
   label  <- .source_label(source, state)
 
+  # ── Large year-range guard ────────────────────────────────────────────────
+  .check_year_span(year_from, year_to, source)
+
   # ── Argument compatibility ────────────────────────────────────────────────
   valid_levels <- .SOURCE_LEVELS[[source]]
   if (!level %in% valid_levels)

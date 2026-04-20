@@ -34,6 +34,17 @@
 .USES_MAX_WORKERS <- c("georgia_results", "utah_results",
                         "connecticut_results", "louisiana_results")
 
+# Earliest confirmed year per source — used to estimate span when year_from is NULL
+.SCRAPER_MIN_YEARS <- c(
+  election_stats        = 1789L,
+  northcarolina_results = 2000L,
+  connecticut_results   = 2016L,
+  georgia_results       = 2000L,
+  utah_results          = 2023L,
+  indiana_results       = 2019L,
+  louisiana_results     = 1982L
+)
+
 # Maps canonical state names to their dedicated source (checked before ElectionStats)
 .STATE_ROUTES <- c(
   "North Carolina" = "northcarolina_results",
@@ -67,6 +78,51 @@
   if (!is.null(state) && state %in% names(.STATE_ROUTES))
     return(unname(.STATE_ROUTES[state]))
   "election_stats"
+}
+
+
+#' Warn or prompt when a year range exceeds the threshold
+#'
+#' In interactive sessions the user is asked to confirm; in non-interactive
+#' sessions (Rscript, knitr, batch jobs) an error is raised immediately so
+#' accidental large scrapes are blocked.
+#' @keywords internal
+.check_year_span <- function(year_from, year_to, source, threshold = 5L) {
+  current_year   <- as.integer(format(Sys.Date(), "%Y"))
+  effective_from <- if (!is.null(year_from)) year_from else .SCRAPER_MIN_YEARS[[source]]
+  effective_to   <- if (!is.null(year_to))   year_to   else current_year
+  span           <- effective_to - effective_from + 1L
+
+  if (span <= threshold) return(invisible(NULL))
+
+  label <- .source_label(source)
+
+  if (!interactive()) {
+    stop(
+      sprintf(
+        "Year range spans %d years (%d\u2013%d) for %s.\n",
+        span, effective_from, effective_to, label
+      ),
+      "  Requests over ", threshold, " years are not allowed in non-interactive sessions.\n",
+      "  Narrow the range with year_from / year_to, or run interactively to confirm.",
+      call. = FALSE
+    )
+  }
+
+  message(sprintf(
+    paste0(
+      "\nNote: you are requesting %d years of data (%d\u2013%d) for %s.\n",
+      "Large requests can take a long time and place significant load on the\n",
+      "data source. Consider narrowing the range with year_from / year_to."
+    ),
+    span, effective_from, effective_to, label
+  ))
+
+  answer <- trimws(readline("Continue? [y/N]: "))
+  if (!tolower(answer) %in% c("y", "yes"))
+    stop("Scrape cancelled.", call. = FALSE)
+
+  invisible(NULL)
 }
 
 

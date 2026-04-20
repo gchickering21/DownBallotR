@@ -205,6 +205,141 @@ ut <- scrape_elections(state = "UT", year_from = 2024, year_to = 2024)
 
 ---
 
+## Step 5: Summarizing and auditing results with `summarize_results()`
+
+### What it does
+
+`summarize_results()` takes any data frame already in your environment from `scrape_elections()` and prints a formatted summary of what's in it. It returns a named list with:
+
+| Field | Description |
+|---|---|
+| `state` | State name, auto-detected from the data or variable name |
+| `years` | Vector of election years present |
+| `n_years` | Number of distinct years |
+| `n_elections` | Number of distinct races/elections |
+| `n_candidates` | Number of distinct candidate names |
+| `office_level_breakdown` | Count of elections by Federal / State / Local |
+| `offices_by_level` | List of unique office names at each level |
+
+### Basic usage
+
+After running any `scrape_elections()` call, pass the resulting data frame (or the state/county/precinct sub-frame) directly to `summarize_results()`:
+
+```r
+co <- scrape_elections(state = "colorado", year_from = 2022, year_to = 2022)
+
+summarize_results(co$state)
+summarize_results(co$county)
+```
+
+For states that return a flat data frame rather than a list (e.g. when `level = "state"` is set):
+
+```r
+ma <- scrape_elections(state = "massachusetts", year_from = 2022, year_to = 2022, level = "state")
+summarize_results(ma)
+```
+
+You can also summarize across multiple years at once — just scrape a wider range and pass the result:
+
+```r
+nc <- scrape_elections(state = "NC", year_from = 2020, year_to = 2024)
+summarize_results(nc$state)
+```
+
+---
+
+### Reviewing the office-level breakdown
+
+The most important thing to check in the summary output is whether offices are being classified correctly as Federal, State, or Local. Here is what to expect for a few states:
+
+**Colorado 2022 (state-level data):**
+
+| Level | Expected offices |
+|---|---|
+| Federal | U.S. Senate, U.S. Representative (multiple districts) |
+| State | Governor, Lieutenant Governor, Attorney General, Secretary of State, State Auditor, State Treasurer, State Board of Education, State Senate, State Representative, Supreme Court |
+| Local | District Attorney |
+
+Watch for:
+- `State Representative` and `State Senate` (district-numbered) should be **State**, not Local
+- `District Attorney` in Colorado is a **Local** office (county-level, not statewide)
+- `State Board of Education` and `Regent of the University of Colorado` should be **State**
+
+**North Carolina:**
+
+NC House and NC Senate entries appear in the data as `NC HOUSE (10)`, `NC SENATE (42)`, etc. These should classify as **State**. If you see them falling into Local, that is a bug worth reporting.
+
+**Georgia:**
+
+- `U.S. Senate` and `U.S. Representative` → Federal
+- `Governor`, `Lieutenant Governor`, `Attorney General`, `Secretary of State`, `State Senate`, `State House` → State
+- `Sheriff`, `County Commissioner`, `Probate Judge`, `School Board` → Local
+
+If you see `Sheriff` or `County Commissioner` showing up as State, or `Governor` as Local, please flag it.
+
+**Things that commonly go wrong:**
+
+- Offices with the word "District" in the name (e.g., `District Court Judge`) can sometimes be misclassified — check that they land in State, not Local
+- County-level judiciary (e.g., `Probate Judge`, `Magistrate`) should be Local
+- Multi-state data frames may show `"Unknown"` as the state if the `state` column is missing — pass `state = "CO"` explicitly to override
+
+---
+
+### Suggested additional statistics to add
+
+The following would be useful additions to `summarize_results()` or companion functions:
+
+**1. Uncontested race count**
+Count races where only one candidate appeared. High uncontested rates in Local offices are normal but worth flagging.
+
+```r
+df |>
+  group_by(office_level, office, district, election_year) |>
+  summarise(n_candidates = n_distinct(candidate), .groups = "drop") |>
+  filter(n_candidates == 1) |>
+  count(office_level, name = "n_uncontested")
+```
+
+**2. Average winner margin by level**
+Useful for sanity-checking that vote shares look plausible (e.g., winners with > 100% share would indicate a parsing bug).
+
+```r
+df |>
+  filter(winner == TRUE) |>
+  summarise(avg_vote_pct = mean(vote_pct, na.rm = TRUE), .by = office_level)
+```
+
+**3. Offices with suspiciously low total votes**
+Local races with very few total votes (e.g., < 10) may indicate a parsing issue rather than a real contest.
+
+```r
+df |>
+  group_by(office_level, office, district, election_year) |>
+  summarise(total_votes = sum(votes, na.rm = TRUE), .groups = "drop") |>
+  filter(total_votes < 50) |>
+  arrange(total_votes)
+```
+
+**4. Year-over-year election count**
+Useful when you pull multiple years to check that coverage is consistent.
+
+```r
+df |>
+  distinct(election_year, office_level, office, district) |>
+  count(election_year, office_level, name = "n_races") |>
+  arrange(election_year, office_level)
+```
+
+**5. Party breakdown**
+Check that party labels are being normalized (e.g., no raw strings like `"DEM"` or `"dem"` mixing with `"Democratic"`).
+
+```r
+df |>
+  count(party, sort = TRUE)
+```
+
+---
+
 ## What to look for
 
 As you test, please note anything in these categories:

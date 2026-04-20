@@ -102,9 +102,9 @@ No data is bundled with the package or hosted by the maintainers. **Note:** We a
 **Current Coverage:** 15 US states. Historical depth varies from 1789
 (Vermont, Virginia) to 2019(Indiana) to the present.
 
-**What the data is:** Vote totals by candidate and contest at the statewide,
+**What the data is:** Vote totals and counts by candidate and contest at the statewide,
 county/parish/town, or precinct level, depending on source and the `level`
-argument.
+argument. Some states (such as Georgia, North Carolina) contain voting methods counts as well. 
 
 **What the data is not:** Certified results. Data should be verified against
 the original source before publication or high-stakes use.

@@ -54,7 +54,8 @@ _FEDERAL_RE = re.compile(
     r"|us\s+house"
     r"|u\.?\s*s\.?\s+house"
     r"|congressman|congresswoman"
-    r"|congressional",
+    r"|congressional"
+    r"|us\s+congress(?:\s+district\s+\d+)?",
     re.IGNORECASE,
 )
 
@@ -82,6 +83,8 @@ _STATE_RE = re.compile(
     r"|general\s+assembly"
     r"|house\s+of\s+representatives"       # catches "NC House of Representatives"
     r"|state\s+senate"
+    r"|nc\s+house(?:\s*\(\d+\))?"         # NC HOUSE, NC HOUSE (10), NC HOUSE (102)
+    r"|nc\s+senate(?:\s*\(\d+\))?"        # NC SENATE, NC SENATE (10), NC SENATE (102)
 
     # Courts (state level)
     r"|supreme\s+court"

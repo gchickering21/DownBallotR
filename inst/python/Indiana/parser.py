@@ -53,11 +53,18 @@ def _fix_winners(df: pd.DataFrame, group_cols: list[str], col: str = "winner") -
 
 
 _JURISDICTION_RE = re.compile(r'^(.+?\s+(?:County|Township|Town|City))\b', re.IGNORECASE)
+_OF_JURISDICTION_RE = re.compile(r'\bOf\s+(.+)$', re.IGNORECASE)
 
 def _extract_jurisdiction(office_title: str) -> "str | None":
     """Extract a leading jurisdiction name (e.g. 'Bartholomew County') from OFFICE_TITLE."""
     m = _JURISDICTION_RE.match(office_title)
     return m.group(1).strip() if m else None
+
+
+def _extract_of_jurisdiction(office_title: str) -> "str | None":
+    """Extract jurisdiction from 'Mayor Of Decatur' style titles → 'Decatur'."""
+    m = _OF_JURISDICTION_RE.search(office_title)
+    return m.group(1).strip() or None if m else None
 
 
 def _extract_district(office_title: str) -> "str | None":
@@ -156,7 +163,10 @@ def parse_state_results(
 
     for race in _ensure_list(summary.get("Race")):
         office_title = race.get("OFFICE_TITLE", "")
-        district     = _extract_district(office_title) or (office_level == "Local" and _extract_jurisdiction(office_title)) or None
+        district     = (_extract_district(office_title)
+                        or (office_level == "Local" and _extract_jurisdiction(office_title))
+                        or (office_level == "Local" and _extract_of_jurisdiction(office_title))
+                        or None)
         num_seats    = _safe_int(race.get("NumofSeats", 1))
 
         for cand in _ensure_list(race.get("Candidates", {}).get("Candidate")):
@@ -231,7 +241,10 @@ def parse_county_results(
 
         for race in races:
             office_title = race.get("OFFICE_TITLE", "")
-            district     = _extract_district(office_title) or (office_level == "Local" and _extract_jurisdiction(office_title)) or None
+            district     = (_extract_district(office_title)
+                            or (office_level == "Local" and _extract_jurisdiction(office_title))
+                            or (office_level == "Local" and _extract_of_jurisdiction(office_title))
+                            or None)
             num_seats    = _safe_int(race.get("NumofSeats", 1))
 
             for cand in _ensure_list(race.get("Candidates", {}).get("Candidate")):

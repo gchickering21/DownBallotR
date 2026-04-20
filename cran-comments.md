@@ -6,26 +6,17 @@
 0 errors | 0 warnings | 0 notes
 
 ### Windows (win-builder, R 4.5.3 / x86_64-w64-mingw32)
-0 errors | 0 warnings | 1 notes (see Notes section below)
+0 errors | 0 warnings | 2 notes (see Notes section below)
 
-### Windows (win-builder, R-devel / x86_64-w64-mingw32)
-0 errors | 0 warnings | 1 note (see Notes section below)
-
-### Windows (win-builder, R 4.4.3 Patched / x86_64-w64-mingw32, old-release)
-0 errors | 0 warnings | 1 note (see Notes section below)
-
-### R-hub (linux, macos, macos-arm64, m1-san, windows, atlas)
-0 errors | 0 warnings | 0 notes
+### Debian (CRAN incoming pretest, R-devel)
+0 errors | 0 warnings | 3 notes (see Notes section below)
 
 ## Notes
 
 ### "New submission"
-This is a new submission, so the NOTE is expected:
+This is the first submission of this package to CRAN.
 
-* checking CRAN incoming feasibility ... NOTE
-  Maintainer: 'Graham Chickering <grahamchickering@gmail.com>'
-  New submission
-  
+
 ## Motivation for the R + Python design
 
 State and local election data is published through a wide variety of government

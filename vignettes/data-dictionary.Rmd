@@ -435,10 +435,10 @@ coverage varies by state. Precinct-level data available for ID, NM, SC, and VA.
 Each source has its own vignette with argument reference, worked examples, and
 performance notes:
 
-- `vignette("connecticut", package = "DownBallotR")`
-- `vignette("georgia", package = "DownBallotR")`
-- `vignette("indiana", package = "DownBallotR")`
-- `vignette("louisiana", package = "DownBallotR")`
-- `vignette("north-carolina", package = "DownBallotR")`
-- `vignette("utah", package = "DownBallotR")`
-- `vignette("election-stats", package = "DownBallotR")`
+- [Connecticut](connecticut.html)
+- [Georgia](georgia.html)
+- [Indiana](indiana.html)
+- [Louisiana](louisiana.html)
+- [North Carolina](north-carolina.html)
+- [Utah](utah.html)
+- [ElectionStats states (VA, MA, CO, NH, ID, SC, NM, NY, VT)](election-stats.html)

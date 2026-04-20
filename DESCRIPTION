@@ -34,6 +34,7 @@ SystemRequirements: Python (>= 3.10), pip
 Depends:
     R (>= 4.1.0)
 Imports:
+    purrr,
     reticulate,
     rlang
 Suggests:

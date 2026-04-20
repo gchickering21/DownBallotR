@@ -186,9 +186,6 @@ scrape_elections <- function(
   source <- .route_to_source(state)
   label  <- .source_label(source, state)
 
-  # ── Large year-range guard ────────────────────────────────────────────────
-  .check_year_span(year_from, year_to, source)
-
   # ── Argument compatibility ────────────────────────────────────────────────
   valid_levels <- .SOURCE_LEVELS[[source]]
   if (!level %in% valid_levels)
@@ -216,6 +213,9 @@ scrape_elections <- function(
 
   if (.max_workers_supplied && !source %in% .USES_MAX_WORKERS)
     stop("'max_workers' is not applicable for ", label, ".", call. = FALSE)
+
+  # ── Large year-range guard ────────────────────────────────────────────────
+  .check_year_span(year_from, year_to, source)
 
   # ── Availability info + unconfirmed-year notice ───────────────────────────
   .emit_availability(source, state, year_to)

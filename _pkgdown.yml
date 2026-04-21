@@ -27,12 +27,12 @@ articles:
   - title: Getting started
     navbar: ~
     contents:
-      - python-setup
+      - articles/python-setup
       - articles/beta-testing
   - title: Using the package
     navbar: ~
     contents:
-      - scraping-data
+      - articles/scraping-data
   - title: Scraper reference
     navbar: ~
     contents:
@@ -46,5 +46,5 @@ articles:
   - title: About the data
     navbar: ~
     contents:
-      - data-dictionary
-      - datasheet
+      - articles/data-dictionary
+      - articles/datasheet

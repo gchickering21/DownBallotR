@@ -77,11 +77,6 @@ during automated or CRAN checks. Tests that do not require Python (input
 validation, state normalization utilities, mocked reticulate bindings) run
 unconditionally and cover the package's pure-R logic.
 
-## Vignettes
-
-All vignette code chunks that invoke scrapers or require Python are set to
-`eval=FALSE`. Vignettes are pre-built and included in `inst/doc`.
-
 ## inst/python
 
 The `inst/python/` directory contains the Python scraper modules loaded at

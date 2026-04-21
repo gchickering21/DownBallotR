@@ -40,6 +40,52 @@ from date_utils import year_to_date_range
 from column_schemas import LA_STATE_COLS, LA_PARISH_COLS, finalize_df, compute_vote_pct
 
 
+_LA_CONTEST_ID = ["election_name", "election_year", "election_date", "office", "district"]
+
+
+def _supplement_state_from_parish(
+    state_df: pd.DataFrame,
+    parish_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Append statewide aggregates for contests present in parish_df but absent from state_df.
+
+    The statewide tabs only show races the SOS chose to display there.
+    Local races that appear on parish pages but not any statewide tab would
+    otherwise be silently missing from state output.
+    """
+    if parish_df.empty:
+        return state_df
+
+    present = [c for c in _LA_CONTEST_ID if c in parish_df.columns]
+
+    if state_df.empty:
+        missing_parish = parish_df
+    else:
+        state_keys = set(
+            map(tuple, state_df[present].drop_duplicates().values.tolist())
+        )
+        mask = ~parish_df[present].apply(lambda r: tuple(r), axis=1).isin(state_keys)
+        missing_parish = parish_df[mask]
+
+    if missing_parish.empty:
+        return state_df
+
+    group_cols = [
+        c for c in
+        ["election_name", "election_year", "election_date",
+         "office_level", "office", "district", "candidate", "party"]
+        if c in missing_parish.columns
+    ]
+    agg = missing_parish.groupby(group_cols, as_index=False, dropna=False)["votes"].sum()
+
+    contest_cols = [c for c in _LA_CONTEST_ID if c in agg.columns]
+    agg = compute_vote_pct(agg, contest_cols)
+    max_votes = agg.groupby(contest_cols, dropna=False)["votes"].transform("max")
+    agg["winner"] = agg["votes"] == max_votes
+
+    return concat_or_empty([state_df, agg])
+
+
 class LaElectionPipeline:
     """Two-phase pipeline for Louisiana SOS Graphical election results.
 
@@ -353,18 +399,26 @@ class LaElectionPipeline:
                     stacklevel=3,
                 )
 
-        _state_raw  = compute_vote_pct(
-            concat_or_empty(state_frames),
-            ["election_name", "election_year", "election_date", "office", "district"],
-            fill_missing_only=True,
-        )
         _parish_raw = compute_vote_pct(
             concat_or_empty(parish_frames),
             ["election_name", "election_year", "election_date", "office", "district", "parish"],
             fill_missing_only=True,
         )
-        state_all  = finalize_df(_state_raw,  LA_STATE_COLS,  state="LA")
-        parish_all = finalize_df(_parish_raw, LA_PARISH_COLS, state="LA")
+
+        _state_supplemented = _supplement_state_from_parish(
+            compute_vote_pct(
+                concat_or_empty(state_frames),
+                ["election_name", "election_year", "election_date", "office", "district"],
+                fill_missing_only=True,
+            ),
+            _parish_raw,
+        )
+        _n_supplemented = len(_state_supplemented) - sum(len(f) for f in state_frames)
+        if _n_supplemented > 0:
+            print(f"[LA]   Supplemented state_df with {_n_supplemented:,} row(s) aggregated from parish data.")
+
+        state_all  = finalize_df(_state_supplemented, LA_STATE_COLS,  state="LA")
+        parish_all = finalize_df(_parish_raw,         LA_PARISH_COLS, state="LA")
 
         print(
             f"[LA] Done. {len(state_all):,} total state rows, {len(parish_all):,} total parish rows."

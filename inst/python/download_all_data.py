@@ -445,12 +445,15 @@ def download_election_stats(
         has_precinct = s in ELECTION_STATS_PRECINCT_STATES
 
         print(f"\n[{label}]")
-        state_ok  = _is_valid_csv(state_path)
-        county_ok = (not has_county) or _is_valid_csv(county_path)
-        if state_ok and county_ok:
+        state_ok    = _is_valid_csv(state_path)
+        county_ok   = (not has_county)   or _is_valid_csv(county_path)
+        precinct_ok = (not has_precinct) or _is_valid_csv(precinct_path)
+        if state_ok and county_ok and precinct_ok:
             files = f"{stem}_state.csv"
             if has_county:
                 files += f", {stem}_county.csv"
+            if has_precinct:
+                files += f", {stem}_precinct.csv"
             print(f"  ↷ already exists, skipping: {files}")
             return True
 

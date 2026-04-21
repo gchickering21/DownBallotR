@@ -53,6 +53,58 @@ _CONTEST_ID = [
 ]
 
 
+def _supplement_county_from_precinct(
+    county_df: pd.DataFrame,
+    precinct_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Append county aggregates for contests present in precinct_df but absent from county_df.
+
+    Mirrors _supplement_state_from_county one level down: precincts are grouped
+    to county so that county→state supplementation can pick them up in turn.
+    """
+    if precinct_df.empty:
+        return county_df
+
+    present = [c for c in _CONTEST_ID if c in precinct_df.columns]
+
+    if county_df.empty:
+        missing_precinct = precinct_df
+    else:
+        county_keys = set(
+            map(tuple, county_df[present].drop_duplicates().values.tolist())
+        )
+        mask = ~precinct_df[present].apply(lambda r: tuple(r), axis=1).isin(county_keys)
+        missing_precinct = precinct_df[mask]
+
+    if missing_precinct.empty:
+        return county_df
+
+    group_cols = [
+        c for c in
+        ["election_name", "election_type", "election_year", "election_date",
+         "office_level", "office", "district", "county", "candidate", "party"]
+        if c in missing_precinct.columns
+    ]
+    agg = missing_precinct.groupby(group_cols, as_index=False, dropna=False)["votes"].sum()
+
+    # vote_pct and county_winner are computed per contest+county.
+    contest_county_cols = [c for c in _CONTEST_ID + ["county"] if c in agg.columns]
+    agg = compute_vote_pct(agg, contest_county_cols)
+    max_votes = agg.groupby(contest_county_cols, dropna=False)["votes"].transform("max")
+    agg["county_winner"] = agg["votes"] == max_votes
+
+    if "url" in missing_precinct.columns:
+        url_map = (
+            missing_precinct
+            .groupby(contest_county_cols, dropna=False)["url"]
+            .first()
+            .reset_index()
+        )
+        agg = agg.merge(url_map, on=contest_county_cols, how="left")
+
+    return concat_or_empty([county_df, agg])
+
+
 def _supplement_state_from_county(
     state_df: pd.DataFrame,
     county_df: pd.DataFrame,
@@ -510,16 +562,24 @@ class ClarityPipeline:
             self._p(f"Done. {len(precinct_df):,} total precinct rows.")
             return precinct_df
 
+        _county_raw = _supplement_county_from_precinct(
+            concat_or_empty(county_frames),
+            concat_or_empty(precinct_frames),
+        )
+        _n_county_supplemented = len(_county_raw) - sum(len(f) for f in county_frames)
+        if _n_county_supplemented > 0:
+            self._p(f"  Supplemented county_df with {_n_county_supplemented:,} row(s) aggregated from precinct data.")
+
         _state_raw  = _supplement_state_from_county(
             concat_or_empty(state_frames),
-            concat_or_empty(county_frames),
+            _county_raw,
         )
         _n_supplemented = len(_state_raw) - sum(len(f) for f in state_frames)
         if _n_supplemented > 0:
             self._p(f"  Supplemented state_df with {_n_supplemented:,} row(s) aggregated from county data.")
 
-        state_df     = finalize_df(_state_raw,                           CLARITY_STATE_COLS,    state=self.state_abbrev)
-        county_df    = finalize_df(concat_or_empty(county_frames),       CLARITY_COUNTY_COLS,   state=self.state_abbrev)
+        state_df     = finalize_df(_state_raw,   CLARITY_STATE_COLS,  state=self.state_abbrev)
+        county_df    = finalize_df(_county_raw,  CLARITY_COUNTY_COLS, state=self.state_abbrev)
         vm_state_df  = finalize_df(concat_or_empty(vm_state_frames),  CLARITY_VM_STATE_COLS, state=self.state_abbrev)
         vm_county_df = finalize_df(concat_or_empty(vm_county_frames), CLARITY_VM_COUNTY_COLS, state=self.state_abbrev)
 

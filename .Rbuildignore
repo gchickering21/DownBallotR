@@ -44,5 +44,7 @@ TESTING.md
 ^CRAN-SUBMISSION$
 ^cran-comments\.md$
 ^doc$
+
 aggregation_stats.R
-total_aggregation_stats.R
+total_aggergation_stats.R
+compare_election_levels.R

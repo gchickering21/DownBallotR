@@ -12,9 +12,52 @@ Public entry points
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from Clarity.pipeline import get_clarity_election_results
+
+# Matches a geographic sub-qualifier trailing the office name after the
+# base office type.  These are sub-area or school-district names that the
+# Utah SOS site appends to the contest title, e.g.:
+#   "School Board Alpine"        → base="School Board",  geo="Alpine"
+#   "County Council Logan"       → base="County Council", geo="Logan"
+#   "Cache Water District North" → base="Cache Water District", geo="North"
+_UT_GEO_SUFFIX_RE = re.compile(
+    r"^(School Board|County Council|Cache Water District)\s+(.+)$",
+    re.I,
+)
+
+
+def _normalize_ut_office_district(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract trailing geographic sub-qualifiers from Utah office names.
+
+    When a geographic sub-area name is appended to the base office
+    (e.g. 'School Board Alpine'), move it to the district column,
+    prepending to any existing district value:
+      office='School Board Alpine', district='District 3'
+        → office='School Board',    district='Alpine, District 3'
+    """
+    if df.empty or "office" not in df.columns:
+        return df
+
+    df = df.copy()
+    m = df["office"].str.extract(_UT_GEO_SUFFIX_RE, expand=True)
+    matched = m[0].notna()
+    if not matched.any():
+        return df
+
+    base_office = m.loc[matched, 0]
+    geo_suffix  = m.loc[matched, 1]
+    existing    = df.loc[matched, "district"].fillna("").str.strip()
+
+    df.loc[matched, "office"]    = base_office
+    df.loc[matched, "district"]  = geo_suffix.str.strip().where(
+        existing == "",
+        geo_suffix.str.strip() + ", " + existing,
+    )
+    return df
 
 
 def _drop_is_incumbent(result):
@@ -73,4 +116,9 @@ def get_ut_election_results(
         level=level,
         max_county_workers=max_county_workers,
     )
-    return _drop_is_incumbent(result)
+    result = _drop_is_incumbent(result)
+    if isinstance(result, pd.DataFrame):
+        return _normalize_ut_office_district(result)
+    if isinstance(result, dict):
+        return {k: _normalize_ut_office_district(v) for k, v in result.items()}
+    return result

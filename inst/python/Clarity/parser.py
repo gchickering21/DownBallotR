@@ -108,7 +108,7 @@ _PARTY_FOR_RE     = re.compile(r"^\w+\s+for\s+", re.I)
 #   "State House District 75"  /  "State House Dist 68"
 #   "State House 172 (Special)"  /  "State Senate 11 (Special)"
 _OFFICE_DISTRICT_RE = re.compile(
-    r"\s*(?:-\s*)?(?:District|Dist\.?)\s+(\d+)(\s*\([^)]+\))?\s*$"
+    r"\s*(?:-\s*)?(?:District|Dist\.?)\s+#?\s*(\d+)(\s*\([^)]+\))?\s*$"
     r"|"
     r"\s+(\d+)(\s*\([^)]+\))?\s*$",
     re.I,

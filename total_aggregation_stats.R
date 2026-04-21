@@ -23,8 +23,9 @@ files_tbl <- tibble(path = file_paths) %>%
     file_name = basename(path),
     state_folder = basename(dirname(path)),
     geography = case_when(
+      str_detect(file_name, regex("vote_method", ignore_case = TRUE)) ~ NA_character_,
       str_detect(file_name, regex("precinct|pct", ignore_case = TRUE)) ~ "precinct",
-      str_detect(file_name, regex("county", ignore_case = TRUE)) ~ "county",
+      str_detect(file_name, regex("county|parish|town", ignore_case = TRUE)) ~ "county",
       str_detect(file_name, regex("state", ignore_case = TRUE)) ~ "state",
       TRUE ~ NA_character_
     )
@@ -34,7 +35,7 @@ files_tbl <- tibble(path = file_paths) %>%
 # ---- helper to read + bind ----
 read_and_bind <- function(files) {
   if (length(files) == 0) return(NULL)
-  
+
   map_dfr(
     files,
     ~ readr::read_csv(.x, show_col_types = FALSE) %>%
@@ -51,7 +52,7 @@ run_summary <- function(df) {
 # ---- helper to flatten summarize_results output into one row ----
 flatten_summary <- function(summary_obj, state_folder, geography) {
   if (is.null(summary_obj)) return(NULL)
-  
+
   tibble(
     state_folder = state_folder,
     geography = geography,
@@ -118,7 +119,19 @@ totals_by_geography <- summary_by_group %>%
     .groups = "drop"
   )
 
+# ---- elections by state x geography ----
+elections_by_level <- summary_by_group %>%
+  filter(geography %in% c("state", "county", "precinct")) %>%
+  select(state_folder, geography, n_elections) %>%
+  pivot_wider(
+    names_from  = geography,
+    values_from = n_elections,
+    names_prefix = "n_elections_"
+  ) %>%
+  arrange(state_folder)
+
 # ---- inspect ----
 print(summary_by_group)
 print(grand_totals)
 print(totals_by_geography)
+print(elections_by_level)

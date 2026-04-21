@@ -3,7 +3,7 @@ library(DownBallotR)
 
 # ---- user inputs ----
 #election_stats/colorado/
-folder_path <- "data/georgia"
+folder_path <- "data/election_stats/idaho"
 file_pattern <- "\\.csv$"
 
 # ---- get all files ----
@@ -33,7 +33,7 @@ precinct_files <- file_paths[
 # ---- helper to read + bind ----
 read_and_bind <- function(files) {
   if (length(files) == 0) return(NULL)
-  
+
   files %>%
     set_names() %>%
     map_dfr(~ readr::read_csv(.x, show_col_types = FALSE) %>%

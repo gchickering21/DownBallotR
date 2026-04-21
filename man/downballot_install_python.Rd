@@ -27,6 +27,10 @@ the function will error if Chromium is missing; set
 
 \item{quiet}{If TRUE, suppress progress messages.}
 }
+\value{
+Called for side effects. Returns \code{invisible(TRUE)} on success,
+or \code{invisible(FALSE)} if the user declines the Chromium download.
+}
 \description{
 Creates/uses a named virtual environment and installs Python requirements
 (pandas, requests, lxml, bs4, playwright), then installs Playwright Chromium.

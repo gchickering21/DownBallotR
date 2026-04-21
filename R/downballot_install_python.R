@@ -282,6 +282,8 @@ db_install_plan <- function(pkgs, reinstall = FALSE, install_chromium = TRUE) {
 #'   the function will error if Chromium is missing; set
 #'   \code{install_chromium = FALSE} to suppress this.
 #' @param quiet If TRUE, suppress progress messages.
+#' @return Called for side effects. Returns \code{invisible(TRUE)} on success,
+#'   or \code{invisible(FALSE)} if the user declines the Chromium download.
 #' @export
 downballot_install_python <- function(
     envname = "downballotR",

@@ -31,7 +31,7 @@ state is detected automatically from the \code{state} column when present,
 or from the variable name (e.g. \code{ga_results} -> "Georgia").
 }
 \examples{
-\dontrun{
+\donttest{
 ga_results <- scrape_elections("GA", 2020, 2024)
 summarize_results(ga_results)
 }

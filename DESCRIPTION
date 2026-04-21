@@ -15,13 +15,13 @@ Authors@R: c(
         role = "ctb"
     )
   )
-Description: Provides an R interface for downloading and standardizing
+Description: Provides an 'R' interface for downloading and standardizing
     election data to support research workflows. Election results are
     published by states through heterogeneous and often dynamic web
     interfaces that are not consistently accessible through existing
-    R packages or APIs. To address this, the package wraps state-specific
-    Python web scrapers through the 'reticulate' package, enabling access
-    to dynamic content while exposing consistent R functions for querying
+    'R' packages or APIs. To address this, the package wraps state-specific
+    'Python' web scrapers through the 'reticulate' package, enabling access
+    to dynamic content while exposing consistent 'R' functions for querying
     election availability and results across jurisdictions. The package is intended
     for responsible use and relies on publicly accessible election result pages.
 License: Apache License (>= 2.0)
@@ -45,7 +45,6 @@ Suggests:
     rmarkdown,
     testthat (>= 3.0.0),
     withr
-VignetteBuilder: knitr
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3

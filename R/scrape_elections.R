@@ -84,7 +84,7 @@
 #'   (e.g. \code{ga_state}, \code{ga_county}) when \code{level = "all"}.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' # General election results — Virginia
 #' df <- scrape_elections(state = "virginia", year_from = 2023, year_to = 2023,
 #'                        level = "state")

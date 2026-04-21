@@ -54,7 +54,7 @@ db_list_states <- function(source = NULL) {
 #'   \code{start_year}, and \code{end_year}.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' # All sources
 #' db_available_years()
 #'

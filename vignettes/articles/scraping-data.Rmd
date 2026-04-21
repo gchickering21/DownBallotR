@@ -1,10 +1,6 @@
 ---
 title: "Scraping election data with DownBallotR"
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Scraping election data with DownBallotR}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include=FALSE, purl=FALSE}

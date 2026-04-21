@@ -20,7 +20,7 @@ scraper source tracked by DownBallotR. All sources include data through the
 current calendar year.
 }
 \examples{
-\dontrun{
+\donttest{
 # All sources
 db_available_years()
 

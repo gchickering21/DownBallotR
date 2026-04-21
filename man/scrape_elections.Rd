@@ -101,7 +101,7 @@ Louisiana Secretary of State scraper (1982–present).
 }
 }
 \examples{
-\dontrun{
+\donttest{
 # General election results — Virginia
 df <- scrape_elections(state = "virginia", year_from = 2023, year_to = 2023,
                        level = "state")

@@ -186,6 +186,12 @@ db_python_status_advice <- function(
 
 # ---- printing (S3) ----
 
+#' Print a downballot_python_status object
+#'
+#' @param x A \code{downballot_python_status} object.
+#' @param ... Further arguments passed to or from other methods (unused).
+#' @return Invisibly returns \code{x}, the \code{downballot_python_status}
+#'   object passed in, following the S3 print method convention.
 #' @export
 print.downballot_python_status <- function(x, ...) {
   cat("\n downballotR Python status\n")

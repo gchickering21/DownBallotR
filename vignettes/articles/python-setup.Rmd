@@ -1,10 +1,6 @@
 ---
 title: "Python setup for DownBallotR"
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Python setup for DownBallotR}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
 ---
 
 ```{r, include=FALSE, purl=FALSE}

@@ -216,9 +216,25 @@ classify_local_office <- function(office) {
   NA_character_
 }
 
+# ---- key columns needed for local office analysis ----
+local_key_cols <- c(
+  "state", "election_year", "election_date",
+  "office_level", "office", "district",
+  "candidate", "party", "votes", "vote_pct", "winner"
+)
+
+read_local <- function(files) {
+  if (length(files) == 0) return(NULL)
+  map_dfr(files, ~ {
+    readr::read_csv(.x, show_col_types = FALSE) %>%
+      select(any_of(local_key_cols)) %>%
+      mutate(across(any_of("election_date"), as.character))
+  })
+}
+
 # ---- bind all state-level CSV data together ----
 all_data <- grouped_files %>%
-  mutate(data = map(files, read_and_bind)) %>%
+  mutate(data = map(files, read_local)) %>%
   pull(data) %>%
   bind_rows()
 

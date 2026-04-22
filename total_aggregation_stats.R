@@ -275,3 +275,21 @@ local_offices_data %>%
   distinct(office_type, office) %>%
   arrange(office_type, office) %>%
   print(n = Inf)
+
+# ---- local offices NOT captured by any target pattern ----
+uncaptured_local <- all_data %>%
+  filter(office_level == "Local", !is.na(office)) %>%
+  mutate(office_type = map_chr(office, classify_local_office)) %>%
+  filter(is.na(office_type)) %>%
+  group_by(state, office) %>%
+  summarise(
+    n_elections  = n_distinct(election_year, office, district, na.rm = TRUE),
+    years_min    = min(election_year, na.rm = TRUE),
+    years_max    = max(election_year, na.rm = TRUE),
+    n_candidates = n_distinct(candidate, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(state, desc(n_elections))
+
+cat("\n=== Local offices NOT captured by any target pattern ===\n")
+print(uncaptured_local, n = Inf)

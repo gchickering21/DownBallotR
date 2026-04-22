@@ -228,7 +228,11 @@ read_local <- function(files) {
   map_dfr(files, ~ {
     readr::read_csv(.x, show_col_types = FALSE) %>%
       select(any_of(local_key_cols)) %>%
-      mutate(across(any_of("election_date"), as.character))
+      mutate(
+        across(any_of(c("election_date", "district", "party", "candidate", "office", "state", "winner")), as.character),
+        across(any_of(c("votes", "election_year")), as.integer),
+        across(any_of("vote_pct"), as.double)
+      )
   })
 }
 

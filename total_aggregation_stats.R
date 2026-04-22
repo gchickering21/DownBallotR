@@ -39,7 +39,10 @@ read_and_bind <- function(files) {
   map_dfr(
     files,
     ~ readr::read_csv(.x, show_col_types = FALSE) %>%
-      mutate(source_file = basename(.x))
+      mutate(
+        source_file   = basename(.x),
+        election_date = as.character(election_date)
+      )
   )
 }
 

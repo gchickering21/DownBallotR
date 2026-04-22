@@ -41,7 +41,7 @@ output_$
 ^inst/python/.*/inspect_.*\.py$
 ^inst/python/download_all_data\.py$
 TESTING.md
-^vignettes$
+^vignettes
 ^CRAN-SUBMISSION$
 ^cran-comments\.md$
 ^doc$

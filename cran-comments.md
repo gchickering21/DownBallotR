@@ -6,10 +6,10 @@
 0 errors | 0 warnings | 0 notes
 
 ### Windows (win-builder, R 4.5.3 / x86_64-w64-mingw32)
-0 errors | 0 warnings | 2 notes (see Notes section below)
+0 errors | 0 warnings | 1 notes (see Notes section below)
 
 ### Debian (CRAN incoming pretest, R-devel)
-0 errors | 0 warnings | 3 notes (see Notes section below)
+0 errors | 0 warnings | 1 notes (see Notes section below)
 
 ## Notes
 
@@ -76,6 +76,15 @@ All tests that require Python are guarded with `testthat::skip_on_cran()` and
 during automated or CRAN checks. Tests that do not require Python (input
 validation, state normalization utilities, mocked reticulate bindings) run
 unconditionally and cover the package's pure-R logic.
+
+## Examples
+
+Examples for functions that download data or require Python (`scrape_elections()`,
+`db_available_years()`, `summarize_results()`) are wrapped in `\donttest{}` as
+recommended. These examples cannot run without a configured Python environment
+(`downballot_install_python()` must be called first). The CI workflow sets
+`_R_CHECK_DONTTEST_EXAMPLES_=false` to prevent these examples from being
+executed in environments where Python is unavailable.
 
 ## inst/python
 

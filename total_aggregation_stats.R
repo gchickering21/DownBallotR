@@ -135,3 +135,143 @@ print(summary_by_group)
 print(grand_totals)
 print(totals_by_geography)
 print(elections_by_level)
+
+# ============================================================
+# LOCAL OFFICES OF INTEREST
+# ============================================================
+
+# Regex patterns for each target office type (case-insensitive)
+local_office_patterns <- list(
+  Mayor = paste(
+    "mayor",
+    "mayoralty",
+    sep = "|"
+  ),
+  City_Council = paste(
+    "city council",
+    "town council",
+    "village council",
+    "municipal council",
+    "city commissioner",
+    "alderman",
+    "alderwoman",
+    "alderperson",
+    "alder(man|woman|person|)",
+    "selectman",
+    "selectmen",
+    "selectwoman",
+    "selectperson",
+    "councilman",
+    "councilwoman",
+    "councilperson",
+    "council member",
+    "council at.large",
+    "city board",
+    sep = "|"
+  ),
+  County_Legislature = paste(
+    "county comm(ission|issioner)",
+    "board of county comm(ission|issioner)",
+    "county council",
+    "county supervisor",
+    "county freeholder",
+    "county legislature",
+    "county board",
+    "county committee",
+    "board of supervisors",
+    "board of freeholders",
+    sep = "|"
+  ),
+  County_Executive = paste(
+    "county executive",
+    "county manager",
+    "county administrator",
+    "county president",
+    "county mayor",
+    sep = "|"
+  ),
+  Sheriff            = "sheriff",
+  School_Board       = paste(
+    "school board",
+    "board of education",
+    "board of ed\\b",
+    "school committee",
+    "school director",
+    "school district board",
+    "education board",
+    sep = "|"
+  )
+)
+
+classify_local_office <- function(office) {
+  office <- tolower(trimws(office))
+  for (type in names(local_office_patterns)) {
+    if (grepl(local_office_patterns[[type]], office, ignore.case = TRUE)) {
+      return(type)
+    }
+  }
+  NA_character_
+}
+
+# ---- bind all state-level CSV data together ----
+all_data <- grouped_files %>%
+  mutate(data = map(files, read_and_bind)) %>%
+  pull(data) %>%
+  bind_rows()
+
+# ---- classify offices and filter to target types ----
+local_offices_data <- all_data %>%
+  filter(office_level == "Local", !is.na(office)) %>%
+  mutate(office_type = map_chr(office, classify_local_office)) %>%
+  filter(!is.na(office_type))
+
+# ---- elections per state x office type ----
+local_office_by_state <- local_offices_data %>%
+  group_by(state, office_type) %>%
+  summarise(
+    n_elections  = n_distinct(election_year, office, district, na.rm = TRUE),
+    years_min    = min(election_year, na.rm = TRUE),
+    years_max    = max(election_year, na.rm = TRUE),
+    n_candidates = n_distinct(candidate, na.rm = TRUE),
+    raw_offices  = paste(sort(unique(office)), collapse = " | "),
+    .groups = "drop"
+  ) %>%
+  arrange(office_type, state)
+
+# ---- coverage matrix: which states have which office types ----
+office_coverage <- local_office_by_state %>%
+  select(state, office_type, n_elections) %>%
+  pivot_wider(
+    names_from  = office_type,
+    values_from = n_elections,
+    values_fill = 0L
+  ) %>%
+  arrange(state)
+
+# ---- totals across all states per office type ----
+office_type_totals <- local_office_by_state %>%
+  group_by(office_type) %>%
+  summarise(
+    n_states     = n_distinct(state),
+    n_elections  = sum(n_elections, na.rm = TRUE),
+    n_candidates = sum(n_candidates, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_elections))
+
+# ---- inspect ----
+cat("\n=== Local offices of interest — by state x office type ===\n")
+print(local_office_by_state)
+
+cat("\n=== Coverage matrix (n elections per state x office type) ===\n")
+print(office_coverage)
+
+cat("\n=== Totals per office type across all states ===\n")
+print(office_type_totals)
+
+# ---- browse raw office name variants per type (useful for QA) ----
+cat("\n=== Raw office name variants captured per type ===\n")
+local_offices_data %>%
+  distinct(office_type, office) %>%
+  arrange(office_type, office) %>%
+  print(n = Inf)

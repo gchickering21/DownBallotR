@@ -40,8 +40,8 @@ read_and_bind <- function(files) {
     files,
     ~ readr::read_csv(.x, show_col_types = FALSE) %>%
       mutate(
-        source_file   = basename(.x),
-        election_date = as.character(election_date)
+        source_file = basename(.x),
+        across(any_of("election_date"), as.character)
       )
   )
 }

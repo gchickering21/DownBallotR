@@ -1,9 +1,10 @@
 # DownBallotR
 
 <!-- badges: start -->
+[![CRAN status](https://www.r-pkg.org/badges/version/DownBallotR)](https://CRAN.R-project.org/package=DownBallotR)
 [![R-CMD-check](https://github.com/gchickering21/DownBallotR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/gchickering21/DownBallotR/actions/workflows/R-CMD-check.yaml)
 [![pkgdown](https://github.com/gchickering21/DownBallotR/actions/workflows/pkgdown.yaml/badge.svg)](https://github.com/gchickering21/DownBallotR/actions/workflows/pkgdown.yaml)
-[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html)
+[![Lifecycle: stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html)
 <!-- badges: end -->
 ---
 
@@ -12,9 +13,12 @@
 ## Installation
 
 ```r
+# From CRAN (stable)
+install.packages("DownBallotR")
+
 # From GitHub (development version)
 install.packages("pak")
-pak::pak("gchickering21/Downballot")
+pak::pak("gchickering21/DownBallotR")
 ```
 
 ---

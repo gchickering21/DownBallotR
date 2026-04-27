@@ -88,7 +88,11 @@ summarize_results <- function(df, state = NULL) {
 #   election_year + type + office  (Indiana — no name or id, but the combination
 #                                   of year, type, and office uniquely identifies elections)
 .count_distinct_elections <- function(df) {
-  has <- function(...) all(c(...) %in% names(df))
+  has <- function(...) {
+    cols <- c(...)
+    all(cols %in% names(df)) &&
+      all(vapply(cols, function(col) any(!is.na(df[[col]])), logical(1L)))
+  }
 
   if (has("election_name", "election_date", "office"))
     return(dplyr::n_distinct(df$election_name, df$election_date, df$office, na.rm = TRUE))

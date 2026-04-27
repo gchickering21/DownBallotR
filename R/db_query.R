@@ -80,61 +80,26 @@ db_available_years <- function(state = NULL) {
   })
   es_df <- do.call(rbind, es_rows)
 
-  nc_avail <- reg$get_available_years("northcarolina_results")
-  nc_row <- data.frame(
-    source     = "northcarolina_results",
-    state      = "North Carolina",
-    start_year = nc_avail$start_year,
-    end_year   = nc_avail$end_year,
-    stringsAsFactors = FALSE
+  dedicated_sources <- c(
+    northcarolina_results = "North Carolina",
+    connecticut_results   = "Connecticut",
+    georgia_results       = "Georgia",
+    utah_results          = "Utah",
+    louisiana_results     = "Louisiana",
+    indiana_results       = "Indiana"
   )
+  dedicated_df <- do.call(rbind, lapply(names(dedicated_sources), function(src) {
+    avail <- reg$get_available_years(src)
+    data.frame(
+      source     = src,
+      state      = dedicated_sources[[src]],
+      start_year = avail$start_year,
+      end_year   = avail$end_year,
+      stringsAsFactors = FALSE
+    )
+  }))
 
-  ct_avail <- reg$get_available_years("connecticut_results")
-  ct_row <- data.frame(
-    source     = "connecticut_results",
-    state      = "Connecticut",
-    start_year = ct_avail$start_year,
-    end_year   = ct_avail$end_year,
-    stringsAsFactors = FALSE
-  )
-
-  ga_avail <- reg$get_available_years("georgia_results")
-  ga_row <- data.frame(
-    source     = "georgia_results",
-    state      = "Georgia",
-    start_year = ga_avail$start_year,
-    end_year   = ga_avail$end_year,
-    stringsAsFactors = FALSE
-  )
-
-  ut_avail <- reg$get_available_years("utah_results")
-  ut_row <- data.frame(
-    source     = "utah_results",
-    state      = "Utah",
-    start_year = ut_avail$start_year,
-    end_year   = ut_avail$end_year,
-    stringsAsFactors = FALSE
-  )
-
-  la_avail <- reg$get_available_years("louisiana_results")
-  la_row <- data.frame(
-    source     = "louisiana_results",
-    state      = "Louisiana",
-    start_year = la_avail$start_year,
-    end_year   = la_avail$end_year,
-    stringsAsFactors = FALSE
-  )
-
-  in_avail <- reg$get_available_years("indiana_results")
-  in_row <- data.frame(
-    source     = "indiana_results",
-    state      = "Indiana",
-    start_year = in_avail$start_year,
-    end_year   = in_avail$end_year,
-    stringsAsFactors = FALSE
-  )
-
-  result <- rbind(es_df, nc_row, ct_row, ga_row, ut_row, la_row, in_row)
+  result <- rbind(es_df, dedicated_df)
   result <- result[order(result$state), ]
 
   if (!is.null(state)) {

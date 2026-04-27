@@ -41,7 +41,10 @@ read_and_bind <- function(files) {
     ~ readr::read_csv(.x, show_col_types = FALSE) %>%
       mutate(
         source_file = basename(.x),
-        across(any_of("election_date"), as.character)
+        across(any_of(c("election_date", "election_name", "election_id", "election_type",
+                        "district", "party", "candidate", "office", "state", "winner")), as.character),
+        across(any_of(c("votes", "election_year")), as.integer),
+        across(any_of("vote_pct"), ~ as.double(gsub("%", "", .x)))
       )
   )
 }
@@ -80,15 +83,17 @@ grouped_files <- files_tbl %>%
   summarise(files = list(path), .groups = "drop")
 
 # ---- read, summarize, flatten ----
-summary_by_group <- grouped_files %>%
+grouped_with_data <- grouped_files %>%
   mutate(
-    data = map(files, read_and_bind),
+    data        = map(files, read_and_bind),
     summary_obj = map(data, run_summary),
     summary_row = pmap(
       list(summary_obj, state_folder, geography),
       flatten_summary
     )
-  ) %>%
+  )
+
+summary_by_group <- grouped_with_data %>%
   select(summary_row) %>%
   unnest(summary_row)
 
@@ -143,6 +148,26 @@ print(elections_by_level)
 # LOCAL OFFICES OF INTEREST
 # ============================================================
 
+# Mirrors DownBallotR:::.count_distinct_elections — same column-priority logic.
+# Needed here because group_modify passes a sub-dataframe per group, so we
+# can't use inline n_distinct() and still respect the source-specific key columns.
+.count_elections_local <- function(df) {
+  has <- function(...) {
+    cols <- c(...)
+    all(cols %in% names(df)) &&
+      all(vapply(cols, function(col) any(!is.na(df[[col]])), logical(1L)))
+  }
+  if (has("election_name", "election_date", "office"))
+    return(dplyr::n_distinct(df$election_name, df$election_date, df$office, na.rm = TRUE))
+  if (has("election_id"))
+    return(dplyr::n_distinct(df$election_id, na.rm = TRUE))
+  if (has("election_year", "election_type", "office"))
+    return(dplyr::n_distinct(df$election_year, df$election_type, df$office, na.rm = TRUE))
+  if (has("election_date", "office"))
+    return(dplyr::n_distinct(df$election_date, df$office, na.rm = TRUE))
+  NA_integer_
+}
+
 # Regex patterns for each target office type (case-insensitive)
 local_office_patterns <- list(
   Mayor = paste(
@@ -156,9 +181,6 @@ local_office_patterns <- list(
     "village council",
     "municipal council",
     "city commissioner",
-    "alderman",
-    "alderwoman",
-    "alderperson",
     "alder(man|woman|person|)",
     "selectman",
     "selectmen",
@@ -219,46 +241,39 @@ classify_local_office <- function(office) {
 # ---- key columns needed for local office analysis ----
 local_key_cols <- c(
   "state", "election_year", "election_date",
+  "election_name", "election_id", "election_type",
   "office_level", "office", "district",
   "candidate", "party", "votes", "vote_pct", "winner"
 )
 
-read_local <- function(files) {
-  if (length(files) == 0) return(NULL)
-  map_dfr(files, ~ {
-    readr::read_csv(.x, show_col_types = FALSE) %>%
-      select(any_of(local_key_cols)) %>%
-      mutate(
-        across(any_of(c("election_date", "district", "party", "candidate", "office", "state", "winner")), as.character),
-        across(any_of(c("votes", "election_year")), as.integer),
-        across(any_of("vote_pct"), as.double)
-      )
-  })
-}
-
-# ---- bind all state-level CSV data together ----
-all_data <- grouped_files %>%
-  mutate(data = map(files, read_local)) %>%
+# ---- build all_data from already-loaded data (avoids re-reading every file) ----
+all_data <- grouped_with_data %>%
   pull(data) %>%
-  bind_rows()
+  bind_rows() %>%
+  select(any_of(local_key_cols))
 
-# ---- classify offices and filter to target types ----
-local_offices_data <- all_data %>%
+# ---- classify unique office names once, then join (avoids per-row iteration) ----
+local_office_classes <- all_data %>%
   filter(office_level == "Local", !is.na(office)) %>%
-  mutate(office_type = map_chr(office, classify_local_office)) %>%
-  filter(!is.na(office_type))
+  distinct(office) %>%
+  mutate(office_type = map_chr(office, classify_local_office))
+
+all_local <- all_data %>%
+  filter(office_level == "Local", !is.na(office)) %>%
+  left_join(local_office_classes, by = "office")
+
+local_offices_data <- all_local %>% filter(!is.na(office_type))
 
 # ---- elections per state x office type ----
 local_office_by_state <- local_offices_data %>%
   group_by(state, office_type) %>%
-  summarise(
-    n_elections  = n_distinct(election_year, office, district, na.rm = TRUE),
-    years_min    = min(election_year, na.rm = TRUE),
-    years_max    = max(election_year, na.rm = TRUE),
-    n_candidates = n_distinct(candidate, na.rm = TRUE),
-    raw_offices  = paste(sort(unique(office)), collapse = " | "),
-    .groups = "drop"
-  ) %>%
+  group_modify(~ tibble(
+    n_elections  = .count_elections_local(.x),
+    years_min    = min(.x$election_year, na.rm = TRUE),
+    years_max    = max(.x$election_year, na.rm = TRUE),
+    n_candidates = n_distinct(.x$candidate, na.rm = TRUE),
+    raw_offices  = paste(sort(unique(.x$office)), collapse = " | ")
+  )) %>%
   arrange(office_type, state)
 
 # ---- coverage matrix: which states have which office types ----
@@ -300,18 +315,15 @@ local_offices_data %>%
   print(n = Inf)
 
 # ---- local offices NOT captured by any target pattern ----
-uncaptured_local <- all_data %>%
-  filter(office_level == "Local", !is.na(office)) %>%
-  mutate(office_type = map_chr(office, classify_local_office)) %>%
+uncaptured_local <- all_local %>%
   filter(is.na(office_type)) %>%
   group_by(state, office) %>%
-  summarise(
-    n_elections  = n_distinct(election_year, office, district, na.rm = TRUE),
-    years_min    = min(election_year, na.rm = TRUE),
-    years_max    = max(election_year, na.rm = TRUE),
-    n_candidates = n_distinct(candidate, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
+  group_modify(~ tibble(
+    n_elections  = .count_elections_local(.x),
+    years_min    = min(.x$election_year, na.rm = TRUE),
+    years_max    = max(.x$election_year, na.rm = TRUE),
+    n_candidates = n_distinct(.x$candidate, na.rm = TRUE)
+  )) %>%
   arrange(state, desc(n_elections))
 
 cat("\n=== Local offices NOT captured by any target pattern ===\n")

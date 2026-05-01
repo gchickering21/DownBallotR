@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import date
 from typing import Iterable
@@ -89,21 +90,30 @@ class NcElectionPipeline:
         state_frames : list[pd.DataFrame] = []
         failed: list[tuple[object, Exception]] = []
 
-        print(f"[NC] Scraping {len(supported)} election row(s)...")
-        for e in supported:
+        w = min(3, len(supported))
+        print(f"[NC] Scraping {len(supported)} election row(s) ({w} worker(s))...")
+
+        def _task(e):
             election_date = _get_attr(e, "election_date")
             print(f"[NC]   {election_date}: downloading ZIP...", flush=True)
-            try:
-                precinct_df, county_df, state_df = self._scrape_one(e)
-                precinct_frames.append(precinct_df)
-                county_frames.append(county_df)
-                state_frames.append(state_df)
-            except Exception as ex:
-                failed.append((e, ex))
-                print(
-                    "[NC] WARNING: failed to scrape "
-                    f"{election_date} ({_get_attr(e,'zip_url')}): {ex}"
-                )
+            return self._scrape_one(e)
+
+        with ThreadPoolExecutor(max_workers=w) as pool:
+            future_map = {pool.submit(_task, e): e for e in supported}
+            for future in as_completed(future_map):
+                e = future_map[future]
+                election_date = _get_attr(e, "election_date")
+                try:
+                    precinct_df, county_df, state_df = future.result()
+                    precinct_frames.append(precinct_df)
+                    county_frames.append(county_df)
+                    state_frames.append(state_df)
+                except Exception as ex:
+                    failed.append((e, ex))
+                    print(
+                        "[NC] WARNING: failed to scrape "
+                        f"{election_date} ({_get_attr(e,'zip_url')}): {ex}"
+                    )
 
         if failed:
             print(

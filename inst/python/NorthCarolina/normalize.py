@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
@@ -135,6 +137,7 @@ _OFFICE_PATTERNS: list[tuple[re.Pattern, str]] = [
 _QUALIFIER_RE = re.compile(r'\s*\([^)]+\)\s*$')
 
 
+@lru_cache(maxsize=2048)
 def extract_office_short(full_name: object) -> object:
     """Return a short office label (e.g. 'Mayor', 'City Council') from a full contest name."""
     if full_name is None or (isinstance(full_name, float) and pd.isna(full_name)):
@@ -351,11 +354,20 @@ def _finalize_for_cross_year_concat(out: pd.DataFrame, schema: CanonicalSchema) 
 # =========================================================
 # Public API
 # =========================================================
-def get_config() -> NcResultsConfig:
-    _DEFAULT_CONFIG_PATH = Path(__file__).with_name("nc_results_pct_config.json")
-    _CONFIG: NcResultsConfig = load_northcarolina_results_config(_DEFAULT_CONFIG_PATH)
 
-    return _CONFIG
+_config_lock: threading.Lock = threading.Lock()
+_config_cache: "NcResultsConfig | None" = None
+
+
+def get_config() -> NcResultsConfig:
+    global _config_cache
+    if _config_cache is None:
+        with _config_lock:
+            if _config_cache is None:
+                _config_cache = load_northcarolina_results_config(
+                    Path(__file__).with_name("nc_results_pct_config.json")
+                )
+    return _config_cache
 
 
 def normalize_northcarolina_results_cols(

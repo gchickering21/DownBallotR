@@ -16,6 +16,8 @@ Public entry point
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import pandas as pd
 from office_level_utils import classify_office_level as _classify_office_level
 
@@ -60,12 +62,16 @@ class InElectionPipeline:
         ``'all'`` (default) — dict with ``'state'`` and ``'county'`` DataFrames;
         ``'state'`` — statewide candidate totals only;
         ``'county'`` — county-level totals only.
+    max_workers : int
+        Parallel office-category JSON fetches per election (default 6).
+        Each fetch is a small, independent HTTP request.
     """
 
-    def __init__(self, level: str = "all"):
+    def __init__(self, level: str = "all", max_workers: int = 6):
         if level not in ("all", "state", "county"):
             raise ValueError(f"level must be 'all', 'state', or 'county'; got {level!r}")
         self.level = level
+        self.max_workers = max_workers
 
     def _scrape_election(
         self, election: InElectionInfo
@@ -91,33 +97,40 @@ class InElectionPipeline:
         county_frames: list[pd.DataFrame] = []
         failed = 0
 
-        for cat in categories:
+        def _fetch_cat(cat):
             cat_id   = cat.get("OFFICECATEGORYID", "")
             cat_name = cat.get("OFFICE_CATEGORY_NAME", cat_id)
             if not cat_id:
-                continue
-            try:
-                offcat_data = client.get_office_category(cat_id)
-            except Exception as exc:
-                failed += 1
-                print(f"[IN]     WARNING: failed to fetch OffCatC_{cat_id}: {exc}")
-                continue
+                return cat_name, None, None
+            office_level = _normalize_in_heading(cat.get("_heading", ""), cat_name)
+            offcat_data  = client.get_office_category(cat_id)
+            return cat_name, office_level, offcat_data
 
-            office_level = _normalize_in_heading(
-                cat.get("_heading", ""), cat_name
-            )
+        w = min(self.max_workers, len(categories))
+        with ThreadPoolExecutor(max_workers=w) as pool:
+            future_map = {pool.submit(_fetch_cat, cat): cat for cat in categories}
+            for future in as_completed(future_map):
+                cat    = future_map[future]
+                cat_id = cat.get("OFFICECATEGORYID", "")
+                try:
+                    cat_name, office_level, offcat_data = future.result()
+                except Exception as exc:
+                    failed += 1
+                    print(f"[IN]     WARNING: failed to fetch OffCatC_{cat_id}: {exc}")
+                    continue
 
-            if self.level in ("all", "state"):
-                df = parse_state_results(
-                    offcat_data, election, cat_name, office_level,
-                )
-                if not df.empty:
-                    state_frames.append(df)
+                if offcat_data is None:
+                    continue
 
-            if self.level in ("all", "county"):
-                df = parse_county_results(offcat_data, election, cat_name, office_level)
-                if not df.empty:
-                    county_frames.append(df)
+                if self.level in ("all", "state"):
+                    df = parse_state_results(offcat_data, election, cat_name, office_level)
+                    if not df.empty:
+                        state_frames.append(df)
+
+                if self.level in ("all", "county"):
+                    df = parse_county_results(offcat_data, election, cat_name, office_level)
+                    if not df.empty:
+                        county_frames.append(df)
 
         if failed:
             print(f"[IN]   NOTE: {failed} office category fetch(es) failed.")
@@ -199,6 +212,7 @@ def get_in_election_results(
     year_from: "int | None" = None,
     year_to: "int | None" = None,
     level: str = "all",
+    max_workers: int = 6,
 ) -> "pd.DataFrame | dict":
     """Return Indiana General Election results.
 
@@ -212,6 +226,8 @@ def get_in_election_results(
         ``'all'`` (default) — dict with ``'state'`` and ``'county'`` DataFrames;
         ``'state'`` — statewide candidate totals only;
         ``'county'`` — county-level totals only.
+    max_workers : int
+        Parallel office-category JSON fetches per election (default 6).
     """
-    pipeline = InElectionPipeline(level=level)
+    pipeline = InElectionPipeline(level=level, max_workers=max_workers)
     return pipeline.run(year_from=year_from, year_to=year_to)

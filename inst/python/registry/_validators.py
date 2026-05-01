@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
-_VALID_LEVELS    = ("all", "state", "county")
-_VALID_LEVELS_CT = ("all", "state", "town")
-_VALID_LEVELS_LA = ("all", "state", "parish")
+_VALID_LEVELS         = ("all", "state", "county")
+_VALID_LEVELS_CT      = ("all", "state", "town")
+_VALID_LEVELS_LA      = ("all", "state", "parish")
+_VALID_LEVELS_BOSTON   = ("all", "city", "ward", "precinct")
+_VALID_LEVELS_HOUSTON  = ("all", "summary", "precinct")
 
 # Max parallel workers allowed via the R / registry.scrape() path.
 # download_all_data.py calls pipeline functions directly and is not subject
@@ -44,6 +46,20 @@ def _validate_level_la(level: str) -> None:
     if level not in _VALID_LEVELS_LA:
         raise ValueError(
             f"level must be one of {_VALID_LEVELS_LA} for Louisiana; got {level!r}."
+        )
+
+
+def _validate_level_boston(level: str) -> None:
+    if level not in _VALID_LEVELS_BOSTON:
+        raise ValueError(
+            f"level must be one of {_VALID_LEVELS_BOSTON} for Boston; got {level!r}."
+        )
+
+
+def _validate_level_houston(level: str) -> None:
+    if level not in _VALID_LEVELS_HOUSTON:
+        raise ValueError(
+            f"level must be one of {_VALID_LEVELS_HOUSTON} for Houston; got {level!r}."
         )
 
 

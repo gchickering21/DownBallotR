@@ -20,7 +20,9 @@ from df_utils import concat_or_empty as _concat_or_empty
 from ._validators import (
     _to_year,
     _validate_level,
+    _validate_level_boston,
     _validate_level_ct,
+    _validate_level_houston,
     _validate_level_la,
     _validate_workers,
 )
@@ -239,6 +241,85 @@ def _scrape_in(
         year_from=year_from,
         year_to=year_to,
         level=level,
+    )
+
+
+def _scrape_boston(
+    year_from: "int | None" = None,
+    year_to: "int | None" = None,
+    level: str = "all",
+    max_pdf_workers: int = 4,
+    **_,
+):
+    """Scrape City of Boston election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive (default: 2005, the earliest year on the page).
+    year_to : int | None
+        End year, inclusive (default: current calendar year).
+    level : str
+        ``'all'``  (default) — dict with keys ``'city'`` and ``'ward'``;
+                   reticulate converts this to a named R list.
+        ``'city'`` — citywide candidate totals only (faster).
+        ``'ward'`` — ward-level totals only.
+    max_pdf_workers : int
+        Parallel PDF download threads per election (default 4).
+    """
+    _validate_level_boston(level)
+    max_pdf_workers = _validate_workers(max_pdf_workers, "max_pdf_workers")
+    year_from, year_to = _prep_years(year_from, year_to, "boston_results")
+
+    label = _format_year_label(year_from, year_to)
+    print(f"[Boston] Starting scrape | {label} | level={level!r}")
+
+    from Boston.pipeline import get_boston_election_results
+    return get_boston_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        max_pdf_workers=max_pdf_workers,
+    )
+
+
+def _scrape_houston(
+    year_from: "int | None" = None,
+    year_to:   "int | None" = None,
+    level: str = "all",
+    max_workers: int = 2,
+    **_,
+):
+    """Scrape Harris County (Houston) election results.
+
+    Parameters
+    ----------
+    year_from : int | None
+        Start year, inclusive (default: 2004, the earliest year in the archive).
+    year_to : int | None
+        End year, inclusive (default: current calendar year).
+    level : str
+        ``'all'``      (default) — dict with keys ``'summary'`` and ``'precinct'``;
+                       reticulate converts this to a named R list.
+        ``'summary'``  — county-wide candidate totals only (faster; no canvass download).
+        ``'precinct'`` — precinct-level candidate totals only.
+    max_workers : int
+        Parallel PDF download threads (default 2).  Set low because canvass PDFs
+        are 40–50 MB each.
+    """
+    _validate_level_houston(level)
+    max_workers = _validate_workers(max_workers, "max_workers")
+    year_from, year_to = _prep_years(year_from, year_to, "houston_results")
+
+    label = _format_year_label(year_from, year_to)
+    print(f"[Houston] Starting scrape | {label} | level={level!r}")
+
+    from Houston.pipeline import get_houston_election_results
+    return get_houston_election_results(
+        year_from=year_from,
+        year_to=year_to,
+        level=level,
+        max_workers=max_workers,
     )
 
 

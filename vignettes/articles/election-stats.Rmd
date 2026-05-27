@@ -36,6 +36,11 @@ Classic states use simple HTTP requests and are fast. Playwright states
 (NY, NM, SC) launch a headless Chromium browser to render JavaScript —
 they are slower but fully automated.
 
+New Hampshire features alongside Indiana in the cross-state section of
+the [Example analyses vignette](https://gchickering21.github.io/DownBallotR/articles/example-analyses.html),
+which shows how to combine multiple ElectionStats and non-ElectionStats
+states with `bind_rows()` for side-by-side comparison.
+
 ---
 
 ## Arguments
@@ -45,17 +50,22 @@ they are slower but fully automated.
 | `state` | required | State name, snake\_case (e.g. `"virginia"`) |
 | `year_from` | `NULL` (earliest) | Start year, inclusive |
 | `year_to` | `NULL` (current year) | End year, inclusive |
-| `level` | `"all"` | What to return — see below |
+| `level` | `"all"` | Constituency level of the returned results — see below |
 | `parallel` | `TRUE` | Parallel county scraping (classic states only) |
 
-### The `level` parameter
+### The `level` parameter (constituency level)
 
-| Value | Returns |
-|---|---|
-| `"all"` (default) | Named list with `$state`, `$county`, and (where available) `$precinct` data frames |
-| `"state"` | Candidate-level results data frame |
-| `"county"` | County vote breakdown data frame |
-| `"precinct"` | Precinct-level vote breakdown data frame (CO, MA, ID, SC, NM, VA) |
+`level` selects which **constituency-level** data frame(s) to return — i.e.,
+the geographic unit at which votes are tabulated. It is **not** the same as
+office level (Federal / State / Local), which appears in the `office_level`
+column.
+
+| Value | Constituency | Returns |
+|---|---|---|
+| `"all"` (default) | All available | Named list with `$state`, `$county`, and (where available) `$precinct` data frames |
+| `"state"` | State-level constituency | Statewide candidate results data frame |
+| `"county"` | County-level constituency | County vote breakdown data frame |
+| `"precinct"` | Precinct-level constituency | Precinct vote breakdown data frame (CO, MA, ID, SC, NM, VA) |
 
 ---
 

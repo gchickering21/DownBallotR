@@ -27,8 +27,10 @@ pak::pak("gchickering21/DownBallotR")
 
 `DownBallotR` requires a one-time Python setup and exposes all data retrieval
 through a single function, `scrape_elections()`. The appropriate backend scraper
-is selected **automatically** based on the `state` and `level` arguments — no
-need to specify a source by name.
+is selected **automatically** based on the `state` and `level` arguments (the
+`level` argument selects the **constituency level** of the returned results —
+statewide, county/parish/town, or precinct) — no need to specify a source by
+name.
 
 | `state` | Scraper | Coverage |
 |---|---|---|
@@ -106,9 +108,12 @@ No data is bundled with the package or hosted by the maintainers. **Note:** We a
 **Current Coverage:** 15 US states. Historical depth varies from 1789
 (Vermont, Virginia) to 2019(Indiana) to the present.
 
-**What the data is:** Vote totals and counts by candidate and contest at the statewide,
-county/parish/town, or precinct level, depending on source and the `level`
-argument. Some states (such as Georgia, North Carolina) contain voting methods counts as well. 
+**What the data is:** Vote totals and counts by candidate and contest at the
+**constituency level** controlled by the `level` argument — statewide,
+county/parish/town, or precinct — with availability depending on source.
+For example, `level = "state"` returns state-level constituency
+(statewide) results. Some states (such as Georgia, North Carolina) contain
+voting methods counts as well.
 
 **What the data is not:** Certified results. Data should be verified against
 the original source before publication or high-stakes use.
@@ -121,7 +126,7 @@ responsible use is in the
 
 ## Vignettes
 
-These four vignettes are bundled with the package and accessible offline after installing:
+These vignettes are bundled with the package and accessible offline after installing:
 
 **Datasheet** — overview of the package’s purpose, data sources, structure, and ethical considerations:
 
@@ -142,6 +147,11 @@ These four vignettes are bundled with the package and accessible offline after i
 
 - In R: `vignette("scraping-data", package = "DownBallotR")`
 - Online: <https://gchickering21.github.io/DownBallotR/articles/scraping-data.html>
+
+**Example analyses** — worked example questions you can answer with the data, with tidyverse code:
+
+- In R: `vignette("example-analyses", package = "DownBallotR")`
+- Online: <https://gchickering21.github.io/DownBallotR/articles/example-analyses.html>
 
 ## Scraper articles
 

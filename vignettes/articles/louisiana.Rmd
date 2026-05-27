@@ -41,7 +41,7 @@ published by the site.
 | `state` | — | `"LA"`, `"louisiana"`, or `"Louisiana"` |
 | `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound (data goes back to 1982) |
 | `year_to` | `NULL` | End year, inclusive; `NULL` = current calendar year |
-| `level` | `"all"` | `"all"` — statewide + parish; `"state"` — statewide only (much faster); `"parish"` — parish-level only |
+| `level` | `"all"` | Constituency level of returned results. `"all"` — statewide + parish; `"state"` — state-level constituency (statewide totals) only (much faster); `"parish"` — parish-level constituency only |
 | `max_workers` | `4L` | Parallel Chromium browsers for parish scraping (capped at 2 internally for LA) |
 
 ---

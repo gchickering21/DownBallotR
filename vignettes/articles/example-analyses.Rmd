@@ -1,0 +1,858 @@
+---
+title: "Example Analyses with DownBallotR"
+output: rmarkdown::html_vignette
+---
+
+```{r, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(
+  purl     = FALSE,
+  collapse = TRUE,
+  comment  = "#>",
+  eval     = FALSE
+)
+```
+
+`DownBallotR` returns standardized election results — candidates, parties,
+votes, and winners — across federal, state, and local contests. This
+vignette walks through several **example questions** users commonly want
+to answer with the data, and shows the corresponding tidyverse code.
+
+The examples use Indiana (`IN`) as a running example because Indiana
+publishes partisan results for every office on the General Election
+ballot and exposes both a statewide and a county-level frame. **Most
+patterns transfer to other states**, but some details (exact office
+strings, county column name) vary by source — each question below
+calls out what's portable and what is not.
+
+---
+
+## A few things you might use this data for
+
+- **Journalism** — Find the closest races of the cycle, identify which
+  offices flipped party, or answer "how did each party do this year?"
+- **Academic research** — Quantify down-ballot drop-off, study
+  ticket-splitting, or assemble panel data on partisan races across years.
+- **Local political strategy** — Understand the partisan baseline in a
+  county, identify uncontested races, or target candidate recruitment
+  in winnable districts.
+
+---
+
+## What varies across states (read this first)
+
+A handful of details differ by source. They matter mostly when you start
+filtering or cross-state binding:
+
+- **Office strings are not normalized.** `office` is taken from each
+  source's site, so what one source calls `"Governor"` another might
+  call `"Governor of Indiana"` or `"GOVERNOR"`. Always inspect with
+  `unique(df$office)` before filtering, and prefer `str_detect()` with
+  a regex over `==`.
+- **Subnational column names differ.** Indiana uses `county_name`,
+  ElectionStats states (NH, MA, CO, ...) use `county_or_city`, Clarity
+  states (GA, UT) use `county`, Connecticut uses `town`, Louisiana uses
+  `parish`. See the
+  [Data dictionary](https://gchickering21.github.io/DownBallotR/articles/data-dictionary.html)
+  for the full schema per source.
+- **Some columns only exist for some sources.** `election_date`,
+  `election_id`, `num_seats`, `url`, `candidate_id` are source-specific.
+  `bind_rows()` fills missing columns with `NA`, so cross-state binding
+  still works — just don't reference those columns in cross-state code.
+- **Party labels are normalized** to canonical full names
+  (`"Democratic"`, `"Republican"`, `"Independent"`) across all sources,
+  so cross-state party comparisons are safe.
+- **`office_level`** is always one of `"Federal"`, `"State"`, or
+  `"Local"`. Not every state populates all three.
+
+---
+
+## Setup
+
+```{r}
+library(DownBallotR)
+library(tidyverse)
+
+# Statewide + county results for Indiana, 2020–2024.
+# When level = "all", scrape_elections() also assigns each sub-frame
+# directly into your environment (e.g. in_state, in_county).
+res <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024)
+
+# Either of these works — they refer to the same data frames:
+in_state  <- res$state    # statewide candidate totals
+in_county <- res$county   # county-level breakdown
+```
+
+A useful first step on any new scrape — see what office strings, office
+levels, and parties are actually in the data:
+
+```{r}
+in_state %>% count(office_level, sort = TRUE)
+in_state %>% distinct(office_level, office) %>% arrange(office_level, office)
+in_state %>% count(party, sort = TRUE)
+```
+
+For reference, here's what Indiana actually returns for 2024:
+
+```
+# office_level counts (state-level frame)
+office_level     n
+Local         2316
+State          306
+Federal         51
+
+# unique (office_level, office) — Federal & State
+[Federal] Presidential Electors for US President & VP
+[Federal] US Representative
+[Federal] US Senator
+[State]   Attorney General
+[State]   Governor & Lt. Governor
+[State]   Judge, Circuit Court / Probate Court / Superior Court
+[State]   State Representative
+[State]   State Senator
+
+# parties present
+Democratic, Republican, Libertarian, Independent,
+Nonpartisan (1,100 rows — mostly judges and school boards), and a few rare labels.
+```
+
+Note two things up front:
+
+- Indiana writes `"US Senator"` and `"US Representative"` (no periods).
+  New Hampshire writes `"U.S. House"` and `"Governor"`. **Always inspect
+  your data before filtering by exact office string.**
+- Indiana labels many local races as `"Nonpartisan"` — judges, school
+  boards. Filtering `party == "Democratic"` silently drops these from
+  the denominator. For "partisan races only," filter
+  `party %in% c("Democratic", "Republican", "Independent", "Libertarian")`
+  or exclude `"Nonpartisan"`.
+
+The remaining sections assume `in_state` and `in_county` are loaded.
+
+---
+
+## Question 1 — How many races did each party win?
+
+Filter to winners and count by party:
+
+```{r}
+in_state %>%
+  filter(winner) %>%
+  count(party, sort = TRUE)
+```
+
+Often the more interesting view is by office level — federal, state, and
+local performance can diverge:
+
+```{r}
+in_state %>%
+  filter(winner) %>%
+  count(office_level, party) %>%
+  arrange(office_level, desc(n))
+```
+
+*Portability:* **fully portable.** `winner`, `party`, and `office_level`
+are present on every state-level scrape.
+
+---
+
+## Question 2 — All races for a given office
+
+The state-run General Election data covers every partisan office on the
+ballot. To answer "how many of these races did each party win?" you
+filter by office and count winners. Picking a single-word, universal
+office like Governor keeps the regex simple:
+
+```{r}
+in_state %>%
+  filter(str_detect(office, regex("governor", ignore_case = TRUE)))
+```
+
+`str_detect()` with a regex is more forgiving than `==`, since office
+names vary slightly across sources and years (e.g. `"Governor"` vs
+`"Governor of Indiana"` vs `"GOVERNOR"`).
+
+Which party won each Governor's race in our window?
+
+```{r}
+in_state %>%
+  filter(str_detect(office, regex("governor", ignore_case = TRUE)),
+         winner) %>%
+  select(election_year, office, candidate, party, votes, vote_pct)
+```
+
+The same pattern works for any office — swap `"governor"` for
+`"senate"`, `"president"`, or `"sheriff"`. The user's original
+"mayoral races by party" question is identical — `regex("mayor",
+ignore_case = TRUE)` — though Indiana's General Election data does not
+include municipal mayoral races (those run on odd years through
+counties); Connecticut's data does.
+
+*Portability:* **pattern is portable; the regex string is not.** Run
+`unique(df$office)` first to confirm how your source spells the office.
+A few real examples I observed:
+
+- **U.S. House**: NH writes `"U.S. House"`, IN writes `"US Representative"`.
+  Cross-state regex: `regex("u\\.?s\\.?\\s*(house|representative)", ignore_case = TRUE)`
+- **U.S. Senate**: NH writes `"U.S. Senate"`, IN writes `"US Senator"`.
+  Cross-state regex: `regex("senat", ignore_case = TRUE)` (matches both
+  "Senate" and "Senator"; combine with `office_level == "Federal"` to
+  exclude state senate).
+- **Governor**: both NH and IN write something containing `"Governor"`
+  as a substring (IN's full string is `"Governor & Lt. Governor"`), so
+  `regex("governor", ignore_case = TRUE)` works for both.
+
+---
+
+## Question 3 — Total votes by party
+
+Sometimes the question is not "who won" but "how much support did each
+party receive overall?" Sum votes across all contests:
+
+```{r}
+in_state %>%
+  group_by(party) %>%
+  summarise(total_votes = sum(votes, na.rm = TRUE)) %>%
+  arrange(desc(total_votes))
+```
+
+For a fairer comparison, restrict to a single office level — otherwise
+a few high-turnout federal contests dominate the total:
+
+```{r}
+in_state %>%
+  filter(office_level == "State") %>%
+  group_by(election_year, party) %>%
+  summarise(total_votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+  arrange(election_year, desc(total_votes))
+```
+
+*Portability:* **fully portable.**
+
+---
+
+## Question 4 — What were the closest races?
+
+A common journalistic question. Compute each contest's winning margin in
+percentage points by sorting candidates within a contest:
+
+```{r}
+in_state %>%
+  group_by(election_year, office, district) %>%
+  arrange(desc(vote_pct), .by_group = TRUE) %>%
+  summarise(
+    winner_party = first(party),
+    winner_pct   = first(vote_pct),
+    runner_pct   = nth(vote_pct, 2),
+    margin_pp    = winner_pct - runner_pct,
+    .groups      = "drop"
+  ) %>%
+  filter(!is.na(margin_pp)) %>%
+  slice_min(margin_pp, n = 10)
+```
+
+`nth(vote_pct, 2)` returns `NA` for uncontested races, which the
+`filter(!is.na(...))` step drops. `slice_min()` returns the 10 rows with
+the smallest margin in ascending order.
+
+*Portability:* **fully portable.** `(election_year, office, district)`
+uniquely identifies a contest in every source schema.
+
+---
+
+## Question 5 — Down-ballot roll-off (a careful one)
+
+Do voters who cast a top-of-ticket ballot also vote in down-ballot
+races? This question is easy to ask but easy to get *wrong*.
+
+**Tempting (but wrong) first attempt:** sum votes per office level.
+
+```{r}
+in_state %>%
+  filter(election_year == 2024) %>%
+  group_by(office_level) %>%
+  summarise(total_votes = sum(votes, na.rm = TRUE)) %>%
+  mutate(pct_of_federal = total_votes /
+                          total_votes[office_level == "Federal"])
+```
+
+For Indiana 2024 this returns:
+
+```
+office_level total_votes pct_of_federal
+Federal        8,634,681           1.00
+State         12,420,340           1.44
+Local         21,278,852           2.46
+```
+
+Local shows **2.46× as many votes as Federal**, which can't possibly
+mean Local turnout was higher than presidential turnout. The reason:
+each voter casts ballots in *several* local races (county treasurer +
+county council + school board + …) but only a handful of federal ones
+(president + their House district + maybe senator). So `sum(votes)`
+counts `voters × (races per voter)`, and inflates by the number of
+races at that level.
+
+**The correct measure compares single races.** Each voter contributes
+at most one vote to a given statewide race, so race-vs-race ratios
+are real turnout comparisons:
+
+```{r}
+in_state %>%
+  filter(election_year == 2024,
+         office %in% c("Presidential Electors for US President & VP",
+                       "Governor & Lt. Governor",
+                       "US Senator",
+                       "Attorney General")) %>%
+  group_by(office) %>%
+  summarise(total_votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(total_votes)) %>%
+  mutate(pct_of_top = total_votes / max(total_votes))
+```
+
+Indiana 2024 actual output:
+
+```
+office                                       total_votes pct_of_top
+Presidential Electors for US President & VP   2,936,677       1.000
+Governor & Lt. Governor                       2,879,655       0.981
+Attorney General                              2,838,098       0.966
+US Senator                                    2,829,897       0.964
+```
+
+A few percentage points of roll-off down the statewide ballot is
+typical — voters who skipped a race after voting for President.
+
+**Local roll-off needs a different approach.** Each local race is
+confined to a single county/district, so summing all 92 county
+treasurer contests *does* equal ~one vote per voter (every voter has
+one CT race available) — but only if every county actually holds the
+race that year, which isn't always true. The safest local
+roll-off measure: pick one county, then compare votes in its
+top-of-ticket race to a specific local race within `in_county`.
+
+```{r}
+in_county %>%
+  filter(election_year == 2024,
+         county_name == "Marion",
+         office %in% c("Presidential Electors for US President & VP",
+                       "County Treasurer",
+                       "School Board Member")) %>%
+  group_by(office) %>%
+  summarise(total_votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+  mutate(pct_of_president = total_votes /
+            total_votes[office == "Presidential Electors for US President & VP"])
+```
+
+*Portability:* **the pattern is portable; the exact office strings
+are state-specific.** Use `unique(df$office)` to find the top federal
+race in your state. NH would use `"President"` and `"Governor"`, for
+example, not Indiana's longer category labels.
+
+---
+
+## Question 6 — Year-over-year trends (update the initial data pull to ensure you have mutiple years of data)
+
+Once you have a multi-year scrape, party performance over time is a
+straightforward `count()`:
+
+```{r}
+in_state %>%
+  filter(office_level == "Federal", winner) %>%
+  count(election_year, party) %>%
+  arrange(election_year, desc(n))
+```
+
+Or vote share for a single party over time:
+
+```{r}
+in_state %>%
+  filter(office_level == "Federal") %>%
+  group_by(election_year) %>%
+  summarise(
+    dem_share = sum(votes[party == "Democratic"], na.rm = TRUE) /
+                sum(votes, na.rm = TRUE)
+  )
+```
+
+*Portability:* **fully portable.**
+
+---
+
+## Question 7 — County-level variation within a single race
+
+Where did a candidate over- or under-perform their statewide result?
+Using the county-level frame, look at Democratic vote share for the
+2024 U.S. Senate race across Indiana's 92 counties.
+
+Note the regex below uses `"senat"`, not `"senate"` — Indiana writes
+the office as `"US Senator"`, so `regex("senate", ...)` would return
+zero rows. `"senat"` matches both `"Senate"` (NH) and `"Senator"` (IN),
+and the `office_level == "Federal"` filter excludes State Senate.
+
+```{r}
+in_county %>%
+  filter(election_year == 2024,
+         office_level == "Federal",
+         str_detect(office, regex("senat", ignore_case = TRUE)),
+         party == "Democratic") %>%
+  arrange(desc(vote_pct)) %>%
+  select(county_name, candidate, votes, vote_pct)
+```
+
+To find the counties where the statewide nominee under-performed most,
+pull the statewide number and compute a swing for each county:
+
+```{r}
+statewide_dem_senate <- in_state %>%
+  filter(election_year == 2024,
+         office_level == "Federal",
+         str_detect(office, regex("senat", ignore_case = TRUE)),
+         party == "Democratic") %>%
+  pull(vote_pct)
+
+in_county %>%
+  filter(election_year == 2024,
+         office_level == "Federal",
+         str_detect(office, regex("senat", ignore_case = TRUE)),
+         party == "Democratic") %>%
+  mutate(swing_vs_state = vote_pct - statewide_dem_senate) %>%
+  select(county_name, vote_pct, swing_vs_state) %>%
+  slice_min(swing_vs_state, n = 10)
+```
+
+*Portability:* **pattern is portable; the column name is not.** The
+subnational unit column changes by source:
+
+| Source | Subnational column |
+|---|---|
+| Indiana | `county_name` |
+| ElectionStats (NH, MA, CO, …) | `county_or_city` |
+| Clarity (GA, UT) | `county` |
+| Connecticut | `town` |
+| Louisiana | `parish` |
+| North Carolina | `county` (county frame) or `precinct` |
+
+---
+
+## Drilling into local elections
+
+State-run General Election scrapers include a long tail of local offices
+alongside the federal and statewide races. Indiana 2024 alone returns
+**2,316 local-office rows** across 14 office types (school boards,
+county treasurers, county commissioners, town councils, township boards,
+etc.). Several questions are only possible at this level.
+
+**First, a data-shape caveat.** For local offices in Indiana's
+state-level frame, the `district` column means different things
+depending on the office:
+
+- *Countywide offices* (County Treasurer, County Recorder, County
+  Auditor, etc.) have no sub-district, so the parser puts the **county
+  name** into `district` (e.g. `"Bartholomew County"`). One row of
+  `(office, district)` = one contest.
+- *Districted offices* (County Council, County Commissioner) have an
+  internal district. The parser puts the **district label** into
+  `district` (e.g. `"District 1"`), and the county name is **lost from
+  the state frame**. To analyze these by county, use the county-level
+  frame (`in_county`), which has `county_name` as a separate column.
+
+The examples below stick to offices where `district` reliably encodes
+the contest.
+
+### What local offices are on the ballot, and which are partisan?
+
+```{r}
+in_state %>%
+  filter(office_level == "Local") %>%
+  group_by(office) %>%
+  summarise(
+    n_candidates = n_distinct(candidate),
+    is_partisan  = any(party %in% c("Democratic", "Republican")),
+    parties      = paste(sort(unique(party)), collapse = ", "),
+    .groups      = "drop"
+  ) %>%
+  arrange(desc(n_candidates))
+```
+
+Real output for Indiana 2024 (abbreviated):
+
+```
+office                       n_candidates  is_partisan
+School Board Member                  1086        FALSE
+County Council Member                 408         TRUE
+County Commissioner                   262         TRUE
+Town Council Member                   125         TRUE
+County Treasurer                       88         TRUE
+County Coroner                         86         TRUE
+County Surveyor                        71         TRUE
+Township Board Member                  57         TRUE
+County Recorder                        47         TRUE
+Clerk of the Circuit Court             34         TRUE
+County Auditor                         28         TRUE
+Town Clerk-Treasurer                   21         TRUE
+```
+
+Useful as a first orientation: nine of the twelve most common local
+office types are partisan, with school boards (the single largest local
+office by candidate count) the major nonpartisan exception.
+
+### How competitive are countywide partisan races?
+
+County Treasurer is a textbook countywide partisan office — every
+county that holds the election has exactly one contest, so
+`(office, district)` cleanly identifies each race. The natural
+question: how often is the race contested, and how often is it
+one-party?
+
+```{r}
+in_state %>%
+  filter(office == "County Treasurer",
+         party %in% c("Democratic", "Republican")) %>%
+  group_by(district, election_year) %>%      # district = county name
+  summarise(
+    n_candidates = n_distinct(candidate),
+    parties      = paste(sort(unique(party)), collapse = "/"),
+    .groups      = "drop"
+  ) %>%
+  count(n_candidates, parties)
+```
+
+The output is a small table — for Indiana 2024 you'll typically see
+many `n_candidates == 1` rows (single party fielding the only
+candidate) alongside the `Democratic/Republican` two-candidate races.
+The same pattern works for County Recorder, County Auditor, and other
+countywide partisan offices.
+
+For an explicitly partisan-baseline view, group by the winner's party:
+
+```{r}
+in_state %>%
+  filter(office == "County Treasurer",
+         party %in% c("Democratic", "Republican"),
+         winner) %>%
+  count(party)
+```
+
+This is the local analogue of "how many county treasurer races did each
+party win?" — the user's original mayoral question, restated for an
+office that actually appears in this dataset.
+
+### Are school board races competitive?
+
+School Board Member is by far the largest local office in Indiana's
+data (~1,000 candidates per cycle across ~300 contests). The
+distribution of candidates per contest measures field size:
+
+```{r}
+in_state %>%
+  filter(office == "School Board Member") %>%
+  group_by(district, election_year) %>%
+  summarise(n_candidates = n_distinct(candidate), .groups = "drop") %>%
+  count(n_candidates) %>%
+  arrange(n_candidates)
+```
+
+Most school board contests draw 1–4 candidates; a long right tail of
+large at-large boards (10+, sometimes 50+ candidates) reflects
+multi-seat elections rather than head-to-head races.
+
+*Portability:* **patterns are portable; office strings are not.** The
+set of local offices a source reports varies a lot — Indiana exposes
+14 distinct local office types; NH exposes 6 (Attorney, County
+Commissioner, Register of Deeds, Register of Probate, Sheriff,
+Treasurer); Connecticut surfaces actual municipal mayors that Indiana
+omits. Always inspect `unique(df$office)` for your state first, and
+prefer the county/town/parish frame for cross-jurisdictional analysis
+of districted offices.
+
+---
+
+## Across multiple states (small N)
+
+`scrape_elections()` returns one state at a time, but the output schemas
+are consistent enough that you can bind frames together and compare. The
+`state` column is always populated, so cross-state queries work cleanly
+even when the column sets differ slightly. `bind_rows()` fills `NA`
+where columns aren't shared.
+
+### Pulling several states
+
+```{r}
+ind <- scrape_elections(state = "IN", year_from = 2024, year_to = 2024,
+                        level = "state")
+nh  <- scrape_elections(state = "NH", year_from = 2024, year_to = 2024,
+                        level = "state")
+
+multi <- bind_rows(ind, nh)
+```
+
+### Question 8 — Governor winners across states
+
+Which party won the Governor's race in each state? (Both IN and NH held
+gubernatorial elections in 2024.)
+
+```{r}
+multi %>%
+  filter(str_detect(office, regex("governor", ignore_case = TRUE)),
+         winner) %>%
+  select(state, candidate, party, votes, vote_pct)
+```
+
+### Question 9 — Democratic vote share across states
+
+A single statewide number per state — useful for ranking how each state
+voted in 2024 at the federal level:
+
+```{r}
+multi %>%
+  filter(office_level == "Federal") %>%
+  group_by(state) %>%
+  summarise(
+    dem_share = sum(votes[party == "Democratic"], na.rm = TRUE) /
+                sum(votes, na.rm = TRUE),
+    rep_share = sum(votes[party == "Republican"], na.rm = TRUE) /
+                sum(votes, na.rm = TRUE)
+  ) %>%
+  arrange(desc(dem_share))
+```
+
+### Question 10 — Down-ballot roll-off, state by state
+
+Applying the **correct** Question 5 logic — single top race at each
+level — to multiple states puts them on a comparable scale. For each
+state, find the highest-vote race at the Federal and State levels,
+then compute the ratio:
+
+```{r}
+multi %>%
+  filter(office_level %in% c("Federal", "State")) %>%
+  group_by(state, office_level, office) %>%
+  summarise(office_votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+  group_by(state, office_level) %>%
+  slice_max(office_votes, n = 1, with_ties = FALSE) %>%   # top race per level
+  group_by(state) %>%
+  mutate(pct_of_top_federal = office_votes /
+                              office_votes[office_level == "Federal"]) %>%
+  select(state, office_level, office, office_votes, pct_of_top_federal) %>%
+  arrange(state, desc(office_votes))
+```
+
+The Federal row is 1.00 by construction; the State row's
+`pct_of_top_federal` reveals how much turnout dropped between the top
+federal race and the top state race in each state. (For local
+roll-off, see the note in Question 5 — use a single county's data
+from the county-level frame.)
+
+### A note on `vote_pct`
+
+`vote_pct` is normalized within each contest, so it's *not* directly
+comparable across contests or states. For cross-state comparisons,
+always work from raw `votes` and re-aggregate (as in Questions 9 and 10
+above).
+
+### A note on party labels in cross-state queries
+
+Most sources use canonical `"Democratic"` / `"Republican"` labels, but
+a few quirks show up when binding many states:
+
+- **New Hampshire** has fusion-party labels — candidates appear with
+  `"Republican/Democratic"` or `"Democratic/Republican"` when nominated
+  by both major parties. A filter `party == "Democratic"` silently
+  drops them. Use `str_detect(party, "Democratic")` if you want to
+  count fusion candidates as Democrats.
+- **Indiana** labels many local races (judges, school boards) as
+  `"Nonpartisan"`. These have no Dem/Rep candidate at all. Include
+  `filter(party != "Nonpartisan")` if your question is about partisan
+  competition only.
+
+---
+
+## Comparing across many states (large N)
+
+Once you have data for a dozen or more states, the questions shift from
+"who won" to "how do states differ on this metric?" The pattern is
+always the same: scrape each state once, bind them, then compute one
+number per state. Below are questions that only become interesting at
+scale.
+
+### Building a multi-state panel
+
+Scraping many states in one R session can take a while. A common
+pattern is to scrape each state once, save the result, and re-load
+later:
+
+```{r}
+states <- c("IN", "NH", "VA", "MA", "CO", "VT", "ID", "NY", "NM", "SC")
+
+# Pull each state's 2024 state-level frame, bind, and save
+panel_2024 <- map_dfr(states, function(s) {
+  scrape_elections(state = s, year_from = 2024, year_to = 2024,
+                   level = "state")
+})
+saveRDS(panel_2024, "panel_2024.rds")
+
+# Next session — skip the rescrape
+panel_2024 <- readRDS("panel_2024.rds")
+```
+
+`map_dfr()` (from purrr) calls `scrape_elections()` once per state and
+row-binds the results. If one state errors, wrap the call in
+`possibly()` or `safely()` so a single failure doesn't lose the rest.
+
+### Question 11 — Closest statewide race in each state
+
+Which state had the nail-biter of the cycle? Combine Q4's margin
+calculation with a `group_by(state)`:
+
+```{r}
+panel_2024 %>%
+  filter(office_level == "Federal") %>%
+  group_by(state, office, district) %>%
+  arrange(desc(vote_pct), .by_group = TRUE) %>%
+  summarise(
+    winner_party = first(party),
+    margin_pp    = first(vote_pct) - nth(vote_pct, 2),
+    .groups      = "drop"
+  ) %>%
+  filter(!is.na(margin_pp)) %>%
+  group_by(state) %>%
+  slice_min(margin_pp, n = 1) %>%
+  arrange(margin_pp)
+```
+
+This returns the single tightest federal race per state, ranked
+nationally — a useful one-glance summary of where the action was.
+
+### Question 12 — Two-party vote share, ranked across states
+
+How does Democratic vote share for federal races compare across the
+panel?
+
+```{r}
+panel_2024 %>%
+  filter(office_level == "Federal") %>%
+  group_by(state) %>%
+  summarise(
+    n_contests = n_distinct(office, district),
+    dem_share  = sum(votes[party == "Democratic"], na.rm = TRUE) /
+                 sum(votes, na.rm = TRUE),
+    rep_share  = sum(votes[party == "Republican"], na.rm = TRUE) /
+                 sum(votes, na.rm = TRUE)
+  ) %>%
+  mutate(two_party_dem = dem_share / (dem_share + rep_share)) %>%
+  arrange(desc(two_party_dem))
+```
+
+`two_party_dem` puts states on a comparable scale even when third-party
+share varies.
+
+### Question 13 — Uncontested races by state
+
+Which states have the most one-candidate races? A useful structural
+indicator of party competition:
+
+```{r}
+panel_2024 %>%
+  group_by(state, office_level, office, district, election_year) %>%
+  summarise(n_candidates = n_distinct(candidate), .groups = "drop") %>%
+  filter(n_candidates == 1) %>%
+  count(state, office_level, sort = TRUE)
+```
+
+Or as a rate — share of contests that are uncontested:
+
+```{r}
+panel_2024 %>%
+  group_by(state, office_level, office, district, election_year) %>%
+  summarise(n_candidates = n_distinct(candidate), .groups = "drop") %>%
+  group_by(state, office_level) %>%
+  summarise(
+    n_contests   = n(),
+    n_uncontested = sum(n_candidates == 1),
+    pct_uncontested = n_uncontested / n_contests,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(pct_uncontested))
+```
+
+### Question 14 — Down-ballot roll-off, ranked nationally
+
+Q10 with more states — the answers become a national distribution
+rather than a two-state comparison. Using the same "single top race
+per level" approach to avoid the per-voter-multiplier bug in
+Question 5:
+
+```{r}
+panel_2024 %>%
+  filter(office_level %in% c("Federal", "State")) %>%
+  group_by(state, office_level, office) %>%
+  summarise(office_votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+  group_by(state, office_level) %>%
+  slice_max(office_votes, n = 1, with_ties = FALSE) %>%
+  group_by(state) %>%
+  summarise(
+    top_federal_votes = office_votes[office_level == "Federal"],
+    top_state_votes   = office_votes[office_level == "State"],
+    state_to_federal  = top_state_votes / top_federal_votes,
+    .groups = "drop"
+  ) %>%
+  arrange(state_to_federal)
+```
+
+States at the top of the result lose the most voters between the
+top of the ticket and the top statewide office (e.g., Governor or
+Attorney General) — a useful indicator of how much voter attention
+extends past President. For local-level roll-off across many states,
+loop over a single county per state using `in_county` (the local
+comparison only works when every voter shares the race, which doesn't
+hold across multiple counties).
+
+### Question 15 — Party dominance index
+
+A composite of "share of statewide federal contests won by the dominant
+party," useful for ranking states by partisan asymmetry:
+
+```{r}
+panel_2024 %>%
+  filter(office_level == "Federal", winner) %>%
+  count(state, party) %>%
+  group_by(state) %>%
+  summarise(
+    total_wins   = sum(n),
+    top_party    = party[which.max(n)],
+    top_share    = max(n) / sum(n),
+    .groups      = "drop"
+  ) %>%
+  arrange(desc(top_share))
+```
+
+---
+
+## Quick top-line: `summarize_results()`
+
+Before writing targeted queries, `summarize_results()` gives a one-call
+overview of what's in any scraped data frame:
+
+```{r}
+summarize_results(in_state)
+```
+
+Output (abbreviated):
+
+```
+Election Results Summary
+========================
+State            : Indiana
+Years covered    : 2020–2024  (3 years)
+Elections        : ...
+Unique candidates: ...
+
+Elections by office level:
+  Federal  : N elections, M offices
+             - ...
+  State    : ...
+  Local    : ...
+```
+
+It is a useful starting point for orienting yourself before drilling
+into a specific office, party, or year.

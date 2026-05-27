@@ -39,16 +39,25 @@
 #'   year).
 #' @param year_to End year, inclusive (default \code{NULL}). When \code{NULL},
 #'   the current calendar year is used as the upper bound.
-#' @param level What to return. \code{"all"} (default) returns a named list with
+#' @param level Constituency (geographic reporting) level of the returned
+#'   results — i.e., the spatial unit at which votes are tabulated. Each value
+#'   corresponds to a constituency: \code{"state"} = state-level constituency
+#'   (statewide totals), \code{"county"}/\code{"town"}/\code{"parish"} =
+#'   county/town/parish-level constituency, \code{"precinct"} = precinct-level
+#'   constituency. This is *not* the same as office level (Federal / State /
+#'   Local), which is reported in the \code{office_level} column and summarized
+#'   by \code{\link{summarize_results}}.
+#'
+#'   \code{"all"} (default) returns a named list with
 #'   \code{$state}, \code{$county}, and (when available) \code{$precinct} data
 #'   frames (ElectionStats); \code{$state} and \code{$county} data frames
 #'   (Georgia / Utah / Indiana); \code{$state} and \code{$town} data frames
 #'   (Connecticut); \code{$state} and \code{$parish} data frames (Louisiana);
 #'   or \code{$precinct}, \code{$county}, and \code{$state} data frames (NC).
-#'   \code{"state"} returns statewide candidate-level results only;
-#'   \code{"county"} returns county vote breakdowns (ElectionStats / Georgia /
-#'   Utah / Indiana);
-#'   \code{"precinct"} returns precinct-level vote breakdowns — columns:
+#'   \code{"state"} returns statewide (state-constituency) candidate results only;
+#'   \code{"county"} returns county-constituency vote breakdowns (ElectionStats /
+#'   Georgia / Utah / Indiana);
+#'   \code{"precinct"} returns precinct-constituency vote breakdowns — columns:
 #'   \code{state}, \code{election_id}, \code{candidate_id}, \code{county},
 #'   \code{precinct}, \code{candidate}, \code{votes}
 #'   (ElectionStats classic states: CO, MA, ID; v2 states: SC, NM, VA;

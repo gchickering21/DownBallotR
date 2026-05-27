@@ -51,9 +51,11 @@ Apache License 2.0.
 ### What does the package retrieve?
 
 `DownBallotR` retrieves **election results** — vote totals by candidate and
-contest — from official sources. Depending on the source and
-the `level` argument, results may be available at the **statewide**,
-**county/parish/town**, or **precinct** level.
+contest — from official sources. The `level` argument selects the
+**constituency level** of the returned results (the geographic unit at which
+votes are tabulated): depending on the source, results may be available at the
+**statewide** (state-level constituency), **county/parish/town**, or
+**precinct** level.
 
 ### What sources are covered?
 

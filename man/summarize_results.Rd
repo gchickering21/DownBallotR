@@ -21,8 +21,10 @@ A named list (printed on call) with:
 \item{\code{n_elections}}{Number of distinct elections.}
 \item{\code{n_candidates}}{Number of distinct candidate names.}
 \item{\code{office_level_breakdown}}{Named integer vector: distinct
-elections by level (Federal / State / Local).}
-\item{\code{offices_by_level}}{Named list: distinct office names per level.}
+elections by office level (Federal / State / Local). Note: this is
+office level, not the constituency \code{level} argument used by
+\code{\link{scrape_elections}}.}
+\item{\code{offices_by_level}}{Named list: distinct office names per office level.}
 }
 }
 \description{

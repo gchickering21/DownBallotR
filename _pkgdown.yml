@@ -33,6 +33,7 @@ articles:
     navbar: ~
     contents:
       - articles/scraping-data
+      - articles/example-analyses
   - title: Scraper reference
     navbar: ~
     contents:

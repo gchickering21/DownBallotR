@@ -14,9 +14,11 @@ from __future__ import annotations
 from typing import List
 
 from ._scrapers import (
+    _scrape_boston,
     _scrape_ct,
     _scrape_election_stats,
     _scrape_ga,
+    _scrape_houston,
     _scrape_in,
     _scrape_la,
     _scrape_nc,
@@ -35,6 +37,22 @@ def _list_election_stats_states() -> List[str]:
 
 
 _SOURCES: dict = {
+    "houston_results": {
+        "description": (
+            "Harris County (Houston, TX) election results (harrisvotes.com, ~2004–present). "
+            "Covers all election types: general, primary, runoff, special."
+        ),
+        "scrape_fn": _scrape_houston,
+        "states": ["TX-Houston"],
+    },
+    "boston_results": {
+        "description": (
+            "City of Boston election results (boston.gov, 2005–present). "
+            "Covers all election types: municipal, state primary, state general, special."
+        ),
+        "scrape_fn": _scrape_boston,
+        "states": ["MA-Boston"],
+    },
     "georgia_results": {
         "description": "Georgia Secretary of State election results (results.sos.ga.gov)",
         "scrape_fn": _scrape_ga,
@@ -144,6 +162,14 @@ def get_available_years(source: str, state: "str | None" = None) -> dict:
 
     if source == "louisiana_results":
         start, end = ranges["LA"]
+        return {"start_year": start, "end_year": end or current_year}
+
+    if source == "boston_results":
+        start, end = ranges["MA-Boston"]
+        return {"start_year": start, "end_year": end or current_year}
+
+    if source == "houston_results":
+        start, end = ranges["TX-Houston"]
         return {"start_year": start, "end_year": end or current_year}
 
     # election_stats — aggregate or per-state lookup

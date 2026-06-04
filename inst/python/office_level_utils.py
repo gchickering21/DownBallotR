@@ -30,6 +30,7 @@ STATE_OFFICE_REGISTRIES.  Source: the state's ElectionStats /search page
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 # ---------------------------------------------------------------------------
 # Federal offices  (regex)
@@ -579,6 +580,7 @@ STATE_OFFICE_REGISTRIES: dict[str, dict[str, str]] = {
 # Public API
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=512)
 def classify_office_level(office: str | None) -> str:
     """Return ``'Federal'``, ``'State'``, or ``'Local'`` using regex only.
 

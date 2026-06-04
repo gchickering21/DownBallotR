@@ -41,6 +41,12 @@ _YEAR_RANGES: dict = {
     "louisiana_results": {
         "LA": (1982, None),  # open-ended; dropdown goes back to 1982
     },
+    "boston_results": {
+        "MA-Boston": (2005, None),  # open-ended; page covers 2005–present
+    },
+    "houston_results": {
+        "TX-Houston": (2004, None),  # open-ended; archive goes back to ~2004
+    },
 }
 
 

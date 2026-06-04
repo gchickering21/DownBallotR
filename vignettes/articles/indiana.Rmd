@@ -29,6 +29,11 @@ State, and Local office categories.
 > is fast relative to Playwright-based states. County-level data covers all
 > 92 Indiana counties.
 
+Indiana is the running example in the
+[Example analyses vignette](https://gchickering21.github.io/DownBallotR/articles/example-analyses.html),
+which demonstrates filtering by office, counting party wins, margin
+calculations, and county-level swing analysis.
+
 ---
 
 ## Arguments

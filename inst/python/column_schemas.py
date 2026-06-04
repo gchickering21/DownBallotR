@@ -193,6 +193,48 @@ ES_PRECINCT_COLS: list[str] = [
     "url",
 ]
 
+# ── Boston ────────────────────────────────────────────────────────────────────
+
+BOSTON_CITY_COLS: list[str] = [
+    "state", "election_name", "election_year", "election_date", "election_type",
+    "office_level", "office", "district",
+    "candidate", "party",
+    "votes", "vote_pct", "winner",
+]
+
+BOSTON_WARD_COLS: list[str] = [
+    "state", "election_name", "election_year", "election_date", "election_type",
+    "office_level", "office", "district", "ward",
+    "candidate", "party",
+    "votes", "vote_pct", "ward_winner",
+]
+
+BOSTON_PRECINCT_COLS: list[str] = [
+    "state", "election_name", "election_year", "election_date", "election_type",
+    "office_level", "office", "district", "ward", "precinct",
+    "candidate", "party",
+    "votes", "vote_pct", "precinct_winner",
+]
+
+
+# ── Houston (Harris County, TX) ───────────────────────────────────────────────
+
+HOUSTON_SUMMARY_COLS: list[str] = [
+    "state", "election_name", "election_year", "election_date", "election_type",
+    "office_level", "office", "district",
+    "candidate", "party",
+    "votes_bm", "votes_ev", "votes_ed", "votes_evp", "votes_edp",
+    "votes", "vote_pct", "winner",
+]
+
+HOUSTON_PRECINCT_COLS: list[str] = [
+    "state", "election_name", "election_year", "election_date", "election_type",
+    "office_level", "office", "district", "precinct",
+    "candidate", "party",
+    "votes", "vote_pct", "precinct_winner",
+]
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def drop_writeins(df: pd.DataFrame, candidate_col: str = "candidate") -> pd.DataFrame:
     """Drop rows where the candidate column is a write-in, blank, scattering, void, etc."""

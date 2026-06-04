@@ -39,7 +39,7 @@ each county page and following "View results by precinct" links for each contest
 | `state` | — | `"UT"`, `"utah"`, or `"Utah"` |
 | `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
 | `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
-| `level` | `"all"` | `"all"` — statewide + county + precinct; `"state"` — statewide only (fastest); `"county"` — county-level only; `"precinct"` — precinct-level only |
+| `level` | `"all"` | Constituency level of returned results. `"all"` — statewide + county + precinct; `"state"` — state-level constituency (statewide totals) only (fastest); `"county"` — county-level constituency only; `"precinct"` — precinct-level constituency only |
 | `max_workers` | `4L` | Parallel Chromium browsers for county and precinct scraping |
 
 ---

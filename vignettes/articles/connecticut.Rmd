@@ -40,7 +40,7 @@ the statewide totals.
 | `state` | — | `"CT"`, `"connecticut"`, or `"Connecticut"` |
 | `year_from` | `NULL` | Start year, inclusive; `NULL` = no lower bound |
 | `year_to` | `NULL` | End year, inclusive; `NULL` = no upper bound |
-| `level` | `"all"` | `"all"` — statewide + town; `"state"` — statewide only; `"town"` — town-level only |
+| `level` | `"all"` | Constituency level of returned results. `"all"` — statewide + town; `"state"` — state-level constituency (statewide totals) only; `"town"` — town-level constituency only |
 | `max_workers` | `2L` | Parallel Chromium browsers for town scraping (one per county) |
 
 ---

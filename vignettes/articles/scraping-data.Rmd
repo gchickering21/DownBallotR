@@ -47,12 +47,12 @@ you never need to specify a backend by name:
 
 | Priority | Condition | Scraper used |
 |---|---|---|
-| 1 | `state` is North Carolina | NC State Board of Elections scraper (2000–present) |
+| 1 | `state` is North Carolina | North Carolina State Board of Elections scraper (2000–present) |
 | 2 | `state` is Connecticut | Connecticut CTEMS scraper (2016–present) |
 | 3 | `state` is Georgia | Georgia Secretary of State scraper (2000–present) |
 | 4 | `state` is Utah | Utah election results scraper (2023–present) |
 | 5 | `state` is Indiana | Indiana voters portal scraper (2019–present) |
-| 6 | `state` is Louisiana | Louisiana SOS scraper (1982–present) |
+| 6 | `state` is Louisiana | Louisiana Secretary of State scraper (1982–present) |
 | 7 | All other states | ElectionStats multi-state scraper |
 
 ---
@@ -80,12 +80,12 @@ db_available_years(state = "Virginia")
 | ElectionStats | New York | 1994 | 2024 |
 | ElectionStats | New Mexico | 2000 | 2024 |
 | ElectionStats | South Carolina | 2008 | 2025 |
-| NC State Board | North Carolina | 2000 | present |
-| CT CTEMS | Connecticut | 2016 | present |
-| GA Secretary of State | Georgia | 2000 | present |
+| North Carolina State Board of Elections | North Carolina | 2000 | present |
+| Connecticut CTEMS | Connecticut | 2016 | present |
+| Georgia Secretary of State | Georgia | 2000 | present |
 | Utah elections site | Utah | 2023 | present |
 | Indiana voters portal | Indiana | 2019 | present |
-| Louisiana SOS | Louisiana | 1982 | present |
+| Louisiana Secretary of State | Louisiana | 1982 | present |
 
 To see which states are supported by the ElectionStats scraper:
 
@@ -100,27 +100,44 @@ db_list_states("election_stats")
 
 ## Choosing the right scraper
 
+> **Note on `level`:** The `level` argument selects the **constituency level**
+> of the returned results — i.e., the geographic unit at which votes are
+> tabulated. For example, `level = "state"` returns state-level constituency
+> (statewide) results, `level = "county"` returns county-level constituency
+> results, and `level = "precinct"` returns precinct-level constituency
+> results. This is **not** the same as office level (Federal / State / Local).
+
 | Goal | Call |
 |---|---|
-| Candidate + vote totals for CO, MA, NH, ID, VT (classic) | `scrape_elections(state = "virginia", ...)` |
-| Precinct-level results for CO, MA, ID (classic) | `scrape_elections(state = "colorado", year_from = 2022, year_to = 2022, level = "precinct")` |
-| Candidate + vote totals for SC, NM, VA, NY (Playwright) | `scrape_elections(state = "south_carolina", ...)` |
-| Precinct-level results for SC, NM, VA (v2 CSV API) | `scrape_elections(state = "new_mexico", year_from = 2024, year_to = 2024, level = "precinct")` |
-| NC precinct-level local results | `scrape_elections(state = "NC", year_from = 2025, year_to = 2025)` |
-| CT statewide + town results | `scrape_elections(state = "CT", year_from = 2024, year_to = 2024)` |
-| CT statewide totals only (faster) | `scrape_elections(state = "CT", year_from = 2024, year_to = 2024, level = "state")` |
-| GA statewide + county + precinct results | `scrape_elections(state = "GA", year_from = 2024, year_to = 2024)` |
-| GA statewide + county only (faster) | `scrape_elections(state = "GA", year_from = 2024, year_to = 2024, level = "county")` |
-| GA with vote-method breakdown | `scrape_elections(state = "GA", year_from = 2024, year_to = 2024, include_vote_methods = TRUE)` |
-| GA precinct-level only | `scrape_elections(state = "GA", year_from = 2024, year_to = 2024, level = "precinct")` |
-| UT statewide + county + precinct results | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024)` |
-| UT statewide + county only (faster) | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024, level = "county")` |
-| UT statewide only (fastest) | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024, level = "state")` |
-| UT precinct-level only | `scrape_elections(state = "UT", year_from = 2024, year_to = 2024, level = "precinct")` |
-| IN statewide + county General Election results | `scrape_elections(state = "IN", year_from = 2024, year_to = 2024)` |
-| IN statewide only (faster) | `scrape_elections(state = "IN", year_from = 2022, year_to = 2022, level = "state")` |
-| LA statewide + parish results | `scrape_elections(state = "LA", year_from = 2024, year_to = 2024)` |
-| LA statewide only (faster; skips parish scraping) | `scrape_elections(state = "LA", year_from = 2023, year_to = 2023, level = "state")` |
+| Candidate + vote totals for Colorado, Massachusetts, New Hampshire, Idaho, Vermont (classic) | `scrape_elections(state = "virginia", ...)` |
+| Precinct-level results for Colorado, Massachusetts, Idaho (classic) | `scrape_elections(state = "colorado", year_from = 2022, year_to = 2022, level = "precinct")` |
+| Candidate + vote totals for South Carolina, New Mexico, Virginia, New York (Playwright) | `scrape_elections(state = "south_carolina", ...)` |
+| Precinct-level results for South Carolina, New Mexico, Virginia (v2 CSV API) | `scrape_elections(state = "new_mexico", year_from = 2024, year_to = 2024, level = "precinct")` |
+| North Carolina precinct-level local results | `scrape_elections(state = "north_carolina", year_from = 2025, year_to = 2025)` |
+| Connecticut statewide + town results | `scrape_elections(state = "connecticut", year_from = 2024, year_to = 2024)` |
+| Connecticut statewide totals only (faster) | `scrape_elections(state = "connecticut", year_from = 2024, year_to = 2024, level = "state")` |
+| Georgia statewide + county + precinct results | `scrape_elections(state = "georgia", year_from = 2024, year_to = 2024)` |
+| Georgia statewide + county only (faster) | `scrape_elections(state = "georgia", year_from = 2024, year_to = 2024, level = "county")` |
+| Georgia with vote-method breakdown | `scrape_elections(state = "georgia", year_from = 2024, year_to = 2024, include_vote_methods = TRUE)` |
+| Georgia precinct-level only | `scrape_elections(state = "georgia", year_from = 2024, year_to = 2024, level = "precinct")` |
+| Utah statewide + county + precinct results | `scrape_elections(state = "utah", year_from = 2024, year_to = 2024)` |
+| Utah statewide + county only (faster) | `scrape_elections(state = "utah", year_from = 2024, year_to = 2024, level = "county")` |
+| Utah statewide only (fastest) | `scrape_elections(state = "utah", year_from = 2024, year_to = 2024, level = "state")` |
+| Utah precinct-level only | `scrape_elections(state = "utah", year_from = 2024, year_to = 2024, level = "precinct")` |
+| Indiana statewide + county General Election results | `scrape_elections(state = "indiana", year_from = 2024, year_to = 2024)` |
+| Indiana statewide only (faster) | `scrape_elections(state = "indiana", year_from = 2022, year_to = 2022, level = "state")` |
+| Louisiana statewide + parish results | `scrape_elections(state = "louisiana", year_from = 2024, year_to = 2024)` |
+| Louisiana statewide only (faster; skips parish scraping) | `scrape_elections(state = "louisiana", year_from = 2023, year_to = 2023, level = "state")` |
+
+---
+
+## Next: analyzing the data
+
+Once you have a scraped data frame, the
+[Example analyses vignette](https://gchickering21.github.io/DownBallotR/articles/example-analyses.html)
+walks through worked example questions — wins by party, closest races,
+down-ballot drop-off, county-level variation, and cross-state
+comparisons — with tidyverse code you can adapt to your own scrapes.
 
 ---
 
@@ -130,13 +147,14 @@ Each scraper has its own article with full argument documentation,
 worked examples, and column descriptions (available on the package website):
 
 - [ElectionStats states](https://gchickering21.github.io/DownBallotR/articles/election-stats.html) —
-  VA, MA, CO, NH, ID, VT (classic) + SC, NM, NY (Playwright); candidate + county + precinct results
+  Virginia, Massachusetts, Colorado, New Hampshire, Idaho, Vermont (classic) +
+  South Carolina, New Mexico, New York (Playwright); candidate + county + precinct results
 - [North Carolina](https://gchickering21.github.io/DownBallotR/articles/north-carolina.html) —
-  NC State Board of Elections; precinct-level results
+  North Carolina State Board of Elections; precinct-level results
 - [Connecticut](https://gchickering21.github.io/DownBallotR/articles/connecticut.html) —
-  CT CTEMS; statewide + town results, 2016–present
+  Connecticut CTEMS; statewide + town results, 2016–present
 - [Georgia](https://gchickering21.github.io/DownBallotR/articles/georgia.html) —
-  GA Secretary of State; statewide + county + precinct results, 2000–present
+  Georgia Secretary of State; statewide + county + precinct results, 2000–present
 - [Utah](https://gchickering21.github.io/DownBallotR/articles/utah.html) —
   Utah elections site; statewide + county + precinct results, 2023–present
 - [Indiana](https://gchickering21.github.io/DownBallotR/articles/indiana.html) —

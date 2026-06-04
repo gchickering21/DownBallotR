@@ -15,6 +15,8 @@ Sections:
     connecticut         Connecticut CTEMS election results (2016-present)
     louisiana           Louisiana SOS Graphical election results (1982-present)
     indiana             Indiana General Election results (2019-present)
+    boston              City of Boston election results (2005-present)
+    houston             Harris County (Houston, TX) election results (~2004-present)
     all                 All of the above (default)
 
 Options:
@@ -50,8 +52,30 @@ Connecticut-specific options:
     --ct-level     LEVEL    What to download: all, state, or town (default: all)
     --ct-town-workers INT   Parallel Chromium browsers for town scraping (default: 2)
 
+Boston-specific options:
+    --boston-year-from INT  First year to download (default: 2005)
+    --boston-year-to   INT  Last year to download (default: current year)
+    --boston-level     LEVEL  What to scrape (default: all)
+                            Choices: all, city, ward, precinct
+    --boston-pdf-workers INT  Parallel PDF downloads per election (default: 4)
+
+Houston-specific options:
+    --houston-year-from INT First year to download (default: 2004)
+    --houston-year-to   INT Last year to download (default: current year)
+    --houston-level  LEVEL  What to scrape (default: all)
+                            Choices: all, summary, precinct
+    --houston-workers   INT Parallel PDF download threads (default: 2)
+                            Keep low — canvass PDFs are 40-50 MB each
+
 Output layout:
     data/
+      boston/
+        boston_{year}_city.csv      (citywide candidate totals)
+        boston_{year}_ward.csv      (per-ward candidate totals)
+        boston_{year}_precinct.csv  (per-precinct candidate totals)
+      houston/
+        houston_{year}_summary.csv  (county-wide candidate totals; includes vote-method breakdown)
+        houston_{year}_precinct.csv (per-precinct candidate totals)
       election_stats/
         {state}/{state}_{year_from}_{year_to}_state.csv
         {state}/{state}_{year_from}_{year_to}_county.csv
@@ -147,6 +171,8 @@ UT_YEAR_RANGE              = (2023, CURRENT_YEAR)
 CT_YEAR_RANGE              = (2016, CURRENT_YEAR)
 # Default to 2024 only until the scraper is validated; full history goes back to 1982.
 LA_YEAR_RANGE              = (1982, 2024)
+BOSTON_YEAR_RANGE          = (2005, CURRENT_YEAR)
+HOUSTON_YEAR_RANGE         = (2004, CURRENT_YEAR)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -767,6 +793,91 @@ def download_louisiana(
     )
 
 
+def download_boston(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    boston_year_from: int = BOSTON_YEAR_RANGE[0],
+    boston_year_to: int = BOSTON_YEAR_RANGE[1],
+    boston_level: str = "all",
+    boston_pdf_workers: int = 4,
+    **_,
+) -> "list[bool]":
+    """City of Boston election results, one set of files per year.
+
+    Output:
+      data/boston/boston_{year}_city.csv      (citywide candidate totals)
+      data/boston/boston_{year}_ward.csv      (per-ward candidate totals)
+      data/boston/boston_{year}_precinct.csv  (per-precinct candidate totals)
+    """
+    def make_label(year: int) -> str:
+        return f"Boston  {year}  level={boston_level}"
+
+    def make_paths(base: Path, year: int) -> "dict[str, Path]":
+        paths: dict[str, Path] = {}
+        if boston_level in ("all", "city"):
+            paths["city"]     = base / f"boston_{year}_city.csv"
+        if boston_level in ("all", "ward"):
+            paths["ward"]     = base / f"boston_{year}_ward.csv"
+        if boston_level in ("all", "precinct"):
+            paths["precinct"] = base / f"boston_{year}_precinct.csv"
+        return paths
+
+    return _download_yearly(
+        output_dir,
+        base_subdir="boston",
+        source="boston_results",
+        year_from=boston_year_from,
+        year_to=boston_year_to,
+        level=boston_level,
+        dry_run=dry_run,
+        make_label=make_label,
+        make_paths=make_paths,
+        scrape_kwargs=dict(max_pdf_workers=boston_pdf_workers),
+    )
+
+
+def download_houston(
+    output_dir: Path,
+    *,
+    dry_run: bool,
+    houston_year_from: int = HOUSTON_YEAR_RANGE[0],
+    houston_year_to:   int = HOUSTON_YEAR_RANGE[1],
+    houston_level: str = "all",
+    houston_workers: int = 2,
+    **_,
+) -> "list[bool]":
+    """Harris County (Houston) election results, one set of files per year.
+
+    Output:
+      data/houston/houston_{year}_summary.csv   (county-wide candidate totals)
+      data/houston/houston_{year}_precinct.csv  (per-precinct candidate totals)
+    """
+    def make_label(year: int) -> str:
+        return f"Houston  {year}  level={houston_level}"
+
+    def make_paths(base: Path, year: int) -> "dict[str, Path]":
+        paths: dict[str, Path] = {}
+        if houston_level in ("all", "summary"):
+            paths["summary"]  = base / f"houston_{year}_summary.csv"
+        if houston_level in ("all", "precinct"):
+            paths["precinct"] = base / f"houston_{year}_precinct.csv"
+        return paths
+
+    return _download_yearly(
+        output_dir,
+        base_subdir="houston",
+        source="houston_results",
+        year_from=houston_year_from,
+        year_to=houston_year_to,
+        level=houston_level,
+        dry_run=dry_run,
+        make_label=make_label,
+        make_paths=make_paths,
+        scrape_kwargs=dict(max_workers=houston_workers),
+    )
+
+
 # ── Trial run ─────────────────────────────────────────────────────────────────
 
 # One representative recent year per section used by trial_run().
@@ -786,6 +897,8 @@ TRIAL_YEARS: dict[str, int] = {
     "utah":           2024,
     "connecticut":    2023,
     "louisiana":      2025,
+    "boston":         2025,
+    "houston":        2024,
 }
 
 
@@ -872,6 +985,26 @@ def trial_run(output_dir: Path, *, dry_run: bool = False, workers: int = os.cpu_
         trial_dir, dry_run=dry_run,
         la_year_from=TRIAL_YEARS["louisiana"], la_year_to=TRIAL_YEARS["louisiana"],
         la_parish_workers=workers,
+    ))
+
+    # ── Boston ─────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: BOSTON (trial)")
+    print(f"{'─'*70}")
+    year = TRIAL_YEARS["boston"]
+    all_results.extend(download_boston(
+        trial_dir, dry_run=dry_run,
+        boston_year_from=year, boston_year_to=year,
+    ))
+
+    # ── Houston ────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: HOUSTON (trial)")
+    print(f"{'─'*70}")
+    year = TRIAL_YEARS["houston"]
+    all_results.extend(download_houston(
+        trial_dir, dry_run=dry_run,
+        houston_year_from=year, houston_year_to=year,
     ))
 
     return all_results
@@ -977,6 +1110,25 @@ def full_run(
         la_parish_workers=workers,
     ))
 
+    # ── Boston ─────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: BOSTON (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_boston(
+        output_dir, dry_run=dry_run,
+        boston_year_from=BOSTON_YEAR_RANGE[0], boston_year_to=BOSTON_YEAR_RANGE[1],
+        boston_pdf_workers=workers,
+    ))
+
+    # ── Houston ────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*70}")
+    print("  SECTION: HOUSTON (full range)")
+    print(f"{'─'*70}")
+    all_results.extend(download_houston(
+        output_dir, dry_run=dry_run,
+        houston_year_from=HOUSTON_YEAR_RANGE[0], houston_year_to=HOUSTON_YEAR_RANGE[1],
+    ))
+
     return all_results
 
 
@@ -990,6 +1142,8 @@ SECTIONS: dict[str, Callable] = {
     "indiana":          download_indiana,
     "connecticut":      download_connecticut,
     "louisiana":        download_louisiana,
+    "boston":           download_boston,
+    "houston":          download_houston,
 }
 
 
@@ -1216,6 +1370,69 @@ def main() -> None:
         help="Parallel Chromium browsers for Louisiana parish scraping (default: 2).",
     )
 
+    # Boston-specific options
+    boston_group = parser.add_argument_group("boston options")
+    boston_group.add_argument(
+        "--boston-year-from",
+        type=int,
+        default=BOSTON_YEAR_RANGE[0],
+        metavar="YEAR",
+        help=f"First year to download for Boston (default: {BOSTON_YEAR_RANGE[0]}).",
+    )
+    boston_group.add_argument(
+        "--boston-year-to",
+        type=int,
+        default=BOSTON_YEAR_RANGE[1],
+        metavar="YEAR",
+        help="Last year to download for Boston (default: current year).",
+    )
+    boston_group.add_argument(
+        "--boston-level",
+        choices=["all", "city", "ward", "precinct"],
+        default="all",
+        help="What to scrape for Boston: city, ward, precinct, or all (default).",
+    )
+    boston_group.add_argument(
+        "--boston-pdf-workers",
+        type=int,
+        default=4,
+        metavar="N",
+        help="Parallel PDF download threads per Boston election (default: 4).",
+    )
+
+    # Houston-specific options
+    houston_group = parser.add_argument_group("houston options")
+    houston_group.add_argument(
+        "--houston-year-from",
+        type=int,
+        default=HOUSTON_YEAR_RANGE[0],
+        metavar="YEAR",
+        help=f"First year to download for Houston (default: {HOUSTON_YEAR_RANGE[0]}).",
+    )
+    houston_group.add_argument(
+        "--houston-year-to",
+        type=int,
+        default=HOUSTON_YEAR_RANGE[1],
+        metavar="YEAR",
+        help="Last year to download for Houston (default: current year).",
+    )
+    houston_group.add_argument(
+        "--houston-level",
+        choices=["all", "summary", "precinct"],
+        default="all",
+        help="What to scrape for Houston: summary, precinct, or all (default).",
+    )
+    houston_group.add_argument(
+        "--houston-workers",
+        type=int,
+        default=2,
+        metavar="N",
+        help=(
+            "Parallel PDF download threads for Houston (default: 2). "
+            "Keep low — canvass PDFs are 40–50 MB each."
+        ),
+    )
+
     # Connecticut-specific options
     ct_group = parser.add_argument_group("connecticut options")
     ct_group.add_argument(
@@ -1289,6 +1506,14 @@ def main() -> None:
         print(f"LA year range    : {args.la_year_from}–{args.la_year_to}")
         print(f"LA level         : {args.la_level}")
         print(f"LA parish workers: {args.la_parish_workers}")
+    if args.section in ("boston", "all"):
+        print(f"Boston year range: {args.boston_year_from}–{args.boston_year_to}")
+        print(f"Boston level     : {args.boston_level}")
+        print(f"Boston PDF wrkrs : {args.boston_pdf_workers}")
+    if args.section in ("houston", "all"):
+        print(f"Houston year range: {args.houston_year_from}–{args.houston_year_to}")
+        print(f"Houston level     : {args.houston_level}")
+        print(f"Houston workers   : {args.houston_workers}")
     print("=" * 70)
 
     if args.trial_run and args.full_run:
@@ -1374,6 +1599,16 @@ def main() -> None:
             la_year_to=args.la_year_to,
             la_level=args.la_level,
             la_parish_workers=args.la_parish_workers,
+            # Boston-specific
+            boston_year_from=args.boston_year_from,
+            boston_year_to=args.boston_year_to,
+            boston_level=args.boston_level,
+            boston_pdf_workers=args.boston_pdf_workers,
+            # Houston-specific
+            houston_year_from=args.houston_year_from,
+            houston_year_to=args.houston_year_to,
+            houston_level=args.houston_level,
+            houston_workers=args.houston_workers,
         )
         all_results.extend(section_results)
 

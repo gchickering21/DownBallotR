@@ -3,7 +3,7 @@
 #' @keywords internal
 db_required_python_packages <- function() {
   # datetime, re, and dataclasses are Python stdlib — not pip-installable
-  c("pandas", "requests", "lxml", "bs4", "playwright", "pyreadr")
+  c("pandas", "requests", "lxml", "bs4", "playwright", "pyreadr", "pdfplumber")
 }
 
 #' @keywords internal

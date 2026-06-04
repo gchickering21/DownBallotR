@@ -70,3 +70,6 @@ output_*/
 data/
 /doc/
 /Meta/
+
+# Local analysis scripts and CSV outputs (not part of the package)
+local_analysis/
